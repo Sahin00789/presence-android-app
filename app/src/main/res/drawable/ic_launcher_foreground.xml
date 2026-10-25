@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Attendance Register Sheet Background -->
+    <path
+        android:pathData="M38,24 L70,24 A4,4 0 0,1 74,28 L74,80 A4,4 0 0,1 70,84 L38,84 A4,4 0 0,1 34,80 L34,28 A4,4 0 0,1 38,24 Z"
+        android:fillColor="#F8FAFC"
+        android:fillAlpha="0.95"/>
+
+    <!-- Binder Clip -->
+    <path
+        android:pathData="M46,20 L62,20 A2,2 0 0,1 64,22 L64,26 A2,2 0 0,1 62,28 L46,28 A2,2 0 0,1 44,26 L44,22 A2,2 0 0,1 46,20 Z"
+        android:fillColor="#4F46E5"/>
+
+    <!-- Sheet Lines -->
+    <path
+        android:pathData="M42,36 L66,36 M42,44 L66,44 M42,52 L66,52 M42,60 L66,60 M42,68 L66,68 M42,76 L66,76"
+        android:strokeWidth="1.5"
+        android:strokeColor="#CBD5E1"/>
+
+    <!-- Biometric Security Shield -->
+    <path
+        android:pathData="M54,32 C68,32 78,36 78,36 C78,55 72,73 54,82 C36,73 30,55 30,36 C30,36 40,32 54,32 Z"
+        android:fillColor="#0F172A"
+        android:fillAlpha="0.92"/>
+
+    <path
+        android:pathData="M54,36 C64,36 73,39 73,39 C73,53 68,69 54,77 C40,69 35,53 35,39 C35,39 44,36 54,36 Z"
+        android:fillColor="#059669"
+        android:fillAlpha="0.88"/>
+
+    <!-- Fingerprint Lines -->
+    <path
+        android:pathData="M54,46 C48,46 44,50 44,56 C44,62 48,66 54,66 C60,66 64,62 64,56"
+        android:strokeWidth="2"
+        android:strokeColor="#EEF2FF"
+        android:strokeLineCap="round"/>
+
+    <!-- GPS Pin -->
+    <path
+        android:pathData="M54,44 C48.5,44 44,48.5 44,54 C44,61.5 54,72 54,72 C54,72 64,61.5 64,54 C64,48.5 59.5,44 54,44 Z"
+        android:fillColor="#0284C7"/>
+
+    <!-- Verified Checkmark ✓ -->
+    <path
+        android:pathData="M48,53 L52,57 L60,48"
+        android:strokeWidth="2.8"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+</vector>

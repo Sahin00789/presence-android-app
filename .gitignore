@@ -1,0 +1,25 @@
+*.iml
+.gradle/
+.kotlin/
+/.idea/
+/local.properties
+.DS_Store
+/build/
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Logs and local scratch files
+*.log
+tsc_out.txt
+count_tsc.js
+count_tsc.py
+fix.vbs
+
+# The backend lives in its own git repository:
+#   cd server && git init
+# It is intentionally excluded from the Android repository.
+/server/
+/presence/
+
