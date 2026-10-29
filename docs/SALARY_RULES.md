@@ -1,6 +1,8 @@
 # Salary Calculation Engine & Compensation Models (`docs/SALARY_RULES.md`)
 
 ## 1. Shift Payment & Attendance Rules (`shift_payment_rules` / `AssignShiftWithRulesModal`)
+> [!NOTE]
+> Salary calculation and compensation models apply exclusively to employees (**Staff** and **Managers**). The **Owner** is the head of the organization, is NOT an employee, and does NOT have attendance or an employee salary.
 
 Configured per staff member or manager for shift templates and attendance statuses. All payment and penalty amounts for each shift status are explicitly entered by the Owner or Manager through `AssignShiftWithRulesModal` or salary rule dialogs, and stored in integer minor units (paise/cents), not automatically generated:
 - **PRESENT**: Explicit shift payment rate entered by Owner/Manager (e.g. ₹600.00 / shift).
@@ -21,7 +23,7 @@ Configures holiday, weekly off-day, and paid-leave compensation explicitly enter
 
 There are no separate worked-holiday or worked-off-day rules. Clock-ins on holidays or weekly offs are paid as normal present days.
 
-Rules are effective-dated and resolved against the payroll period start date. A staff-specific rule overrides the organization default for the same day type. The engine emits itemized earnings as `HOLIDAY_PAY`, `PAID_LEAVE`, and `WEEKLY_OFF_PAY`.
+Rules are resolved by precedence (employee-specific > premises-specific > organization default). The engine emits itemized earnings as `HOLIDAY_PAY`, `PAID_LEAVE`, and `WEEKLY_OFF_PAY`.
 
 ---
 

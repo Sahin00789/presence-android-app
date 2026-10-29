@@ -71,7 +71,8 @@ fun LocationsTab(
     isSubmitting: Boolean,
     onSelectPremises: (String) -> Unit,
     onRefresh: () -> Unit,
-    onResolveGpsException: (exceptionId: String, status: String, reason: String) -> Unit = { _, _, _ -> }
+    onResolveGpsException: (exceptionId: String, status: String, reason: String) -> Unit = { _, _, _ -> },
+    onCancelOvertime: (String) -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -86,9 +87,10 @@ fun LocationsTab(
                 selectedPremisesId = selectedPremisesId,
                 onSelectPremises = onSelectPremises,
                 onRefresh = onRefresh,
-                onResolveGpsException = onResolveGpsException
+                onResolveGpsException = onResolveGpsException,
+                onCancelOvertime = onCancelOvertime
             )
-            Role.STAFF -> StaffLocationsTabContent(
+            Role.STAFF -> employeeLocationsTabContent(
                 presenceState = presenceState,
                 onRefresh = onRefresh
             )
@@ -107,7 +109,8 @@ private fun LocationPresenceTabContent(
     selectedPremisesId: String?,
     onSelectPremises: (String) -> Unit,
     onRefresh: () -> Unit,
-    onResolveGpsException: (exceptionId: String, status: String, reason: String) -> Unit
+    onResolveGpsException: (exceptionId: String, status: String, reason: String) -> Unit,
+    onCancelOvertime: (String) -> Unit
 ) {
     val premisesList = (premisesState as? UiState.Success)?.data.orEmpty()
 
@@ -187,10 +190,11 @@ private fun LocationPresenceTabContent(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(data.staff, key = { it.staffProfileId }) { card ->
+                        items(data.staff, key = { it.employeeId }) { card ->
                             DailyStaffPresenceCard(
                                 card = card,
-                                onResolveGpsException = onResolveGpsException
+                                onResolveGpsException = onResolveGpsException,
+                                onCancelOvertime = onCancelOvertime
                             )
                         }
                     }
@@ -209,6 +213,7 @@ private fun LocationPresenceTabContent(
 fun DailyStaffPresenceCard(
     card: LocationStaffCardDto,
     onResolveGpsException: (exceptionId: String, status: String, reason: String) -> Unit = { _, _, _ -> },
+    onCancelOvertime: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val locationColor = when (card.locationStatus) {
@@ -381,9 +386,14 @@ fun DailyStaffPresenceCard(
                 )
             }
 
-            // GPS Exception Action Banner (if 3 pings failed / open exception exists)
-            if (card.consecutiveFailures >= 3 || card.exceptionId != null) {
-                val exceptionId = card.exceptionId ?: card.staffProfileId
+            // GPS Exception Action Banner. The buttons remain available until the
+            // active shift/overtime session is completely finished.
+            val sessionFinished =
+                card.clockOutTime != null &&
+                    (!card.hasOvertimeToday || card.overtimeClockOutTime != null)
+            if (card.exceptionId != null && !sessionFinished) {
+                val exceptionId = card.exceptionId
+                val isOvertimeException = card.hasOvertimeToday || card.overtimeId != null
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Card(
@@ -404,7 +414,8 @@ fun DailyStaffPresenceCard(
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = "3 Consecutive GPS Pings Failed — Manager Action Required",
+                                text = if (isOvertimeException) "More than 3 Outside GPS Pings on Overtime — Owner/Manager Action Required"
+                                       else "More than 3 Outside GPS Pings — Owner/Manager Action Required",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.error
@@ -413,45 +424,38 @@ fun DailyStaffPresenceCard(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // 4 Resolution Action Buttons
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
+                        if (isOvertimeException && card.overtimeId != null) {
                             Button(
-                                onClick = { onResolveGpsException(exceptionId, "ABSENT", "Marked absent by manager") },
+                                onClick = { onCancelOvertime(card.overtimeId) },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
                                 shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Absent", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("Delete overtime", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
-
-                            Button(
-                                onClick = { onResolveGpsException(exceptionId, "HOLIDAY", "Marked leave by manager") },
-                                colors = ButtonDefaults.buttonColors(containerColor = TertiaryAmber),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f)
+                        } else {
+                            // Resolution Action Buttons (Absent, Half-Day)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text("Leave", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            }
+                                Button(
+                                    onClick = { onResolveGpsException(exceptionId, "ABSENT", "Marked absent by manager") },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Absent", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
 
-                            Button(
-                                onClick = { onResolveGpsException(exceptionId, "HALF_DAY", "Marked half-day by manager") },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Half-Day", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            }
-
-                            Button(
-                                onClick = { onResolveGpsException(exceptionId, "RESUME", "Resumed tracking by manager") },
-                                colors = ButtonDefaults.buttonColors(containerColor = SecondaryEmerald),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Resume", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Button(
+                                    onClick = { onResolveGpsException(exceptionId, "HALF_DAY", "Marked half-day by manager") },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Half-Day", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -718,7 +722,7 @@ private fun GpsPingRow(ping: GpsPingSummaryDto) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun StaffLocationsTabContent(
+private fun employeeLocationsTabContent(
     presenceState: UiState<LocationTodayPresenceResponseDto>,
     onRefresh: () -> Unit
 ) {
@@ -796,6 +800,13 @@ private fun StaffLocationsTabContent(
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
+                                if (!data.address.isNullOrBlank()) {
+                                    Text(
+                                        text = data.address,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                                 Text(
                                     text = "Geofence Radius: ${data.radiusMeters ?: 50} meters",
                                     style = MaterialTheme.typography.bodySmall,

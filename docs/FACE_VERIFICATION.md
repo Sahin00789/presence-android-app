@@ -33,12 +33,7 @@ Biometric processing runs on the Android device using ONNX Runtime Mobile with X
 ## 2. On-Device Models & Anti-Spoof Liveness Pipeline
 
 ### AI Models & Runtime Setup
-- **YuNet Face Detector (`yunet.onnx`)**: Detects face bounding boxes and extracts 5 key facial landmarks:
-  1. Right Eye $(x_1, y_1)$
-  2. Left Eye $(x_2, y_2)$
-  3. Nose Tip $(x_3, y_3)$
-  4. Right Mouth Corner $(x_4, y_4)$
-  5. Left Mouth Corner $(x_5, y_5)$
+- **YuNet Face Detector (`yunet.onnx`)**: Detects face bounding boxes and extracts 5 key facial landmarks.
 - **SFace Recognizer (`sface.onnx`)**: Aligns face crop using similarity transform to $112\times112$ and outputs a $128$-element `FloatArray` embedding.
 - **XNNPACK Acceleration**: Both ONNX sessions execute with `OptLevel.ALL_OPT`, 2 intra-op threads, and XNNPACK CPU provider options for sub-50ms inference times.
 
@@ -62,13 +57,8 @@ Pose orientation is computed dynamically using relative 2D landmark geometry:
 
 Before auto-capturing any pose vector, two anti-spoof checks must pass:
 
-1. **Active Liveness (Eye-Blink Tracker)**:
-   - Tracks Eye Aspect Ratio (EAR) across frame sequence:
-     $$\text{EAR} = \frac{|y_{\text{top}} - y_{\text{bottom}}|}{\|x_{\text{left}} - x_{\text{right}}\|}$$
-   - Detects eye open $\rightarrow$ closed $\rightarrow$ open transitions to confirm a real human present.
-2. **Passive Liveness (Laplacian Texture Variance)**:
-   - Computes Laplacian texture variance $\sigma^2_L$ over grayscale face region.
-   - Screen re-prompts and printed photos exhibit abnormally low texture variance due to Moiré blur or specular reflection ($\sigma^2_L < 15.0$).
+1. **Active Liveness (Eye-Blink Tracker)**: Tracks Eye Aspect Ratio (EAR) across frame sequences.
+2. **Passive Liveness (Laplacian Texture Variance)**: Computes Laplacian texture variance $\sigma^2_L$ over grayscale face region ($\sigma^2_L \ge 15.0$).
 
 ---
 
@@ -80,7 +70,7 @@ Before auto-capturing any pose vector, two anti-spoof checks must pass:
 CREATE TABLE multi_pose_face_templates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  staff_profile_id UUID NOT NULL REFERENCES staff_profiles(id) ON DELETE CASCADE UNIQUE,
+  employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE UNIQUE,
   center_vector vector(128) NOT NULL,
   left_vector vector(128) NOT NULL,
   right_vector vector(128) NOT NULL,
@@ -107,7 +97,7 @@ During live clock-in, Fastify compares the single live vector $E_{\text{live}}$ 
 
 ```sql
 SELECT
-  staff_profile_id,
+  employee_id,
   LEAST(
     center_vector <=> $1::vector(128),
     left_vector <=> $1::vector(128),
@@ -125,7 +115,7 @@ $$\text{Similarity Score} = 1.0 - \text{min\_distance}$$
 
 | Similarity Score | Result | Action |
 | :--- | :--- | :--- |
-| $\ge 0.64$ ($\text{dist} \le 0.36$) | **VERIFIED MATCH** | Clock-in accepted for matched `staff_profile_id`. |
+| $\ge 0.64$ ($\text{dist} \le 0.36$) | **VERIFIED MATCH** | Clock-in accepted for matched `employee_id`. |
 | $< 0.64$ ($\text{dist} > 0.36$) | **REJECTED MATCH** | Verification failed. Attendance exception created. |
 
 ---
@@ -138,7 +128,7 @@ Saves 5 distinct 128-float pose vectors for an employee.
 - **Request Payload**:
   ```json
   {
-    "staffProfileId": "c39e258f-1234-4567-8901-abcdef123456",
+    "employeeId": "c39e258f-1234-4567-8901-abcdef123456",
     "centerVector": [0.012, -0.045, ... 128 floats],
     "leftVector": [0.018, -0.039, ... 128 floats],
     "rightVector": [0.011, -0.048, ... 128 floats],
@@ -150,22 +140,3 @@ Saves 5 distinct 128-float pose vectors for an employee.
 
 ### `POST /api/v1/biometrics/clock-in`
 Validates a single live 128-float vector against all stored pose columns using `pgvector`.
-
-- **Request Payload**:
-  ```json
-  {
-    "liveVector": [0.012, -0.045, ... 128 floats],
-    "similarityThreshold": 0.64
-  }
-  ```
-- **Success Response**:
-  ```json
-  {
-    "success": true,
-    "matched": true,
-    "staffProfileId": "c39e258f-1234-4567-8901-abcdef123456",
-    "minDistance": 0.1245,
-    "similarityScore": 0.8755,
-    "message": "Face verified successfully against stored 3D pose vectors."
-  }
-  ```

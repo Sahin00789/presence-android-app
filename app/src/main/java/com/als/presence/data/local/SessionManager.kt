@@ -1,130 +1,73 @@
 package com.als.presence.data.local
 
 import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
-import com.als.presence.data.model.UserDto
-import com.als.presence.domain.model.Role
-import com.als.presence.domain.model.User
+import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "presence_session")
 
 @Singleton
 class SessionManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val accessTokenKey = stringPreferencesKey("access_token")
-    private val refreshTokenKey = stringPreferencesKey("refresh_token")
-    private val userIdKey = stringPreferencesKey("user_id")
-    private val userEmailKey = stringPreferencesKey("user_email")
-    private val userNameKey = stringPreferencesKey("user_name")
-    private val userRoleKey = stringPreferencesKey("user_role")
-    private val orgIdKey = stringPreferencesKey("org_id")
-    private val orgNameKey = stringPreferencesKey("org_name")
-    private val userAvatarUrlKey = stringPreferencesKey("user_avatar_url")
-    private val orgLogoUrlKey = stringPreferencesKey("org_logo_url")
-
-    val userFlow: Flow<User?> = context.dataStore.data.map { preferences ->
-        val id = preferences[userIdKey] ?: return@map null
-        val email = preferences[userEmailKey] ?: ""
-        val name = preferences[userNameKey] ?: ""
-        val roleStr = preferences[userRoleKey] ?: Role.STAFF.name
-        val orgId = preferences[orgIdKey] ?: ""
-        val orgName = preferences[orgNameKey] ?: ""
-        val avatarUrl = preferences[userAvatarUrlKey]
-        val orgLogoUrl = preferences[orgLogoUrlKey]
-
-        User(
-            id = id,
-            email = email,
-            fullName = name,
-            role = Role.fromString(roleStr),
-            organizationId = orgId,
-            organizationName = orgName,
-            avatarUrl = avatarUrl,
-            organizationLogoUrl = orgLogoUrl
-        )
-    }
-
-    val accessTokenFlow: Flow<String?> = context.dataStore.data.map { preferences ->
-        preferences[accessTokenKey]
-    }
-
-    val refreshTokenFlow: Flow<String?> = context.dataStore.data.map { preferences ->
-        preferences[refreshTokenKey]
-    }
-
-    suspend fun getAccessToken(): String? = accessTokenFlow.firstOrNull()
-
-    suspend fun getRefreshToken(): String? = refreshTokenFlow.firstOrNull()
-
-    suspend fun updateTokens(accessToken: String, refreshToken: String) {
-        context.dataStore.edit { preferences ->
-            preferences[accessTokenKey] = accessToken
-            preferences[refreshTokenKey] = refreshToken
+    private val prefs: SharedPreferences by lazy {
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context,
+                "presence_secure_session",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.values().first(),
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.values().first()
+            )
+        } catch (_: Exception) {
+            context.getSharedPreferences("presence_session_fallback", Context.MODE_PRIVATE)
         }
     }
 
-    suspend fun saveSession(
-        accessToken: String,
-        refreshToken: String,
-        userDto: UserDto
-    ) {
-        context.dataStore.edit { preferences ->
-            preferences[accessTokenKey] = accessToken
-            preferences[refreshTokenKey] = refreshToken
-            preferences[userIdKey] = userDto.id
-            preferences[userEmailKey] = userDto.email
-            preferences[userNameKey] = userDto.fullName
-            preferences[userRoleKey] = userDto.role
-            preferences[orgIdKey] = userDto.organizationId
-            preferences[orgNameKey] = userDto.organizationName
-            if (userDto.avatarUrl != null) {
-                preferences[userAvatarUrlKey] = userDto.avatarUrl
-            } else {
-                preferences.remove(userAvatarUrlKey)
-            }
-            if (userDto.organizationLogoUrl != null) {
-                preferences[orgLogoUrlKey] = userDto.organizationLogoUrl
-            } else {
-                preferences.remove(orgLogoUrlKey)
-            }
+    var token: String?
+        get() = prefs.getString(KEY_TOKEN, null)
+        set(value) {
+            prefs.edit().putString(KEY_TOKEN, value).apply()
         }
+
+    var refreshToken: String?
+        get() = prefs.getString(KEY_REFRESH_TOKEN, null)
+        set(value) {
+            prefs.edit().putString(KEY_REFRESH_TOKEN, value).apply()
+        }
+
+    var organizationId: String?
+        get() = prefs.getString(KEY_ORG_ID, null)
+        set(value) {
+            prefs.edit().putString(KEY_ORG_ID, value).apply()
+        }
+
+    var role: String?
+        get() = prefs.getString(KEY_ROLE, null)
+        set(value) {
+            prefs.edit().putString(KEY_ROLE, value).apply()
+        }
+
+    var userId: String?
+        get() = prefs.getString(KEY_USER_ID, null)
+        set(value) {
+            prefs.edit().putString(KEY_USER_ID, value).apply()
+        }
+
+    fun clear() {
+        prefs.edit().clear().apply()
     }
 
-    suspend fun updateUser(userDto: UserDto) {
-        context.dataStore.edit { preferences ->
-            preferences[userIdKey] = userDto.id
-            preferences[userEmailKey] = userDto.email
-            preferences[userNameKey] = userDto.fullName
-            preferences[userRoleKey] = userDto.role
-            preferences[orgIdKey] = userDto.organizationId
-            preferences[orgNameKey] = userDto.organizationName
-            if (userDto.avatarUrl != null) {
-                preferences[userAvatarUrlKey] = userDto.avatarUrl
-            } else {
-                preferences.remove(userAvatarUrlKey)
-            }
-            if (userDto.organizationLogoUrl != null) {
-                preferences[orgLogoUrlKey] = userDto.organizationLogoUrl
-            } else {
-                preferences.remove(orgLogoUrlKey)
-            }
-        }
-    }
-
-    suspend fun clearSession() {
-        context.dataStore.edit { preferences ->
-            preferences.clear()
-        }
+    companion object {
+        private const val KEY_TOKEN = "access_token"
+        private const val KEY_REFRESH_TOKEN = "refresh_token"
+        private const val KEY_ORG_ID = "organization_id"
+        private const val KEY_ROLE = "user_role"
+        private const val KEY_USER_ID = "user_id"
     }
 }

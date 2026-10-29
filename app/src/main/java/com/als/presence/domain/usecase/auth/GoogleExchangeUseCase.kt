@@ -6,9 +6,10 @@ import com.als.presence.domain.repository.AuthRepository
 import javax.inject.Inject
 
 class GoogleExchangeUseCase @Inject constructor(
-    private val repository: AuthRepository
+    private val authRepository: AuthRepository
 ) {
-    suspend operator fun invoke(code: String, redirectUri: String? = null): Resource<User> {
-        return repository.googleExchange(code, redirectUri)
+    suspend operator fun invoke(code: String = "", redirectUri: String = "", idToken: String = ""): Resource<User> {
+        val token = idToken.ifBlank { code }
+        return authRepository.googleExchange(token)
     }
 }

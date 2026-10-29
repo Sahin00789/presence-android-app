@@ -182,7 +182,7 @@ fun OwnerReportsTab(
                     label = { Text("All Premises") }
                 )
                 premisesList.forEach { premises ->
-                    val parts = premises.name.split(",", limit = 2)
+                    val parts = premises.premisesName.split(",", limit = 2)
                     val shortName = parts[0].trim()
                     FilterChip(
                         selected = selectedPremisesId == premises.id,

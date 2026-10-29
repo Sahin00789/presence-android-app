@@ -2,28 +2,28 @@
 
 ## 1. Monthly Salary Calculation Flow
 
-Monthly salary calculation runs automatically per employee and manager for each month from their joining date up to the current month:
+Monthly salary calculation runs automatically for all employees (both Staff and Managers residing in `employees` table) for each month from their joining date up to the current month. **The Owner is NOT an employee, has NO attendance tracking, earns NO salary, and cannot receive payroll disbursements; the Owner holds exclusive rights to review, disburse, and lock monthly payroll (`monthly_payrolls`).**
 
-- **Shift Attendance Payments**: Computed from verified shift attendance records (`attendance_events`) evaluated against `shift_payment_rules` (`PRESENT`, `LATE`, `HALF_DAY`, `ABSENT`).
-- **Holiday & Off-Days Payments**: Computed from unworked paid public holidays and off-day counts evaluated against `unworked_payment_rules` (`HOLIDAY`, `WEEKLY_OFF`, `PAID_LEAVE`).
-- **Completed Overtime**: Aggregated from completed & approved entries in the `overtime` table (`status` IN `APPROVED`, `COMPLETED`, `PAID`, `CLOSED`).
-- **Gross & Net Totals**: Calculated as `Gross Salary = Shift Earnings + Holiday/Off-Day Earnings + Overtime Pay - Penalties/Deductions`.
+- **Shift Attendance Payments**: Computed from verified shift attendance records (`employee_attendance`) evaluated against shift assignment pay rates (`present_pay`, `half_day_pay`, `leave_pay`, `absent_pay`).
+- **Holiday & Off-Days Payments**: Computed from unworked paid public holidays and weekly off counts evaluated against `unworked_payment_rules` (`HOLIDAY`, `WEEKLY_OFF`, `PAID_LEAVE`).
+- **Completed Overtime**: Aggregated from completed & approved entries in the `overtime` table.
+- **Gross, Deductions & Net Totals**: Stored in `monthly_payrolls` with itemized breakdown in `staff_earning_ledger`, `payroll_deductions`, and settled via `payroll_transactions`.
 
 ---
 
 ## 2. Salary Payment Console & Month-by-Month Disbursal Flow
 - **Direct Workforce Payment Roster**: Renders employee and manager rosters with live salary calculations from joining date up to current month.
-- **Month Card Disbursements**: Each month card displays itemized Earned, Paid, and Due salary, shift attendance counts (Present, Half-Day, Leave, Absent, Holidays, Off-Days), and a dedicated **Pay Salary** / **Pay Again** button.
-- **Payment Modal (`PayStaffModal`)**: Displays the selected month (e.g. `Jan 2025`), current due balance, and month payment history (listing previous disbursements, payment modes, reference numbers/UTRs, and dates). Supports partial or full payments via Bank Transfer, UPI, Cash, or Cheque with custom reference notes.
-- **Ledger Transfer**: Payment confirmation moves wallet balances from `approved_unpaid_balance_cents` or `earned_balance_cents` to `paid_balance_cents` using double-entry idempotency-backed ledger transactions.
+- **Month Card Disbursements**: Each month card displays itemized Earned, Deducted, Paid, and Due salary, shift attendance counts, and a dedicated **Pay Salary** / **Pay Again** button.
+- **Payment Modal (`PayStaffModal`)**: Displays the selected month (e.g. `Jan 2025`), current due balance, and month payment history (listing previous disbursements, payment modes, reference numbers, and dates via `payroll_transactions`).
+- **Ledger Settlement**: Payment confirmation inserts a record into `payroll_transactions` and updates `monthly_payrolls` statuses (`OPEN`, `FINALIZED`, `PAID`).
 
 ---
 
 ## 3. Itemized Payslips
 Generated payslips include:
-- Organization branding, name, tax/business ID.
-- Staff/Manager details: Name, Staff Code, Department, Designation, Hire Date.
-- Attendance summary: Total Days, Present Days, Late Days, Half Days, Leave Days, Unpaid Absences, Public Holiday Count, Weekly Off Count.
-- Itemized Earnings: Base Shift Earnings (`shift_payment_rules`), Public Holiday & Weekly Off Pay (`unworked_payment_rules`), Completed Overtime Pay (`overtime`), Bonuses.
-- Itemized Deductions: Late Penalties, Half-Day Deductions, Unpaid Leave Deductions, Advances.
-- Net Payable Amount & Payment Reference History.
+- Organization branding, name, timezone, currency.
+- Employee details: Name, Staff Code, Department, Designation, Hire Date.
+- Attendance summary: Present Days, Absent Days, Leave Days, Half Days, Public Holiday Count, Weekly Off Count.
+- Itemized Earnings: Shift Earnings (`staff_earning_ledger`), Public Holiday & Weekly Off Pay, Completed Overtime Pay (`overtime`).
+- Itemized Deductions: Penalties, Advances, Deductions (`payroll_deductions`).
+- Net Payable Amount & Payment Reference History (`payroll_transactions`).

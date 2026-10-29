@@ -69,15 +69,14 @@ import com.als.presence.ui.dashboard.common.KeyValueRow
 import com.als.presence.ui.dashboard.common.Dates
 import com.als.presence.ui.dashboard.common.Money
 import com.als.presence.ui.dashboard.common.PayStaffModal
-import com.als.presence.ui.dashboard.common.SalaryDialog
 import com.als.presence.ui.dashboard.common.SectionHeader
 import com.als.presence.ui.dashboard.common.StatusPill
 
 import com.als.presence.domain.model.User
 
-/** Manager "Staff" tab — the roster this manager operates on a daily basis. */
+/** Manager "employee" tab — the roster this manager operates on a daily basis. */
 @Composable
-fun ManagerStaffTab(
+fun ManageremployeeTab(
     user: User? = null,
     staffState: UiState<List<StaffDto>>,
     faceStatuses: Map<String, FaceStatusDto>,
@@ -86,9 +85,8 @@ fun ManagerStaffTab(
     engine: FaceEmbeddingEngine,
     onRefresh: () -> Unit,
     onAddStaff: () -> Unit,
-    onSetSalary: (staffProfileId: String, monthlySalary: String) -> Unit,
-    onEnrollFace: (staffProfileId: String, embeddings: Map<String, FaceEmbeddingEngine.Embedding>) -> Unit,
-    onRevokeFace: (staffProfileId: String) -> Unit,
+    onEnrollFace: (employeeId: String, embeddings: Map<String, FaceEmbeddingEngine.Embedding>) -> Unit,
+    onRevokeFace: (employeeId: String) -> Unit,
     onDeactivateStaff: ((userId: String, name: String) -> Unit)? = null,
     onAssignShift: (staff: StaffDto) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -98,8 +96,7 @@ fun ManagerStaffTab(
     onRecordPayment: ((itemId: String, amountCents: Long, paymentMethod: String, reference: String) -> Unit)? = null
 ) {
     var query by remember { mutableStateOf("") }
-    var salaryTarget by remember { mutableStateOf<StaffDto?>(null) }
-    var payTargetStaff by remember { mutableStateOf<StaffDto?>(null) }
+    var payTargetemployee by remember { mutableStateOf<StaffDto?>(null) }
     var deleteTarget by remember { mutableStateOf<StaffDto?>(null) }
     var faceTarget by remember { mutableStateOf<StaffDto?>(null) }
     var revokeTarget by remember { mutableStateOf<StaffDto?>(null) }
@@ -222,7 +219,9 @@ fun ManagerStaffTab(
             Column(modifier = Modifier.fillMaxSize()) {
                 // Team Salary & Wallet Summary Card
                 val totalEarnedCents = staff.sumOf { it.earnedBalanceCents }
-                val totalWalletCents = staff.sumOf { it.totalBalanceCents }
+                val totalWalletCents = staff.sumOf {
+                    it.earnedBalanceCents + it.approvedUnpaidBalanceCents + it.paidBalanceCents
+                }
 
                 Surface(
                     modifier = Modifier
@@ -383,7 +382,7 @@ fun ManagerStaffTab(
 
                                     // Pay Salary Button
                                     FilledTonalButton(
-                                        onClick = { payTargetStaff = member },
+                                        onClick = { payTargetemployee = member },
                                         shape = RoundedCornerShape(10.dp),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
@@ -454,18 +453,6 @@ fun ManagerStaffTab(
         }
     }
 
-    salaryTarget?.let { target ->
-        SalaryDialog(
-            staffName = target.fullName,
-            initialAmount = target.baseRateCents?.let { (it / 100).toString() } ?: "",
-            onDismiss = { salaryTarget = null },
-            onConfirm = { shiftAmt ->
-                onSetSalary(target.id, shiftAmt)
-                salaryTarget = null
-            }
-        )
-    }
-
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
@@ -525,11 +512,11 @@ fun ManagerStaffTab(
         )
     }
 
-    payTargetStaff?.let { target ->
+    payTargetemployee?.let { target ->
         val foundItem = remember(target, periods, payrollItemsMap) {
             periods.firstNotNullOfOrNull { period ->
                 payrollItemsMap[period.id]?.firstOrNull {
-                    it.staffProfileId == target.id || it.staffEmail.equals(target.email, ignoreCase = true)
+                    it.employeeId == target.id || it.staffEmail.equals(target.email, ignoreCase = true)
                 }
             }
         }
@@ -541,13 +528,13 @@ fun ManagerStaffTab(
             staffCode = target.staffCode,
             earnedCents = earned,
             paidCents = paid,
-            onDismiss = { payTargetStaff = null },
+            onDismiss = { payTargetemployee = null },
             onConfirmPay = { amountCents, method, reference ->
                 val itemId = foundItem?.id
                 if (itemId != null && onRecordPayment != null) {
                     onRecordPayment(itemId, amountCents, method, reference)
                 }
-                payTargetStaff = null
+                payTargetemployee = null
             }
         )
     }

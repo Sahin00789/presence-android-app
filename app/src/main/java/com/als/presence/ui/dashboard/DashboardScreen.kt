@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
@@ -124,8 +125,9 @@ import com.als.presence.ui.dashboard.manager.screens.ShiftManagementScreen
 import com.als.presence.ui.dashboard.owner.OwnerDashboardScreen
 import com.als.presence.ui.dashboard.common.MyShiftsScreen
 import com.als.presence.ui.dashboard.owner.screens.EmployeesManagementScreen
+import com.als.presence.ui.dashboard.owner.screens.OrganizationSettingsScreen
 import com.als.presence.ui.dashboard.owner.screens.PremisesManagementScreen
-import com.als.presence.ui.dashboard.staff.StaffDashboardScreen
+import com.als.presence.ui.dashboard.staff.EmployeeDashboardScreen
 import kotlinx.coroutines.launch
 
 private enum class SecondaryDestination(val label: String) {
@@ -136,7 +138,8 @@ private enum class SecondaryDestination(val label: String) {
     SALARY_PAYMENT("Salary Payments"),
     HOLIDAY_MANAGEMENT("Holiday Calendar"),
     LEAVE("Leave Requests"),
-    OVERTIME("Overtime Console")
+    OVERTIME("Overtime Console"),
+    ORGANIZATION_SETTINGS("Organization & Owner")
 }
 
 private const val PRIMARY_ROUTE_PREFIX = "dashboard/primary/"
@@ -225,14 +228,12 @@ fun DashboardScreen(
             Role.OWNER -> listOf(
                 PresenceBottomItem("Employees", Icons.Default.People),
                 PresenceBottomItem("Locations", Icons.Default.LocationOn),
-                PresenceBottomItem("Reports", Icons.Default.BarChart),
-                PresenceBottomItem("Approvals", Icons.AutoMirrored.Filled.FactCheck)
+                PresenceBottomItem("Reports", Icons.Default.BarChart)
             )
             Role.MANAGER -> listOf(
                 PresenceBottomItem("Attendance", Icons.Default.EventAvailable),
                 PresenceBottomItem("Staff", Icons.Default.People),
-                PresenceBottomItem("Locations", Icons.Default.LocationOn),
-                PresenceBottomItem("Approvals", Icons.AutoMirrored.Filled.FactCheck)
+                PresenceBottomItem("Locations", Icons.Default.LocationOn)
             )
             Role.STAFF -> listOf(
                 PresenceBottomItem("Check-in", Icons.Default.Home),
@@ -249,6 +250,7 @@ fun DashboardScreen(
                 DrawerSection(
                     title = "ORGANIZATION",
                     items = listOf(
+                        DrawerEntry(SecondaryDestination.ORGANIZATION_SETTINGS, Icons.Default.EditNote),
                         DrawerEntry(SecondaryDestination.EMPLOYEES_MANAGEMENT, Icons.Default.Badge),
                         DrawerEntry(SecondaryDestination.PREMISES_MANAGEMENT, Icons.Default.Business),
                         DrawerEntry(SecondaryDestination.SALARY_PAYMENT, Icons.Default.Payments)
@@ -504,24 +506,7 @@ fun DashboardScreen(
                                 }
                             }
 
-                            // Settings Section (Organization Settings for Owner)
-                            if (user.role == Role.OWNER) {
-                                Spacer(modifier = Modifier.height(20.dp))
-                                DrawerSectionHeader("ORGANIZATION & TENANT")
-                                DrawerActionItem(
-                                    label = "Organization Settings & Logo",
-                                    icon = Icons.Default.Business,
-                                    selected = false,
-                                    accentColor = roleColor,
-                                    onClick = {
-                                        scope.launch { drawerState.close() }
-                                        showEditOrgModal = true
-                                    }
-                                )
-                                DrawerDivider()
-                            } else {
-                                Spacer(modifier = Modifier.height(12.dp))
-                            }
+                            Spacer(modifier = Modifier.height(12.dp))
 
                             // The drawer is the home of everything the bottom
                             // row deliberately leaves out; the primary tabs stay
@@ -711,7 +696,9 @@ fun DashboardScreen(
                                     SecondaryDestinationContent(
                                         user = user,
                                         destination = destination,
-                                        onBack = returnToMenu
+                                        onBack = returnToMenu,
+                                        onEditProfileClick = { showEditProfileModal = true },
+                                        onEditOrgClick = { showEditOrgModal = true }
                                     )
                                 }
                             }
@@ -790,7 +777,7 @@ private fun RoleDashboardContent(
     when (user.role) {
         Role.OWNER -> OwnerDashboardScreen(user = user, selectedTab = tabIndex, onEditOrgClick = onEditOrgClick)
         Role.MANAGER -> ManagerDashboardScreen(user = user, selectedTab = tabIndex)
-        Role.STAFF -> StaffDashboardScreen(user = user, selectedTab = tabIndex)
+        Role.STAFF -> EmployeeDashboardScreen(user = user, selectedTab = tabIndex)
     }
 }
 
@@ -798,7 +785,9 @@ private fun RoleDashboardContent(
 private fun SecondaryDestinationContent(
     user: User,
     destination: SecondaryDestination,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onEditProfileClick: () -> Unit,
+    onEditOrgClick: () -> Unit
 ) {
     when (destination) {
         SecondaryDestination.MY_SHIFTS -> MyShiftsScreen(user = user, onBack = onBack)
@@ -825,6 +814,12 @@ private fun SecondaryDestinationContent(
             onBack = onBack
         )
         SecondaryDestination.OVERTIME -> OvertimeScreen(onBack = onBack)
+        SecondaryDestination.ORGANIZATION_SETTINGS -> OrganizationSettingsScreen(
+            user = user,
+            onBack = onBack,
+            onEditProfileClick = onEditProfileClick,
+            onEditOrgClick = onEditOrgClick
+        )
     }
 }
 
@@ -925,12 +920,12 @@ private fun DashboardTopAppBar(
                         modifier = Modifier.clickable(onClick = onOrgClick)
                     ) {
                         OrganizationMark(
-                            name = user.organizationName,
+                            name = user.organizationName.orEmpty(),
                             logoUrl = user.organizationLogoUrl,
                             accent = roleColor
                         )
                         Text(
-                            text = user.organizationName.ifBlank { "Organization" },
+                            text = user.organizationName.orEmpty().ifBlank { "Organization" },
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontSize = 16.sp,
                                 letterSpacing = (-0.3).sp

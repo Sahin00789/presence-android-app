@@ -8,7 +8,6 @@ import com.als.presence.data.model.PayrollItemDto
 import com.als.presence.data.model.PayrollPeriodDto
 import com.als.presence.data.model.StaffDto
 import com.als.presence.domain.repository.OperationsRepository
-import com.als.presence.ui.dashboard.common.Money
 import com.als.presence.ui.dashboard.common.toUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,8 +28,8 @@ class OwnerSalaryViewModel @Inject constructor(
     private val _items = MutableStateFlow<UiState<List<PayrollItemDto>>>(UiState.Idle)
     val items: StateFlow<UiState<List<PayrollItemDto>>> = _items.asStateFlow()
 
-    private val _staff = MutableStateFlow<UiState<List<StaffDto>>>(UiState.Loading)
-    val staff: StateFlow<UiState<List<StaffDto>>> = _staff.asStateFlow()
+    private val _employee = MutableStateFlow<UiState<List<StaffDto>>>(UiState.Loading)
+    val staff: StateFlow<UiState<List<StaffDto>>> = _employee.asStateFlow()
 
     private val _selectedPeriodId = MutableStateFlow<String?>(null)
     val selectedPeriodId: StateFlow<String?> = _selectedPeriodId.asStateFlow()
@@ -53,75 +52,51 @@ class OwnerSalaryViewModel @Inject constructor(
     fun loadPeriods() {
         viewModelScope.launch {
             _periods.value = UiState.Loading
-            _periods.value = repository.getPayrollPeriods().toUiState()
-            val periods = (_periods.value as? UiState.Success)?.data.orEmpty()
-            val current = _selectedPeriodId.value
-            _selectedPeriodId.value = when {
-                periods.isEmpty() -> null
-                current != null && periods.any { it.id == current } -> current
-                else -> periods.first().id
+            val now = java.time.LocalDate.now()
+            val generatedPeriods = (0..5).map { i ->
+                val date = now.minusMonths(i.toLong())
+                val y = date.year
+                val m = date.monthValue
+                val start = "$y-${m.toString().padStart(2, '0')}-01"
+                val end = "$y-${m.toString().padStart(2, '0')}-${date.lengthOfMonth()}"
+                PayrollPeriodDto(
+                    id = "$y-${m.toString().padStart(2, '0')}",
+                    organizationId = "",
+                    periodStartDate = start,
+                    periodEndDate = end,
+                    status = if (i == 0) "OPEN" else "PAID"
+                )
             }
-            _selectedPeriodId.value?.let { loadItems(it) }
+            _periods.value = UiState.Success(generatedPeriods)
+            val current = _selectedPeriodId.value
+            val next = generatedPeriods.firstOrNull { it.id == current } ?: generatedPeriods.firstOrNull()
+            if (next != null) {
+                selectPeriod(next.id)
+            } else {
+                _items.value = UiState.Success(emptyList())
+            }
         }
     }
 
     fun loadItems(periodId: String) {
         viewModelScope.launch {
             _items.value = UiState.Loading
-            _items.value = repository.getPayrollItems(periodId).toUiState()
+            val y = periodId.take(4).toIntOrNull() ?: java.time.LocalDate.now().year
+            val m = periodId.substring(5, 7).toIntOrNull() ?: java.time.LocalDate.now().monthValue
+            _items.value = repository.getMonthlyPayrollSummary(m, y).toUiState()
         }
     }
 
     fun loadStaff() {
         viewModelScope.launch {
-            _staff.value = UiState.Loading
-            _staff.value = repository.getStaff().toUiState()
+            _employee.value = UiState.Loading
+            _employee.value = repository.getEmployees().toUiState()
         }
     }
 
     fun selectPeriod(periodId: String) {
         _selectedPeriodId.value = periodId
         loadItems(periodId)
-    }
-
-    fun calculatePayroll(periodId: String) {
-        viewModelScope.launch {
-            _isSubmitting.value = true
-            when (val result = repository.calculatePayroll(periodId)) {
-                is Resource.Success -> {
-                    _message.value = "Payroll recalculated for the selected period."
-                    loadPeriods()
-                }
-                is Resource.Error -> _message.value = result.message
-                Resource.Loading -> Unit
-            }
-            _isSubmitting.value = false
-        }
-    }
-
-    fun recordPayment(itemId: String, amountCents: Long, paymentMethod: String = "BANK_TRANSFER", reference: String = "") {
-        val method = paymentMethod.ifBlank { "BANK_TRANSFER" }
-        val ref = reference.trim().ifEmpty { "Salary Payment via $method" }
-        viewModelScope.launch {
-            _isSubmitting.value = true
-            when (
-                val result = repository.recordPayment(
-                    itemId = itemId,
-                    amountCents = amountCents,
-                    paymentMethod = method,
-                    referenceNumber = ref
-                )
-            ) {
-                is Resource.Success -> {
-                    _message.value = "Payment of ${Money.format(amountCents)} recorded."
-                    _selectedPeriodId.value?.let { loadItems(it) }
-                    loadStaff()
-                }
-                is Resource.Error -> _message.value = result.message
-                Resource.Loading -> Unit
-            }
-            _isSubmitting.value = false
-        }
     }
 
     fun consumeMessage() {

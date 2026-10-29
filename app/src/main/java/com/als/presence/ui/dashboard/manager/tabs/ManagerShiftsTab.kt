@@ -80,13 +80,11 @@ fun ManagerShiftsTab(
         name: String,
         start: String,
         end: String,
-        breakMins: Int,
-        graceMins: Int,
-        thresholdMins: Int,
+        dayName: String,
+        halfDayThreshold: String,
         premisesId: String?,
-        daysOfWeek: List<Int>?,
         isActive: Boolean
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _ -> },
+    ) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onDeleteTemplate: (templateId: String) -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
@@ -163,7 +161,8 @@ fun ManagerShiftsTab(
                 is UiState.Success -> {
                     WeekDaysList.forEach { dayInfo ->
                         val dayShifts = filteredTemplates.filter { template ->
-                            template.daysOfWeek.isNullOrEmpty() || template.daysOfWeek.contains(dayInfo.dayOfWeek)
+                            val days = template.daysOfWeek
+                            days.isNullOrEmpty() || days.contains(dayInfo.dayOfWeek)
                         }
 
                         TabDayShiftCard(
@@ -190,17 +189,15 @@ fun ManagerShiftsTab(
                 template = activeEditing,
                 premisesList = premises,
                 onDismiss = { editingTemplate = null },
-                onConfirm = { name, start, end, breakMins, graceMins, thresholdMins, premisesId, daysOfWeek, isActive ->
+                onConfirm = { name, start, end, dayName, halfDayThreshold, premisesId, isActive ->
                     onUpdateTemplate(
                         activeEditing.id,
                         name,
                         start,
                         end,
-                        breakMins,
-                        graceMins,
-                        thresholdMins,
+                        dayName,
+                        halfDayThreshold,
                         premisesId,
-                        daysOfWeek,
                         isActive
                     )
                     editingTemplate = null
@@ -406,11 +403,9 @@ private fun EditShiftModal(
         name: String,
         start: String,
         end: String,
-        breakMins: Int,
-        graceMins: Int,
-        thresholdMins: Int,
+        dayName: String,
+        halfDayThreshold: String,
         premisesId: String?,
-        daysOfWeek: List<Int>?,
         isActive: Boolean
     ) -> Unit,
     onDelete: (() -> Unit)? = null
@@ -418,8 +413,10 @@ private fun EditShiftModal(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var name by remember(template) { mutableStateOf(template.name) }
+    var dayName by remember(template) { mutableStateOf(template.dayName) }
     var start by remember(template) { mutableStateOf(template.startTime.take(5)) }
     var end by remember(template) { mutableStateOf(template.endTime.take(5)) }
+    var halfDayThreshold by remember(template) { mutableStateOf(template.halfDayThreshold.take(5)) }
     var isActive by remember(template) { mutableStateOf(template.isActive) }
 
     val valid = name.trim().length >= 2 &&
@@ -427,7 +424,6 @@ private fun EditShiftModal(
             end.matches(Regex("^\\d{2}:\\d{2}$"))
 
     val premiseObj = premisesList.find { it.id == template.premisesId }
-    val dayNames = template.daysOfWeek?.let { Dates.formatDaysOfWeek(it) } ?: "All Days"
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -455,12 +451,13 @@ private fun EditShiftModal(
                     if (premiseObj != null) {
                         PresenceDetailRow(label = "Premises", value = Dates.cleanPremisesName(premiseObj.name))
                     }
-                    PresenceDetailRow(label = "Applicable Days", value = dayNames)
+                    PresenceDetailRow(label = "Applicable Days", value = dayName)
                 }
             }
 
             PresenceFieldGroup(title = "Details") {
                 PresenceTextField(value = name, onValueChange = { name = it }, label = "Shift name")
+                PresenceTextField(value = dayName, onValueChange = { dayName = it }, label = "Day Name (e.g. Monday, ALL)")
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -489,6 +486,11 @@ private fun EditShiftModal(
                     onValueChange = { end = it },
                     label = "End time (HH:MM)"
                 )
+                PresenceTextField(
+                    value = halfDayThreshold,
+                    onValueChange = { halfDayThreshold = it },
+                    label = "Half-day threshold (HH:MM)"
+                )
             }
 
             PresenceButton(
@@ -498,11 +500,9 @@ private fun EditShiftModal(
                         name.trim(),
                         start.trim(),
                         end.trim(),
-                        template.breakMinutes,
-                        template.lateGraceMinutes,
-                        template.halfDayThresholdMinutes,
+                        dayName.trim(),
+                        halfDayThreshold.trim(),
                         template.premisesId,
-                        template.daysOfWeek,
                         isActive
                     )
                 },

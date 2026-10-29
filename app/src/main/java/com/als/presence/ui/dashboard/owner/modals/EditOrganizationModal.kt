@@ -69,7 +69,7 @@ fun EditOrganizationModal(
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
     val context = LocalContext.current
-    var orgName by remember { mutableStateOf(user.organizationName) }
+    var orgName by remember { mutableStateOf(user.organizationName.orEmpty()) }
     var timezone by remember { mutableStateOf("Asia/Kolkata") }
     var currency by remember { mutableStateOf("INR") }
     var selectedLogoUri by remember { mutableStateOf<Uri?>(null) }
@@ -162,7 +162,7 @@ fun EditOrganizationModal(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = user.organizationName.take(1).uppercase().ifBlank { "O" },
+                            text = user.organizationName.orEmpty().take(1).uppercase().ifBlank { "O" },
                             style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer

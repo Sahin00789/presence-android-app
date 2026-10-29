@@ -283,9 +283,9 @@ private fun LateClockInCard(
             PresenceMetaStrip(
                 items = listOf(
                     "Shift" to (leave.shiftName?.ifBlank { null } ?: "Scheduled Shift"),
-                    "Date" to leave.startDate,
+                    "Date" to (leave.startDate),
                     "Requested" to (leave.createdAt?.take(10) ?: "—")
-                )
+                ).filter { it.second != null } as List<Pair<String, String>>
             )
             leave.reason?.takeIf { it.isNotBlank() }?.let { reason ->
                 Spacer(modifier = Modifier.height(7.dp))

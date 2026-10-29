@@ -103,8 +103,7 @@ private data class UnifiedEmployeeItem(
     val premisesName: String?,
     val joinedAt: String?,
     val isActive: Boolean,
-    val staffProfileId: String?,
-    val baseRateCents: Long? = null
+    val employeeId: String?
 )
 
 /**
@@ -170,14 +169,13 @@ fun EmployeesManagementScreen(
                 premisesName = resolvedPremisesName,
                 joinedAt = s.hireDate,
                 isActive = s.isActive,
-                staffProfileId = s.id,
-                baseRateCents = s.baseRateCents
+                employeeId = s.id
             )
         }
         val managerList = members.filter { m -> m.role == "MANAGER" && !staffUserIds.contains(m.userId) }.map { m ->
             val resolvedPremisesName = m.premisesName?.takeIf { it.isNotBlank() }
                 ?: premisesMap[m.premisesId]?.name
-            val effectiveProfileId = m.staffProfileId ?: m.userId
+            val effectiveProfileId = m.employeeId ?: m.userId
             UnifiedEmployeeItem(
                 id = effectiveProfileId,
                 userId = m.userId,
@@ -190,7 +188,7 @@ fun EmployeesManagementScreen(
                 premisesName = resolvedPremisesName,
                 joinedAt = m.joinedAt,
                 isActive = m.isActive,
-                staffProfileId = effectiveProfileId
+                employeeId = effectiveProfileId
             )
         }
         staffList + managerList
@@ -327,7 +325,7 @@ fun EmployeesManagementScreen(
                 )
             } else {
                 filteredEmployees.forEach { employee ->
-                    val targetProfileId = employee.staffProfileId ?: employee.id
+                    val targetProfileId = employee.employeeId ?: employee.id
                     EmployeeCard(
                         employee = employee,
                         face = faceStatuses[targetProfileId],
@@ -407,7 +405,7 @@ fun EmployeesManagementScreen(
     }
 
     faceTarget?.let { target ->
-        val profileId = target.staffProfileId ?: target.id
+        val profileId = target.employeeId ?: target.id
         if (profileId.isNotBlank()) {
             FaceCaptureDialog(
                 engine = viewModel.faceEmbeddingEngine,
@@ -423,7 +421,7 @@ fun EmployeesManagementScreen(
     }
 
     revokeTarget?.let { target ->
-        val profileId = target.staffProfileId ?: target.id
+        val profileId = target.employeeId ?: target.id
         AlertDialog(
             onDismissRequest = { revokeTarget = null },
             title = { Text("Reset face enrolment?", fontWeight = FontWeight.Bold) },
@@ -448,7 +446,7 @@ fun EmployeesManagementScreen(
 
     val activeShiftTarget = shiftTarget
     if (activeShiftTarget != null) {
-        val targetProfileId = activeShiftTarget.staffProfileId ?: activeShiftTarget.id
+        val targetProfileId = activeShiftTarget.employeeId ?: activeShiftTarget.id
         val staffAdapter = StaffDto(
             id = targetProfileId,
             userId = activeShiftTarget.userId,
@@ -468,13 +466,8 @@ fun EmployeesManagementScreen(
             initialStaffId = staffAdapter.id,
             initialPremisesId = activeShiftTarget.premisesId,
             onDismiss = { shiftTarget = null },
-            onAssignWithRules = { staffProfileId, assignments, startDate, premisesId, _, _ ->
-                viewModel.assignShifts(staffProfileId, assignments, startDate, premisesId)
-                assignments.firstOrNull()?.presentPay?.let { pay ->
-                    if (pay.isNotBlank()) {
-                        viewModel.setSalary(staffProfileId, pay)
-                    }
-                }
+            onAssignWithRules = { employeeId, assignments, startDate, premisesId, _, _ ->
+                viewModel.assignShifts(employeeId, assignments, startDate, premisesId)
                 shiftTarget = null
             }
         )
@@ -569,18 +562,12 @@ private fun EmployeeCard(
 
             // Assigned Shifts & Attendance Payment Rules
             AssignedShiftsSection(
-                staffProfileId = employee.staffProfileId,
+                employeeId = employee.employeeId,
                 fullName = employee.fullName,
                 email = employee.email,
                 staffCode = employee.staffCode,
-                baseRateCents = employee.baseRateCents,
                 shiftAssignments = shiftAssignments,
                 shiftTemplates = shiftTemplates
-            )
-
-            // Unworked Day Payment Rules
-            UnworkedPaymentRulesSection(
-                baseRateCents = employee.baseRateCents
             )
 
             // Action Buttons: Assign Shift & Payments, Enrol Face
@@ -626,17 +613,16 @@ private fun EmployeeCard(
 
 @Composable
 private fun AssignedShiftsSection(
-    staffProfileId: String?,
+    employeeId: String?,
     fullName: String?,
     email: String?,
     staffCode: String?,
-    baseRateCents: Long?,
     shiftAssignments: List<ShiftAssignmentDto>,
     shiftTemplates: List<ShiftTemplateDto>
 ) {
-    val myAssignments = remember(staffProfileId, fullName, email, staffCode, shiftAssignments) {
+    val myAssignments = remember(employeeId, fullName, email, staffCode, shiftAssignments) {
         shiftAssignments.filter { a ->
-            (staffProfileId != null && a.staffProfileId == staffProfileId) ||
+            (employeeId != null && a.employeeId == employeeId) ||
             (!fullName.isNullOrBlank() && a.staffName.equals(fullName, ignoreCase = true)) ||
             (!email.isNullOrBlank() && a.staffName.equals(email, ignoreCase = true)) ||
             (!staffCode.isNullOrBlank() && a.staffName.equals(staffCode, ignoreCase = true))
@@ -716,7 +702,7 @@ private fun AssignedShiftsSection(
 
                     val isShiftActive = matchingAssignment != null
                     val timeWindow = if (isShiftActive) Dates.formatWindow(template?.startTime, template?.endTime) else "Off Day"
-                    val presentPayCents = matchingAssignment?.paymentCents ?: baseRateCents
+                    val presentPayCents = matchingAssignment?.paymentCents
 
                     Surface(
                         modifier = Modifier.width(155.dp),
@@ -769,7 +755,7 @@ private fun AssignedShiftsSection(
 
                             if (matchingAssignment != null) {
                                 Text(
-                                    text = matchingAssignment.shiftName.ifBlank { template?.name ?: "Shift" },
+                                    text = matchingAssignment.shiftName?.ifBlank { null } ?: template?.name ?: "Shift",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = PresenceDesign.Ink,
@@ -837,64 +823,6 @@ private fun AssignedShiftsSection(
                             }
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun UnworkedPaymentRulesSection(
-    baseRateCents: Long?
-) {
-    val unworkedRateCents = baseRateCents ?: 60000L
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    Icons.Default.Payments,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = "Unworked Day Payment Rules",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = PresenceDesign.Ink
-                )
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text("Weekly Off Rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.5.sp)
-                    Text(Money.format(unworkedRateCents), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SecondaryEmerald)
-                }
-                Column {
-                    Text("Public Holiday Rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.5.sp)
-                    Text(Money.format(unworkedRateCents), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                }
-                Column {
-                    Text("Paid Leave Rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.5.sp)
-                    Text(Money.format(unworkedRateCents), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
                 }
             }
         }

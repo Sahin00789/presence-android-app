@@ -1,72 +1,28 @@
-# Role Permissions & Invitation Workflows (`docs/ROLE_PERMISSIONS.md`)
+# Role & Permissions Matrix (`docs/ROLE_PERMISSIONS.md`)
 
-## 1. Role Permission Matrix
+## 1. Scope & Authority
+- **Owner**: Head of the organization (`organization_id`) who manages everything across the organization and all its premises. Possesses exclusive administration rights for organization creation, direct addition of Managers with mandatory premises assignment (`premises_id`), global premises configuration, payroll locking (`monthly_payrolls`), sensitive financial approvals, and supervised face enrollment of Managers and Staff (`multi_pose_face_templates`). **The Owner is NOT an employee** (represented by `organizations.owner_user_id`), does not reside in the `employees` table, has **NO attendance tracking**, and does **NOT earn an employee salary**.
+- **Manager**: Premises-level head (`premises_id`), NOT organization-level. Directly added by the Owner with mandatory premises assignment. Manages daily operations, directly adds Staff to their assigned premises, configures and assigns premises-level shifts (`shifts`, `employee_shift_assignments`), performs face enrollment for Staff within their premises (`multi_pose_face_templates`), reviews attendance exceptions and GPS monitoring pings, and handles leave/corrections. **Managers ARE employees** (`employees` table with `role = 'MANAGER'`) — they have their own assigned shifts, track attendance (`employee_attendance`), and earn salary through monthly payroll (`monthly_payrolls`) and the earning ledger (`staff_earning_ledger`).
+- **Staff**: Premises-level workforce directly added by their premises Manager. **Staff ARE employees** (`employees` table with `role = 'STAFF'`) scoped to their Manager's `premises_id`. They perform geofenced face clock-in/clock-out, participate in periodic GPS monitoring checks (`attendance_location_pings`), view shift schedules, track attendance, and earn salary through monthly payroll and the staff earning ledger (`staff_earning_ledger`). Staff cannot self-enroll biometrics.
 
-| Module / Action | Owner | Manager | Staff |
+---
+
+## 2. Permissions Table
+
+| Feature / Action | Owner (Head of Organization) | Manager (Head of Assigned Premises) | Staff (Employee Self) |
 | :--- | :---: | :---: | :---: |
-| **Self-Registration** | Yes | No | No |
-| **Create/Configure Organization** | Yes | No | No |
-| **Configure Premises & Geofence** | Yes | No | No |
-| **Add / Deactivate Managers** | Yes | No | No |
-| **Add / Deactivate Staff** | View Only | Yes | No |
-| **Assign & Edit Shift Templates** | View Only | Yes | No |
-| **Complete Face Enrollment** | Supervise Managers | Supervise Staff | No (Manager/Owner supervised) |
-| **Perform Clock-in / Clock-out** | No | If Employed | Yes |
-| **Active Shift GPS Checks** | No | If Employed | Yes |
-| **View Attendance Exceptions** | Yes | Yes | Own Only |
-| **Resolve Manual Attendance Corrections** | Review/Approve | Yes | Request Only |
-| **Submit Leave Requests** | No | Request | Request |
-| **Approve Leave Requests** | Escalations | Yes | No |
-| **Configure Staff Salary Structures** | View Policy | Yes | No |
-| **View Wallet Balances & Ledgers** | Org Overview | Own + Staff | Own Only |
-| **Prepare Monthly Payroll Draft** | View | Yes | No |
-| **Approve & Lock Monthly Payroll** | Yes | Submit | No |
-| **Record Manual Salary Payments** | View | Yes | No |
-| **Access Itemized Payslips** | Org Summary | Own Payslip | Own Payslip |
-| **View Operational Audit Logs** | Full | Partial | None |
+| **Is Employee?** | **No** (Head of Org) | **Yes** (Premises Employee) | **Yes** (Premises Employee) |
+| **Has Attendance & Salary Tracking?** | **No** (Exempt) | **Yes** (Tracked & Earns Salary) | **Yes** (Tracked & Earns Salary) |
+| **Organization Management** | Full Control | Read Only | No |
+| **Premises Configuration** | All Premises (Create/Edit) | Assigned Premises Only (Read) | Assigned Premises Only (Read) |
+| **Manager Creation & Premises Assignment** | Yes | No | No |
+| **Staff Creation & Premises Assignment** | Yes (All Premises) | Yes (Assigned Premises Only) | No |
+| **Shift Definition & Assignment** | Yes (All Premises) | Yes (Assigned Premises Only) | View Assigned Shifts |
+| **Clock-In / Attendance Participation** | **No** (Owner has no attendance) | **Yes** (Own attendance tracked) | **Yes** (Own attendance tracked) |
+| **Attendance Review & Corrections** | All Premises | Assigned Premises Only | Own Records Only |
+| **Payroll Review & Calculation** | All Employees | Assigned Premises Staff (+ Own) | Own Payslips Only |
+| **Payroll Locking (`monthly_payrolls`)** | Exclusive Right | No | No |
+| **Salary Disbursal (`payroll_transactions`)** | Yes | No | No |
+| **Face Enrollment (`multi_pose_face_templates`)**| Yes (Managers & Staff) | Yes (Assigned Premises Staff) | Supervised Only (No Self-Enrollment) |
+| **Earnings & Payslips Tracking** | All Employees (Ledger Oversight) | Assigned Premises (+ Own Salary) | Own Salary & Payslips Only |
 
----
-
-## 2. Invitation Workflows
-
-### 2.1 Owner Adds Manager Workflow
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Owner
-    participant API as Fastify API
-    participant DB as PostgreSQL
-    
-    Owner->>API: POST /api/v1/staff/invite (Email, Role=MANAGER, Premises)
-    API->>DB: Insert User & Membership (Role=MANAGER)
-    API->>DB: Insert StaffProfile (Manager Code, Premises)
-    API-->>Owner: 200 OK (Manager Added)
-    Owner->>API: POST /api/v1/biometrics/enroll (StaffProfileId, 5-Pose Embeddings)
-    API->>DB: Save encrypted multi-pose templates
-    API-->>Owner: 200 OK (Face Enrolled)
-```
-
-### 2.2 Manager Adds Staff Workflow
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Manager
-    participant API as Fastify API
-    participant DB as PostgreSQL
-    
-    Manager->>API: POST /api/v1/staff/invite (Email, Name, Role=STAFF, Premises)
-    API->>DB: Insert User & Membership (Role=STAFF)
-    API->>DB: Insert StaffProfile (Auto-generated EMP Code, Premises)
-    API-->>Manager: 200 OK (Staff Added)
-    Manager->>API: POST /api/v1/biometrics/enroll (StaffProfileId, 5-Pose Embeddings)
-    API->>DB: Save encrypted multi-pose templates
-    API-->>Manager: 200 OK (Face Enrolled)
-```
-
----
-
-## 3. Organization Isolation Policies
-1. Every user belongs to one or more organizations via the `memberships` table.
-2. The user's active `organization_id` is encoded in the session JWT.
-3. Every database query in Fastify repositories **must** explicitly include `WHERE organization_id = session.organization_id`.
-4. Cross-tenant data leakage is strictly audited and tested in security regression tests.

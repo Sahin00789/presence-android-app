@@ -15,28 +15,30 @@ import com.als.presence.domain.model.User
 import com.als.presence.ui.dashboard.common.LocationsTab
 import com.als.presence.ui.dashboard.common.LocationsViewModel
 import com.als.presence.ui.dashboard.common.MessageSnackbar
-import com.als.presence.ui.dashboard.staff.tabs.StaffAttendanceTab
-import com.als.presence.ui.dashboard.staff.tabs.StaffClockInTab
-import com.als.presence.ui.dashboard.staff.tabs.StaffWalletTab
+import com.als.presence.ui.dashboard.staff.tabs.employeeAttendanceTab
+import com.als.presence.ui.dashboard.staff.tabs.employeeClockInTab
+import com.als.presence.ui.dashboard.staff.tabs.staffLedgerTab
+import com.als.presence.ui.dashboard.staff.viewmodels.StaffAttendanceViewModel
+import com.als.presence.ui.dashboard.staff.viewmodels.StaffClockInViewModel
+import com.als.presence.ui.dashboard.staff.viewmodels.StaffLedgerViewModel
 
-/** Staff dashboard: Clock-In (0), Shifts/Attendance (1), Locations (2), Wallet (3). */
+/** Staff dashboard: Clock-In (0), Shifts/Attendance (1), Locations (2), Ledger (3). */
 @Composable
-fun StaffDashboardScreen(
+fun EmployeeDashboardScreen(
     user: User,
     selectedTab: Int,
     modifier: Modifier = Modifier,
     clockInViewModel: StaffClockInViewModel = hiltViewModel(),
     attendanceViewModel: StaffAttendanceViewModel = hiltViewModel(),
-    walletViewModel: StaffWalletViewModel = hiltViewModel(),
+    ledgerViewModel: StaffLedgerViewModel = hiltViewModel(),
     locationsViewModel: LocationsViewModel = hiltViewModel()
 ) {
     val clockState by clockInViewModel.state.collectAsStateWithLifecycle()
     val recordsState by attendanceViewModel.records.collectAsStateWithLifecycle()
-    val scheduleState by attendanceViewModel.schedule.collectAsStateWithLifecycle()
     val overtimeState by attendanceViewModel.overtime.collectAsStateWithLifecycle()
-    val summaryState by walletViewModel.summary.collectAsStateWithLifecycle()
-    val transactionsState by walletViewModel.transactions.collectAsStateWithLifecycle()
-    val payslipsState by walletViewModel.payslips.collectAsStateWithLifecycle()
+    val summaryState by ledgerViewModel.summary.collectAsStateWithLifecycle()
+    val ledgerState by ledgerViewModel.ledgerEntries.collectAsStateWithLifecycle()
+    val payslipsState by ledgerViewModel.payslips.collectAsStateWithLifecycle()
 
     val presenceState by locationsViewModel.presence.collectAsStateWithLifecycle()
     val premisesState by locationsViewModel.premises.collectAsStateWithLifecycle()
@@ -54,14 +56,14 @@ fun StaffDashboardScreen(
     }
 
     LaunchedEffect(selectedTab) {
-        if (selectedTab == 3) walletViewModel.refresh()
+        if (selectedTab == 3) ledgerViewModel.refresh()
         if (selectedTab == 1) attendanceViewModel.refresh()
         if (selectedTab == 2) locationsViewModel.refresh()
     }
 
     Box(modifier = modifier.fillMaxSize()) {
         when (selectedTab) {
-            0 -> StaffClockInTab(
+            0 -> employeeClockInTab(
                 user = user,
                 state = clockState,
                 onRefresh = clockInViewModel::refresh,
@@ -71,9 +73,8 @@ fun StaffDashboardScreen(
                 engine = clockInViewModel.faceEmbeddingEngine,
                 onFaceCaptured = clockInViewModel::setFaceEmbedding
             )
-            1 -> StaffAttendanceTab(
+            1 -> employeeAttendanceTab(
                 recordsState = recordsState,
-                scheduleState = scheduleState,
                 overtimeState = overtimeState,
                 onRefresh = attendanceViewModel::refresh
             )
@@ -88,11 +89,11 @@ fun StaffDashboardScreen(
                 onRefresh = locationsViewModel::refresh,
                 onResolveGpsException = locationsViewModel::resolveGpsException
             )
-            else -> StaffWalletTab(
+            else -> staffLedgerTab(
                 summaryState = summaryState,
-                transactionsState = transactionsState,
+                ledgerState = ledgerState,
                 payslipsState = payslipsState,
-                onRefresh = walletViewModel::refresh
+                onRefresh = ledgerViewModel::refresh
             )
         }
 

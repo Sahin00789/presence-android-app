@@ -20,6 +20,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
+        buildConfigField("String", "OLA_MAPS_API_KEY", "\"wZWX2vb65oEDfkT3D0TTJ2abGTQ97PqRn34xh7kH\"")
+
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -90,11 +92,12 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.retrofit.kotlinx.serialization.converter)
 
-    // Room DB & DataStore
+    // Room DB, DataStore & Encrypted Security
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
     implementation(libs.datastore.preferences)
+    implementation("androidx.security:security-crypto:1.1.0")
 
     // CameraX & ONNX Biometrics
     implementation(libs.camerax.core)

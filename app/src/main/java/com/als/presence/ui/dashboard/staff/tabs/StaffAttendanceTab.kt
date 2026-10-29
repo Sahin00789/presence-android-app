@@ -40,7 +40,6 @@ import androidx.compose.ui.unit.dp
 import com.als.presence.core.common.UiState
 import com.als.presence.data.model.AttendanceRecordDto
 import com.als.presence.data.model.OvertimeDto
-import com.als.presence.data.model.ScheduleEntryDto
 import com.als.presence.ui.dashboard.common.Dates
 import com.als.presence.ui.dashboard.common.MetricTile
 import com.als.presence.ui.dashboard.common.Money
@@ -50,18 +49,17 @@ import com.als.presence.ui.dashboard.common.SectionHeader
 import com.als.presence.ui.dashboard.common.SectionLoading
 import com.als.presence.ui.dashboard.common.StatusPill
 
-/** Staff "Shifts" tab: personal register, upcoming schedule and overtime. */
+/** Staff "Attendance" tab: personal register and overtime history. */
 @Composable
-fun StaffAttendanceTab(
+fun employeeAttendanceTab(
     recordsState: UiState<List<AttendanceRecordDto>>,
-    scheduleState: UiState<List<ScheduleEntryDto>>,
     overtimeState: UiState<List<OvertimeDto>>,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
     isScrollable: Boolean = true
 ) {
-    var section by remember { mutableIntStateOf(1) } // Default to "Schedule" (Shifts)
-    val sections = listOf("Register", "Schedule", "Overtime")
+    var section by remember { mutableIntStateOf(0) }
+    val sections = listOf("Register", "Overtime")
     val scrollState = rememberScrollState()
 
     val records = (recordsState as? UiState.Success)?.data.orEmpty()
@@ -75,99 +73,65 @@ fun StaffAttendanceTab(
             .padding(top = if (isScrollable) 16.dp else 0.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "My Shifts",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Your upcoming shifts, register, and overtime",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        SectionHeader(
+            title = "Personal Workspace",
+            trailing = {
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
-            IconButton(
-                onClick = onRefresh,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = "Refresh attendance",
-                    modifier = Modifier.size(19.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        )
 
         Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             MetricTile(
-                label = "Present",
+                label = "Days Present",
                 value = records.count { it.status == "PRESENT" }.toString(),
-                modifier = Modifier.weight(1f),
-                accent = MaterialTheme.colorScheme.secondary
+                modifier = Modifier.weight(1f)
             )
             MetricTile(
-                label = "Late",
-                value = records.count { it.status == "LATE" }.toString(),
-                modifier = Modifier.weight(1f),
-                accent = MaterialTheme.colorScheme.tertiary
-            )
-            MetricTile(
-                label = "Hours",
-                value = "%.1f".format(records.sumOf { it.workedMinutes } / 60.0),
+                label = "Worked Hours",
+                value = Dates.formatMinutes(records.sumOf { it.workedMinutes }),
                 modifier = Modifier.weight(1f)
             )
         }
 
         Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
             sections.forEachIndexed { index, label ->
                 FilterChip(
                     selected = section == index,
                     onClick = { section = index },
-                    label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-                    shape = RoundedCornerShape(10.dp)
+                    label = { Text(label) }
                 )
             }
         }
 
         when (section) {
             0 -> when (recordsState) {
-                is UiState.Loading, is UiState.Idle -> SectionLoading("Loading your register…")
+                is UiState.Loading, is UiState.Idle -> SectionLoading("Loading attendance register…")
                 is UiState.Error -> SectionError(recordsState.message)
                 is UiState.Success -> {
-                    if (records.isEmpty()) {
-                        SectionEmpty("No attendance in the last 30 days.")
+                    val list = recordsState.data
+                    if (list.isEmpty()) {
+                        SectionEmpty("No attendance records for the past 30 days.")
                     } else {
-                        records.forEach { record -> RecordRow(record) }
-                    }
-                }
-            }
-
-            1 -> when (scheduleState) {
-                is UiState.Loading, is UiState.Idle -> SectionLoading("Loading your schedule…")
-                is UiState.Error -> SectionError(scheduleState.message)
-                is UiState.Success -> {
-                    val entries = scheduleState.data
-                    if (entries.isEmpty()) {
-                        SectionEmpty("No shifts scheduled for the next two weeks.")
-                    } else {
-                        entries.forEach { entry -> ScheduleRow(entry) }
+                        list.forEach { record -> RecordRow(record) }
                     }
                 }
             }
@@ -223,77 +187,6 @@ private fun RecordRow(record: AttendanceRecordDto) {
 }
 
 @Composable
-private fun ScheduleRow(entry: ScheduleEntryDto) {
-    val isShift = entry.type.equals("SHIFT", ignoreCase = true)
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (isShift) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-            else MaterialTheme.colorScheme.tertiary.copy(alpha = 0.35f)
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(
-                        (if (isShift) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.tertiary).copy(alpha = 0.1f)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isShift) {
-                        Icons.Default.Schedule
-                    } else {
-                        Icons.Default.BeachAccess
-                    },
-                    contentDescription = null,
-                    tint = if (isShift) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.size(17.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "${Dates.formatDate(entry.date)} • ${Dates.dayName(entry.date)}",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = when {
-                        isShift && entry.shiftName != null ->
-                            "${entry.shiftName} • ${Dates.formatWindow(entry.startTime, entry.endTime)}"
-                        entry.holidayName != null -> entry.holidayName
-                        else -> entry.type.lowercase().replace('_', ' ')
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            if (isShift) {
-                Text(
-                    text = Dates.formatMinutes(entry.scheduledMinutes),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-            } else {
-                StatusPill(entry.type)
-            }
-        }
-    }
-}
-
-@Composable
 private fun OvertimeRow(entry: OvertimeDto) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -304,44 +197,38 @@ private fun OvertimeRow(entry: OvertimeDto) {
             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
         )
     ) {
-        Column(
+        Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = Dates.formatDate(entry.workDate),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.tertiaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.size(20.dp)
                 )
-                StatusPill(entry.status)
             }
-            Text(
-                text = "${Dates.formatWindow(entry.startTime, entry.endTime)} • ${Dates.formatMinutes(entry.plannedMinutes)} planned",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = entry.reason ?: "Overtime",
-                    style = MaterialTheme.typography.labelSmall,
+                    text = "${Dates.formatDate(entry.workDate)} • ${Dates.formatTime(entry.startTime)} – ${Dates.formatTime(entry.endTime)}",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${Dates.formatMinutes(entry.plannedMinutes)} planned • Pay: ${Money.format(entry.paymentInr)}",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Text(
-                    text = Money.format(entry.paymentCents),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.secondary
-                )
             }
-            if (entry.workedMinutes > 0) {
-                Text(
-                    text = "Worked ${Dates.formatMinutes(entry.workedMinutes)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
+            StatusPill(entry.status)
         }
     }
 }

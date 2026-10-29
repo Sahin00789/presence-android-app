@@ -14,11 +14,12 @@ stateDiagram-v2
     CLOCKED_IN --> PRESENT : Timely Clock-In
     CLOCKED_IN --> LATE : Clocked-In After Grace Period
     CLOCKED_IN --> HALF_DAY : Worked < Half-Day Threshold
-    CLOCKED_IN --> EXCEPTION_OPEN : 3 Failed GPS Checks / Geofence Breach
+    CLOCKED_IN --> EXCEPTION_OPEN : 3 Consecutive Outside GPS Pings (>3 count)
 
-    EXCEPTION_OPEN --> CORRECTED_PRESENT : Manager Resolves (Present)
-    EXCEPTION_OPEN --> CORRECTED_ABSENT : Manager Resolves (Absent)
-    EXCEPTION_OPEN --> DISPUTED : Staff Contests Manager Decision
+    EXCEPTION_OPEN --> CORRECTED_PRESENT : Manager/Owner Resolves (Present)
+    EXCEPTION_OPEN --> CORRECTED_ABSENT : Manager/Owner Resolves (Absent)
+    EXCEPTION_OPEN --> CORRECTED_HALF_DAY : Manager/Owner Resolves (Half-Day)
+    EXCEPTION_OPEN --> DEFAULT_PRESENT : Shift/Overtime Completed & No Button Pressed
 
     PRESENT --> CLOCKED_OUT : Shift Completed
     LATE --> CLOCKED_OUT : Shift Completed
@@ -31,6 +32,9 @@ stateDiagram-v2
 ---
 
 ## 2. Clock-In Validation Policy
+> [!NOTE]
+> Attendance tracking and clock-in apply exclusively to employees (**Staff** and **Managers**). The **Owner** is the head of the organization, is NOT an employee, has NO attendance tracking, and does NOT clock in.
+
 1. **Distance Check**: Distance between device GPS coordinates and premise coordinates must be $\le 50\text{ metres}$.
 2. **Accuracy Threshold**: GPS reading `accuracyMeters` must be $\le 30\text{ metres}$. Stale location readings ($>2\text{ minutes}$ old) or flagged mock locations are rejected.
 3. **Face Verification Check**: Cosine similarity score between clock-in embedding and enrolled template must exceed the configured threshold ($\ge 0.75$).
@@ -46,7 +50,9 @@ stateDiagram-v2
 
 ---
 
-## 4. Manual Resolution & Exception Workflows
-1. **Immutable History**: Original clock-in event rows are never deleted or modified.
-2. **Correction Audit**: Manual overrides create an `attendance_corrections` entry referencing the original `attendance_exceptions` record, storing `actor_id`, timestamp, and reason text.
-3. **Approval Escalation**: Manager corrections involving financial rate changes or sensitive absences require Owner review if configured by policy.
+## 4. Manual Resolution & Exception Workflows (3 Consecutive Outside Pings)
+1. **Trigger Condition**: When periodic active-shift location monitoring records **3 consecutive outside pings** (`consecutiveFailures >= 3` / outside count $> 3$), an attendance monitoring exception is raised.
+2. **Action Buttons Persistence**: Resolution action buttons (Absent, Half-Day, Leave, Resume) appear on the Owner and Manager dashboard and remain visible and active **until the shift or overtime is completely finished/completed**.
+3. **Manual Options**: Owner or Manager can manually mark attendance as `ABSENT`, `HALF_DAY`, `LEAVE`, or resume tracking (`RESUME`).
+4. **Default Present Rule (No Action)**: If the owner or manager **does not press any button** before the shift or overtime session completes, the system automatically **defaults the attendance status to Present** (`PRESENT`).
+5. **Audit Logging**: Manual overrides and final resolutions are tracked in `audit_logs` and `attendance_corrections`.

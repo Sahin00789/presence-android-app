@@ -6,23 +6,29 @@ import com.als.presence.domain.repository.AuthRepository
 import javax.inject.Inject
 
 class RegisterOwnerWithGoogleUseCase @Inject constructor(
-    private val repository: AuthRepository
+    private val authRepository: AuthRepository
 ) {
     suspend operator fun invoke(
         idToken: String,
-        organizationName: String,
+        orgName: String,
         timezone: String,
         currency: String,
         premisesName: String,
-        radiusMeters: Int
+        radius: Int,
+        premisesAddress: String? = null,
+        latitude: String? = null,
+        longitude: String? = null
     ): Resource<User> {
-        return repository.registerOwnerWithGoogle(
+        return authRepository.registerOwner(
             idToken = idToken,
-            organizationName = organizationName,
+            orgName = orgName,
             timezone = timezone,
             currency = currency,
             premisesName = premisesName,
-            radiusMeters = radiusMeters
+            radius = radius,
+            premisesAddress = premisesAddress,
+            latitude = latitude,
+            longitude = longitude
         )
     }
 }

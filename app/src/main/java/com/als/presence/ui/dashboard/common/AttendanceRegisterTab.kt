@@ -153,7 +153,7 @@ fun AttendanceRegisterTab(
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            text = exception.reason.replace('_', ' '),
+                                            text = exception.reason?.replace('_', ' ').orEmpty(),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -281,7 +281,7 @@ private fun ResolveExceptionDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "${exception.staffName ?: "Staff"} • ${exception.reason.replace('_', ' ')}",
+                    text = "${exception.staffName ?: "Staff"} • ${exception.reason?.replace('_', ' ').orEmpty()}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

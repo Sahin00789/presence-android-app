@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-import com.als.presence.data.remote.DomainWebSocketEvent
+import com.als.presence.data.model.DomainWebSocketEvent
 import com.als.presence.data.remote.EventsWebSocketService
 
 @HiltViewModel
@@ -28,8 +28,8 @@ class LocationsViewModel @Inject constructor(
     private val _premises = MutableStateFlow<UiState<List<PremisesDto>>>(UiState.Loading)
     val premises: StateFlow<UiState<List<PremisesDto>>> = _premises.asStateFlow()
 
-    private val _staff = MutableStateFlow<UiState<List<StaffDto>>>(UiState.Loading)
-    val staff: StateFlow<UiState<List<StaffDto>>> = _staff.asStateFlow()
+    private val _employee = MutableStateFlow<UiState<List<StaffDto>>>(UiState.Loading)
+    val staff: StateFlow<UiState<List<StaffDto>>> = _employee.asStateFlow()
 
     private val _selectedPremisesId = MutableStateFlow<String?>(null)
     val selectedPremisesId: StateFlow<String?> = _selectedPremisesId.asStateFlow()
@@ -81,10 +81,10 @@ class LocationsViewModel @Inject constructor(
                 }
             }
 
-            when (val staffRes = repository.getStaff()) {
-                is Resource.Success -> _staff.value = UiState.Success(staffRes.data)
-                is Resource.Error -> _staff.value = UiState.Error(staffRes.message ?: "Failed to load staff")
-                is Resource.Loading -> _staff.value = UiState.Loading
+            when (val staffRes = repository.getEmployees()) {
+                is Resource.Success -> _employee.value = UiState.Success(staffRes.data)
+                is Resource.Error -> _employee.value = UiState.Error(staffRes.message ?: "Failed to load staff")
+                is Resource.Loading -> _employee.value = UiState.Loading
             }
         }
     }
@@ -117,7 +117,7 @@ class LocationsViewModel @Inject constructor(
     fun resolveGpsException(exceptionId: String, status: String, reason: String) {
         viewModelScope.launch {
             _isSubmitting.value = true
-            when (val res = repository.resolveException(exceptionId, ResolveExceptionRequest(correctedStatus = status, reason = reason))) {
+            when (val res = repository.resolveException(exceptionId, status, reason)) {
                 is Resource.Success -> {
                     _message.value = "GPS Exception resolved ($status)."
                     loadPresence()
@@ -131,10 +131,27 @@ class LocationsViewModel @Inject constructor(
         }
     }
 
-    fun assignStaffPremises(staffProfileId: String, premisesId: String?) {
+    fun cancelOvertime(overtimeId: String) {
         viewModelScope.launch {
             _isSubmitting.value = true
-            when (val res = repository.assignStaffPremises(staffProfileId, premisesId)) {
+            when (val res = repository.cancelOvertime(overtimeId)) {
+                is Resource.Success -> {
+                    _message.value = "Overtime deleted successfully."
+                    loadPresence()
+                }
+                is Resource.Error -> {
+                    _message.value = res.message ?: "Failed to delete overtime"
+                }
+                is Resource.Loading -> {}
+            }
+            _isSubmitting.value = false
+        }
+    }
+
+    fun assignStaffPremises(employeeId: String, premisesId: String?) {
+        viewModelScope.launch {
+            _isSubmitting.value = true
+            when (val res = repository.assignStaffPremises(employeeId, premisesId)) {
                 is Resource.Success -> {
                     _message.value = "Assigned location updated successfully."
                     refresh()

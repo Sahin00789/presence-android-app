@@ -1,22 +1,7 @@
 package com.als.presence.di
 
 import com.als.presence.data.local.SessionManager
-import com.als.presence.data.remote.AttendanceApiService
-import com.als.presence.data.remote.AuthApiService
-import com.als.presence.data.remote.AuthInterceptor
-import com.als.presence.data.remote.FaceApiService
-import com.als.presence.data.remote.InvitationApiService
-import com.als.presence.data.remote.LeaveApiService
-import com.als.presence.data.remote.LocationApiService
-import com.als.presence.data.remote.OvertimeApiService
-import com.als.presence.data.remote.PRESENCE_BASE_URL
-import com.als.presence.data.remote.OrganizationApiService
-import com.als.presence.data.remote.PayrollApiService
-import com.als.presence.data.remote.PostalApiService
-import com.als.presence.data.remote.PremisesApiService
-import com.als.presence.data.remote.ShiftApiService
-import com.als.presence.data.remote.StaffApiService
-import com.als.presence.data.remote.WalletApiService
+import com.als.presence.data.remote.*
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import dagger.Module
 import dagger.Provides
@@ -53,6 +38,7 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(
         sessionManager: SessionManager,
+        tokenAuthenticator: TokenAuthenticator,
         json: Json
     ): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
@@ -61,6 +47,7 @@ object NetworkModule {
 
         return OkHttpClient.Builder()
             .addInterceptor(AuthInterceptor(sessionManager, json, DEFAULT_BASE_URL))
+            .authenticator(tokenAuthenticator)
             .addInterceptor(logging)
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
@@ -99,13 +86,8 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideStaffApiService(retrofit: Retrofit): StaffApiService =
-        retrofit.create(StaffApiService::class.java)
-
-    @Provides
-    @Singleton
-    fun provideInvitationApiService(retrofit: Retrofit): InvitationApiService =
-        retrofit.create(InvitationApiService::class.java)
+    fun provideEmployeeApiService(retrofit: Retrofit): EmployeeApiService =
+        retrofit.create(EmployeeApiService::class.java)
 
     @Provides
     @Singleton
@@ -121,11 +103,6 @@ object NetworkModule {
     @Singleton
     fun provideShiftApiService(retrofit: Retrofit): ShiftApiService =
         retrofit.create(ShiftApiService::class.java)
-
-    @Provides
-    @Singleton
-    fun provideWalletApiService(retrofit: Retrofit): WalletApiService =
-        retrofit.create(WalletApiService::class.java)
 
     @Provides
     @Singleton
@@ -149,6 +126,14 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideHolidayApiService(retrofit: Retrofit): HolidayApiService = retrofit.create(HolidayApiService::class.java)
+
+    @Provides
+    @Singleton
+    fun provideShiftsApiService(retrofit: Retrofit): ShiftsApiService = retrofit.create(ShiftsApiService::class.java)
+
+    @Provides
+    @Singleton
     fun providePostalApiService(
         okHttpClient: OkHttpClient,
         json: Json
@@ -160,5 +145,20 @@ object NetworkModule {
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
         return retrofit.create(PostalApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideOlaMapsApiService(
+        okHttpClient: OkHttpClient,
+        json: Json
+    ): com.als.presence.data.remote.OlaMapsApiService {
+        val contentType = "application/json".toMediaType()
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://api.olamaps.io/")
+            .client(okHttpClient)
+            .addConverterFactory(json.asConverterFactory(contentType))
+            .build()
+        return retrofit.create(com.als.presence.data.remote.OlaMapsApiService::class.java)
     }
 }

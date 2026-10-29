@@ -7,7 +7,7 @@ import com.als.presence.core.common.UiState
 import com.als.presence.data.model.AttendanceExceptionDto
 import com.als.presence.data.model.AttendanceRecordDto
 import com.als.presence.data.model.ResolveExceptionRequest
-import com.als.presence.data.remote.DomainWebSocketEvent
+import com.als.presence.data.model.DomainWebSocketEvent
 import com.als.presence.data.remote.EventsWebSocketService
 import com.als.presence.domain.repository.OperationsRepository
 import com.als.presence.ui.dashboard.common.Dates
@@ -78,7 +78,8 @@ class ManagerAttendanceViewModel @Inject constructor(
             when (
                 val result = repository.resolveException(
                     exceptionId,
-                    ResolveExceptionRequest(correctedStatus = correctedStatus, reason = reason)
+                    correctedStatus,
+                    reason
                 )
             ) {
                 is Resource.Success -> {

@@ -12,13 +12,12 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
 /**
- * Formatting helpers shared by every dashboard. Money is always handled in the
- * backend's minor currency units (paise/cents) and only converted for display —
- * never for arithmetic (`AGENTS.md` §6.2).
+ * Formatting helpers shared by every dashboard. Money is always handled in Indian Rupees (INR / ₹)
+ * using integer minor units (paise: 1 Rupee = 100 Paise).
  */
 object Money {
-    fun format(cents: Long?, withDecimals: Boolean = true): String {
-        val value = cents ?: return "—"
+    fun format(paise: Long?, withDecimals: Boolean = true): String {
+        val value = paise ?: return "—"
         val negative = value < 0
         val absolute = if (negative) -value else value
         val whole = absolute / 100
@@ -36,8 +35,8 @@ object Money {
         return if (negative) "-₹$body" else "₹$body"
     }
 
-    /** Parses a human currency string ("12,500.50") into minor units. */
-    fun parseToCents(raw: String): Long? {
+    /** Parses a human currency string ("12,500.50") into paise (minor currency units). */
+    fun parseToPaise(raw: String): Long? {
         val cleaned = raw.replace("₹", "").replace(",", "").trim()
         if (cleaned.isEmpty()) return null
         return cleaned.toBigDecimalOrNull()
@@ -45,6 +44,9 @@ object Money {
             ?.setScale(0, java.math.RoundingMode.HALF_UP)
             ?.toLong()
     }
+
+    @Deprecated("Use parseToPaise", ReplaceWith("parseToPaise(raw)"))
+    fun parseToCents(raw: String): Long? = parseToPaise(raw)
 }
 
 object Dates {

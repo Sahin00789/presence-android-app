@@ -56,7 +56,7 @@ import com.als.presence.ui.dashboard.common.PresenceVariant
 import com.als.presence.ui.dashboard.manager.screens.DayInfo
 import com.als.presence.ui.dashboard.manager.screens.WeekDaysList
 
-import com.als.presence.data.model.DayShiftAssignmentRequest
+import com.als.presence.data.model.CreateShiftAssignmentRequest
 
 data class ShiftPaymentState(
     val templateId: String,
@@ -68,7 +68,7 @@ data class ShiftPaymentState(
     val presentPay: String = "600",
     val halfDayPay: String = "300",
     val leavePay: String = "600",
-    val absentDeduction: String = "0"
+    val absentPay: String = "0"
 )
 
 data class DayCardState(
@@ -90,8 +90,8 @@ fun AssignShiftWithRulesModal(
     initialPremisesId: String? = null,
     onDismiss: () -> Unit,
     onAssignWithRules: (
-        staffProfileId: String,
-        assignments: List<DayShiftAssignmentRequest>,
+        employeeId: String,
+        assignments: List<CreateShiftAssignmentRequest>,
         startDate: String,
         premisesId: String?,
         holidayPay: String,
@@ -119,7 +119,8 @@ fun AssignShiftWithRulesModal(
         mutableStateOf(
             WeekDaysList.map { dayInfo ->
                 val matchingShifts = availableTemplates.filter { t ->
-                    t.daysOfWeek.isNullOrEmpty() || t.daysOfWeek.contains(dayInfo.dayOfWeek)
+                    val days = t.daysOfWeek
+                    days.isNullOrEmpty() || days.contains(dayInfo.dayOfWeek)
                 }
 
                 val shiftStates = matchingShifts.mapIndexed { shiftIndex, template ->
@@ -132,7 +133,7 @@ fun AssignShiftWithRulesModal(
                         presentPay = "600",
                         halfDayPay = "300",
                         leavePay = "600",
-                        absentDeduction = "0"
+                        absentPay = "0"
                     )
                 }
 
@@ -285,7 +286,7 @@ fun AssignShiftWithRulesModal(
                                     presentPay = present,
                                     halfDayPay = halfDay,
                                     leavePay = leave,
-                                    absentDeduction = absent
+                                    absentPay = absent
                                 )
                                 this[dayIndex] = this[dayIndex].copy(shiftStates = currentShifts)
                             }
@@ -362,7 +363,7 @@ fun AssignShiftWithRulesModal(
                 val presentPay: String,
                 val halfDayPay: String,
                 val leavePay: String,
-                val absentDeduction: String
+                val absentPay: String
             )
 
             val compiledAssignments = remember(dayCardStates) {
@@ -374,19 +375,18 @@ fun AssignShiftWithRulesModal(
                             presentPay = shiftState.presentPay,
                             halfDayPay = shiftState.halfDayPay,
                             leavePay = shiftState.leavePay,
-                            absentDeduction = shiftState.absentDeduction
+                            absentPay = shiftState.absentPay
                         )
                         map.getOrPut(key) { mutableListOf() }.add(dayCard.dayInfo.dayOfWeek)
                     }
                 }
                 map.map { (key, days) ->
-                    DayShiftAssignmentRequest(
-                        shiftTemplateId = key.templateId,
-                        daysOfWeek = days.distinct().sorted(),
-                        presentPay = key.presentPay,
-                        halfDayPay = key.halfDayPay,
-                        leavePay = key.leavePay,
-                        absentPay = key.absentDeduction
+                    CreateShiftAssignmentRequest(
+                        shiftId = key.templateId,
+                        presentPay = key.presentPay.toDoubleOrNull() ?: 0.0,
+                        halfDayPay = key.halfDayPay.toDoubleOrNull() ?: 0.0,
+                        leavePay = key.leavePay.toDoubleOrNull() ?: 0.0,
+                        absentPay = key.absentPay.toDoubleOrNull() ?: 0.0
                     )
                 }
             }
@@ -595,7 +595,7 @@ private fun ShiftPaymentConfigRow(
                         PresenceTextField(
                             value = shiftState.presentPay,
                             onValueChange = { present ->
-                                onUpdateRates(present, shiftState.halfDayPay, shiftState.leavePay, shiftState.absentDeduction)
+                                onUpdateRates(present, shiftState.halfDayPay, shiftState.leavePay, shiftState.absentPay)
                             },
                             label = "Present Rate (₹)",
                             enabled = shiftState.isEditing,
@@ -604,7 +604,7 @@ private fun ShiftPaymentConfigRow(
                         PresenceTextField(
                             value = shiftState.halfDayPay,
                             onValueChange = { halfDay ->
-                                onUpdateRates(shiftState.presentPay, halfDay, shiftState.leavePay, shiftState.absentDeduction)
+                                onUpdateRates(shiftState.presentPay, halfDay, shiftState.leavePay, shiftState.absentPay)
                             },
                             label = "Half-Day Rate (₹)",
                             enabled = shiftState.isEditing,
@@ -619,18 +619,18 @@ private fun ShiftPaymentConfigRow(
                         PresenceTextField(
                             value = shiftState.leavePay,
                             onValueChange = { leave ->
-                                onUpdateRates(shiftState.presentPay, shiftState.halfDayPay, leave, shiftState.absentDeduction)
+                                onUpdateRates(shiftState.presentPay, shiftState.halfDayPay, leave, shiftState.absentPay)
                             },
                             label = "Leave Rate (₹)",
                             enabled = shiftState.isEditing,
                             modifier = Modifier.weight(1f)
                         )
                         PresenceTextField(
-                            value = shiftState.absentDeduction,
+                            value = shiftState.absentPay,
                             onValueChange = { absent ->
                                 onUpdateRates(shiftState.presentPay, shiftState.halfDayPay, shiftState.leavePay, absent)
                             },
-                            label = "Absent Deduction (₹)",
+                            label = "Absent Pay (₹)",
                             enabled = shiftState.isEditing,
                             modifier = Modifier.weight(1f)
                         )

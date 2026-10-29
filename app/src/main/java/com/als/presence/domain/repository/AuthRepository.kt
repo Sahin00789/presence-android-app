@@ -1,45 +1,43 @@
 package com.als.presence.domain.repository
 
 import com.als.presence.core.common.Resource
-import com.als.presence.data.model.OtpResponse
+import com.als.presence.data.model.*
 import com.als.presence.domain.model.LoggedDevice
-import com.als.presence.domain.model.Role
 import com.als.presence.domain.model.User
 import kotlinx.coroutines.flow.Flow
 
 interface AuthRepository {
-    suspend fun requestOtp(email: String, role: Role): Resource<OtpResponse>
-
+    suspend fun requestOtp(email: String, role: String): Resource<OtpResponse>
     suspend fun verifyOtp(
         email: String,
-        code: String,
-        role: Role,
+        otp: String,
+        role: String = "STAFF",
         fullName: String? = null,
         organizationName: String? = null,
         timezone: String? = null,
         currency: String? = null,
         premisesName: String? = null,
+        premisesAddress: String? = null,
+        latitude: String? = null,
+        longitude: String? = null,
         radiusMeters: Int? = null
     ): Resource<User>
-
-    suspend fun googleExchange(code: String, redirectUri: String? = null): Resource<User>
-    suspend fun registerOwnerWithGoogle(
+    suspend fun googleExchange(idToken: String): Resource<User>
+    suspend fun registerOwner(
         idToken: String,
-        organizationName: String,
+        orgName: String,
         timezone: String,
         currency: String,
         premisesName: String,
-        radiusMeters: Int
+        radius: Int,
+        premisesAddress: String? = null,
+        latitude: String? = null,
+        longitude: String? = null
     ): Resource<User>
-    suspend fun refreshSession(): Resource<User>
-    suspend fun fetchCurrentUser(): Resource<User>
-    suspend fun updateProfile(
-        fullName: String? = null,
-        phone: String? = null,
-        avatarBase64: String? = null
-    ): Resource<User>
-    fun observeCurrentUser(): Flow<User?>
-    suspend fun logout(): Resource<Unit>
     suspend fun getLoggedDevices(): Resource<List<LoggedDevice>>
     suspend fun revokeDevice(deviceId: String): Resource<Unit>
+    suspend fun logout()
+    suspend fun refreshToken(): Resource<User>
+    suspend fun updateProfile(fullName: String? = null, phone: String? = null, avatarBase64: String? = null): Resource<User>
+    fun observeCurrentUser(): Flow<User?>
 }

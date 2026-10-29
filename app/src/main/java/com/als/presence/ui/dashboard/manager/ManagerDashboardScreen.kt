@@ -21,7 +21,7 @@ import com.als.presence.ui.dashboard.common.MessageSnackbar
 import com.als.presence.ui.dashboard.manager.modals.AddStaffModal
 import com.als.presence.ui.dashboard.manager.modals.AssignShiftWithRulesModal
 import com.als.presence.ui.dashboard.manager.tabs.ManagerAttendanceTab
-import com.als.presence.ui.dashboard.manager.tabs.ManagerStaffTab
+import com.als.presence.ui.dashboard.manager.tabs.ManageremployeeTab
 import com.als.presence.ui.dashboard.owner.tabs.OwnerApprovalsTab
 import com.als.presence.ui.dashboard.staff.StaffClockInViewModel
 
@@ -77,9 +77,9 @@ fun ManagerDashboardScreen(
     }
 
     var ownAssignDialog by remember { mutableStateOf(false) }
-    var selectedStaffForShift by remember { mutableStateOf<StaffDto?>(null) }
+    var selectedEmployeeForShift by remember { mutableStateOf<StaffDto?>(null) }
     var selectedPremisesForShift by remember { mutableStateOf<String?>(null) }
-    var localAddStaff by remember { mutableStateOf(false) }
+    var localAddEmployee by remember { mutableStateOf(false) }
 
     val allStaff = (shiftStaffState as? UiState.Success)?.data.orEmpty().ifEmpty {
         (staffState as? UiState.Success)?.data.orEmpty()
@@ -104,7 +104,7 @@ fun ManagerDashboardScreen(
                 engine = clockInViewModel.faceEmbeddingEngine,
                 onFaceCaptured = clockInViewModel::setFaceEmbedding
             )
-            1 -> ManagerStaffTab(
+            1 -> ManageremployeeTab(
                 user = user,
                 staffState = staffState,
                 faceStatuses = faceStatuses,
@@ -112,18 +112,17 @@ fun ManagerDashboardScreen(
                 isSubmitting = staffSubmitting,
                 engine = staffViewModel.faceEmbeddingEngine,
                 onRefresh = staffViewModel::refresh,
-                onAddStaff = { localAddStaff = true },
-                onSetSalary = staffViewModel::setSalary,
+                onAddStaff = { localAddEmployee = true },
                 onEnrollFace = staffViewModel::enrollFace,
                 onRevokeFace = staffViewModel::revokeFace,
                 onDeactivateStaff = staffViewModel::deactivateMember,
-                onAssignShift = { staff -> selectedStaffForShift = staff },
+                onAssignShift = { staff -> selectedEmployeeForShift = staff },
                 premisesState = premisesState,
                 payrollPeriodsState = payrollPeriodsState,
                 payrollItemsMap = payrollItemsMap,
                 onRecordPayment = staffViewModel::recordPayment
             )
-            2 -> LocationsTab(
+            else -> LocationsTab(
                 user = user,
                 premisesState = premisesState,
                 presenceState = presenceState,
@@ -135,13 +134,8 @@ fun ManagerDashboardScreen(
                     locationsViewModel.refresh()
                     shiftsViewModel.refresh()
                 },
-                onResolveGpsException = locationsViewModel::resolveGpsException
-            )
-            else -> OwnerApprovalsTab(
-                exceptionsState = exceptionsState,
-                isSubmitting = attendanceSubmitting,
-                onRefresh = attendanceViewModel::refresh,
-                onResolve = attendanceViewModel::resolve
+                onResolveGpsException = locationsViewModel::resolveGpsException,
+                onCancelOvertime = locationsViewModel::cancelOvertime
             )
         }
 
@@ -158,19 +152,19 @@ fun ManagerDashboardScreen(
         (premisesState as? UiState.Success)?.data.orEmpty()
     }
 
-    if (localAddStaff) {
+    if (localAddEmployee) {
         AddStaffModal(
             premises = availablePremisesForAdd,
             initialPremisesId = managerPremisesId ?: selectedPremisesForShift,
-            onDismiss = { localAddStaff = false },
+            onDismiss = { localAddEmployee = false },
             onAddStaff = { name, email, department, address, premisesId ->
                 staffViewModel.addStaff(name, email, department, address, premisesId)
-                localAddStaff = false
+                localAddEmployee = false
             }
         )
     }
 
-    val activeStaffForShift = selectedStaffForShift
+    val activeStaffForShift = selectedEmployeeForShift
     if (ownAssignDialog || activeStaffForShift != null) {
         val staffList = if (activeStaffForShift != null) listOf(activeStaffForShift) else allStaff
         AssignShiftWithRulesModal(
@@ -180,23 +174,18 @@ fun ManagerDashboardScreen(
             initialPremisesId = selectedPremisesForShift,
             onDismiss = {
                 ownAssignDialog = false
-                selectedStaffForShift = null
+                selectedEmployeeForShift = null
                 selectedPremisesForShift = null
             },
-            onAssignWithRules = { staffProfileId, assignments, startDate, premisesId, _, _ ->
+            onAssignWithRules = { employeeId, assignments, startDate, premisesId, _, _ ->
                 shiftsViewModel.assignShifts(
-                    staffProfileId = staffProfileId,
+                    employeeId = employeeId,
                     assignmentsList = assignments,
                     startDate = startDate,
                     premisesId = premisesId
                 )
-                assignments.firstOrNull()?.presentPay?.let { pay ->
-                    if (pay.isNotBlank()) {
-                        staffViewModel.setSalary(staffProfileId, pay)
-                    }
-                }
                 ownAssignDialog = false
-                selectedStaffForShift = null
+                selectedEmployeeForShift = null
                 selectedPremisesForShift = null
             }
         )

@@ -34,8 +34,8 @@ class PayrollViewModel @Inject constructor(
     private val _payrollItemsMap = MutableStateFlow<Map<String, List<PayrollItemDto>>>(emptyMap())
     val payrollItemsMap: StateFlow<Map<String, List<PayrollItemDto>>> = _payrollItemsMap.asStateFlow()
 
-    private val _staff = MutableStateFlow<UiState<List<StaffDto>>>(UiState.Loading)
-    val staff: StateFlow<UiState<List<StaffDto>>> = _staff.asStateFlow()
+    private val _employee = MutableStateFlow<UiState<List<StaffDto>>>(UiState.Loading)
+    val staff: StateFlow<UiState<List<StaffDto>>> = _employee.asStateFlow()
 
     private val _members = MutableStateFlow<UiState<List<OrganizationMemberDto>>>(UiState.Loading)
     val members: StateFlow<UiState<List<OrganizationMemberDto>>> = _members.asStateFlow()
@@ -61,8 +61,8 @@ class PayrollViewModel @Inject constructor(
 
     fun loadStaff() {
         viewModelScope.launch {
-            _staff.value = UiState.Loading
-            _staff.value = repository.getStaff().toUiState()
+            _employee.value = UiState.Loading
+            _employee.value = repository.getEmployees().toUiState()
         }
     }
 
@@ -76,47 +76,41 @@ class PayrollViewModel @Inject constructor(
     fun loadPeriods() {
         viewModelScope.launch {
             _periods.value = UiState.Loading
-            when (val result = repository.getPayrollPeriods()) {
-                is Resource.Success -> {
-                    _periods.value = UiState.Success(result.data)
-                    val itemsMap = mutableMapOf<String, List<PayrollItemDto>>()
-                    result.data.forEach { period ->
-                        val itemsRes = repository.getPayrollItems(period.id)
-                        if (itemsRes is Resource.Success) {
-                            itemsMap[period.id] = itemsRes.data
-                        }
-                    }
-                    _payrollItemsMap.value = itemsMap
-
-                    val current = _selectedPeriodId.value
-                    val next = result.data.firstOrNull { it.id == current } ?: result.data.firstOrNull()
-                    if (next != null) {
-                        selectPeriod(next.id)
-                    } else {
-                        _items.value = UiState.Success(emptyList())
-                    }
-                }
-                is Resource.Error ->
-                    _periods.value = UiState.Error(result.message ?: "Could not load payroll periods")
-                Resource.Loading -> Unit
+            val now = java.time.LocalDate.now()
+            val generatedPeriods = (0..5).map { i ->
+                val date = now.minusMonths(i.toLong())
+                val y = date.year
+                val m = date.monthValue
+                val start = "$y-${m.toString().padStart(2, '0')}-01"
+                val end = "$y-${m.toString().padStart(2, '0')}-${date.lengthOfMonth()}"
+                PayrollPeriodDto(
+                    id = "$y-${m.toString().padStart(2, '0')}",
+                    organizationId = "",
+                    periodStartDate = start,
+                    periodEndDate = end,
+                    status = if (i == 0) "OPEN" else "PAID"
+                )
             }
-        }
-    }
+            _periods.value = UiState.Success(generatedPeriods)
 
-    fun createPeriod(startDate: String, endDate: String) {
-        viewModelScope.launch {
-            _isSubmitting.value = true
-            when (val result = repository.createPayrollPeriod(startDate, endDate)) {
-                is Resource.Success -> {
-                    _message.value = "Payroll period generated."
-                    _selectedPeriodId.value = result.data.id
-                    selectPeriod(result.data.id)
-                    loadPeriods()
+            val itemsMap = mutableMapOf<String, List<PayrollItemDto>>()
+            generatedPeriods.forEach { period ->
+                val y = period.periodStartDate.take(4).toIntOrNull() ?: now.year
+                val m = period.periodStartDate.substring(5, 7).toIntOrNull() ?: now.monthValue
+                val itemsRes = repository.getMonthlyPayrollSummary(m, y)
+                if (itemsRes is Resource.Success) {
+                    itemsMap[period.id] = itemsRes.data
                 }
-                is Resource.Error -> _message.value = result.message
-                Resource.Loading -> Unit
             }
-            _isSubmitting.value = false
+            _payrollItemsMap.value = itemsMap
+
+            val current = _selectedPeriodId.value
+            val next = generatedPeriods.firstOrNull { it.id == current } ?: generatedPeriods.firstOrNull()
+            if (next != null) {
+                selectPeriod(next.id)
+            } else {
+                _items.value = UiState.Success(emptyList())
+            }
         }
     }
 
@@ -124,64 +118,9 @@ class PayrollViewModel @Inject constructor(
         _selectedPeriodId.value = periodId
         viewModelScope.launch {
             _items.value = UiState.Loading
-            _items.value = repository.getPayrollItems(periodId).toUiState()
-        }
-    }
-
-    fun calculatePayroll(periodId: String) {
-        viewModelScope.launch {
-            _isSubmitting.value = true
-            when (val result = repository.calculatePayroll(periodId)) {
-                is Resource.Success -> {
-                    _message.value = "Payroll calculated."
-                    selectPeriod(periodId)
-                    loadPeriods()
-                }
-                is Resource.Error -> _message.value = result.message
-                Resource.Loading -> Unit
-            }
-            _isSubmitting.value = false
-        }
-    }
-
-    fun approvePayroll(periodId: String) {
-        viewModelScope.launch {
-            _isSubmitting.value = true
-            when (val result = repository.approvePayroll(periodId)) {
-                is Resource.Success -> {
-                    _message.value = "Payroll approved and locked."
-                    loadPeriods()
-                }
-                is Resource.Error -> _message.value = result.message
-                Resource.Loading -> Unit
-            }
-            _isSubmitting.value = false
-        }
-    }
-
-    fun recordPayment(itemId: String, amountCents: Long, paymentMethod: String = "BANK_TRANSFER", reference: String = "") {
-        val method = paymentMethod.ifBlank { "BANK_TRANSFER" }
-        val ref = reference.trim().ifEmpty { "Salary Payment via $method" }
-        viewModelScope.launch {
-            _isSubmitting.value = true
-            when (
-                val result = repository.recordPayment(
-                    itemId = itemId,
-                    amountCents = amountCents,
-                    paymentMethod = method,
-                    referenceNumber = ref
-                )
-            ) {
-                is Resource.Success -> {
-                    _message.value = "Payment of ${Money.format(amountCents)} recorded."
-                    loadPeriods()
-                    loadStaff()
-                    loadMembers()
-                }
-                is Resource.Error -> _message.value = result.message
-                Resource.Loading -> Unit
-            }
-            _isSubmitting.value = false
+            val y = periodId.take(4).toIntOrNull() ?: java.time.LocalDate.now().year
+            val m = periodId.substring(5, 7).toIntOrNull() ?: java.time.LocalDate.now().monthValue
+            _items.value = repository.getMonthlyPayrollSummary(m, y).toUiState()
         }
     }
 

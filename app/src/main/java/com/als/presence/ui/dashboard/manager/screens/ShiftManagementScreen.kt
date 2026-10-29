@@ -199,7 +199,8 @@ fun ShiftManagementScreen(
                 is UiState.Success -> {
                     WeekDaysList.forEach { dayInfo ->
                         val dayShifts = filteredTemplates.filter { template ->
-                            template.daysOfWeek.isNullOrEmpty() || template.daysOfWeek.contains(dayInfo.dayOfWeek)
+                            val days = template.daysOfWeek
+                            days.isNullOrEmpty() || days.contains(dayInfo.dayOfWeek)
                         }
 
                         DayShiftCard(
@@ -232,17 +233,14 @@ fun ShiftManagementScreen(
                 showCreateTemplate = false
                 createForDayOfWeek = null
             },
-            onConfirm = { name, start, end, breakMins, graceMins, thresholdMins, premisesId, daysOfWeek, lateInAllowed ->
+            onConfirm = { name, start, end, dayName, halfDayThreshold, premisesId ->
                 viewModel.createTemplate(
                     name = name,
                     startTime = start,
                     endTime = end,
-                    breakMinutes = breakMins,
-                    lateGraceMinutes = graceMins,
-                    halfDayThresholdMinutes = thresholdMins,
                     premisesId = premisesId,
-                    daysOfWeek = daysOfWeek,
-                    lateClockInAllowed = lateInAllowed
+                    dayName = dayName,
+                    halfDayThreshold = halfDayThreshold
                 )
                 showCreateTemplate = false
                 createForDayOfWeek = null
@@ -256,18 +254,15 @@ fun ShiftManagementScreen(
             template = activeEditing,
             premisesList = premises,
             onDismiss = { editingTemplate = null },
-            onConfirm = { name, start, end, breakMins, graceMins, thresholdMins, premisesId, daysOfWeek, lateInAllowed, isActive ->
+            onConfirm = { name, start, end, dayName, halfDayThreshold, premisesId, isActive ->
                 viewModel.updateTemplate(
                     templateId = activeEditing.id,
                     name = name,
                     startTime = start,
                     endTime = end,
-                    breakMinutes = breakMins,
-                    lateGraceMinutes = graceMins,
-                    halfDayThresholdMinutes = thresholdMins,
+                    dayName = dayName,
+                    halfDayThreshold = halfDayThreshold,
                     premisesId = premisesId,
-                    daysOfWeek = daysOfWeek,
-                    lateClockInAllowed = lateInAllowed,
                     isActive = isActive
                 )
                 editingTemplate = null
@@ -417,8 +412,8 @@ private fun ShiftItemRow(
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     PresenceBadge(
-                        label = if (template.lateClockInAllowed) "Late In Allowed" else "No Late In",
-                        tone = if (template.lateClockInAllowed) PresenceTone.Success else PresenceTone.Warning
+                        label = "Day: ${template.dayName}",
+                        tone = PresenceTone.Info
                     )
                 }
             }
@@ -446,12 +441,9 @@ private fun CreateShiftModal(
         name: String,
         start: String,
         end: String,
-        breakMins: Int,
-        graceMins: Int,
-        thresholdMins: Int,
-        premisesId: String,
-        daysOfWeek: List<Int>?,
-        lateClockInAllowed: Boolean
+        dayName: String,
+        halfDayThreshold: String,
+        premisesId: String
     ) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -460,10 +452,11 @@ private fun CreateShiftModal(
     var start by remember { mutableStateOf("09:00") }
     var end by remember { mutableStateOf("18:00") }
     var halfDayThreshold by remember { mutableStateOf("11:00") }
-    var lateClockInAllowed by remember { mutableStateOf(true) }
+
+    val dayObj = WeekDaysList.find { it.dayOfWeek == initialDayOfWeek }
+    var dayName by remember(initialDayOfWeek) { mutableStateOf(dayObj?.fullName ?: "ALL") }
 
     val targetPremisesId = initialPremisesId ?: premisesList.firstOrNull()?.id.orEmpty()
-    val targetDays = listOf(initialDayOfWeek)
 
     val valid = name.trim().length >= 2 &&
             targetPremisesId.isNotBlank() &&
@@ -471,7 +464,6 @@ private fun CreateShiftModal(
             end.matches(Regex("^\\d{2}:\\d{2}$"))
 
     val premiseObj = premisesList.find { it.id == targetPremisesId }
-    val dayObj = WeekDaysList.find { it.dayOfWeek == initialDayOfWeek }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -499,15 +491,16 @@ private fun CreateShiftModal(
                     if (premiseObj != null) {
                         PresenceDetailRow(label = "Premises", value = Dates.cleanPremisesName(premiseObj.name))
                     }
-                    PresenceDetailRow(label = "Selected Day", value = dayObj?.fullName ?: "Day $initialDayOfWeek")
+                    PresenceDetailRow(label = "Selected Day", value = dayName)
                 }
             }
 
             PresenceFieldGroup(title = "Details") {
                 PresenceTextField(value = name, onValueChange = { name = it }, label = "Shift name")
+                PresenceTextField(value = dayName, onValueChange = { dayName = it }, label = "Day Name (e.g. Monday, ALL)")
             }
 
-            PresenceFieldGroup(title = "Timing & Shift Flags") {
+            PresenceFieldGroup(title = "Timing") {
                 PresenceTextField(
                     value = start,
                     onValueChange = { start = it },
@@ -523,14 +516,6 @@ private fun CreateShiftModal(
                     onValueChange = { halfDayThreshold = it },
                     label = "Half-day threshold (HH:MM)"
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Allow Late Clock-in (lateclockin)", style = MaterialTheme.typography.bodyMedium)
-                    Switch(checked = lateClockInAllowed, onCheckedChange = { lateClockInAllowed = it })
-                }
             }
 
             PresenceButton(
@@ -540,12 +525,9 @@ private fun CreateShiftModal(
                         name.trim(),
                         start.trim(),
                         end.trim(),
-                        0,
-                        15,
-                        240,
-                        targetPremisesId,
-                        targetDays,
-                        lateClockInAllowed
+                        dayName.trim(),
+                        halfDayThreshold.trim(),
+                        targetPremisesId
                     )
                 },
                 enabled = valid,
@@ -567,12 +549,9 @@ private fun EditShiftModal(
         name: String,
         start: String,
         end: String,
-        breakMins: Int,
-        graceMins: Int,
-        thresholdMins: Int,
+        dayName: String,
+        halfDayThreshold: String,
         premisesId: String?,
-        daysOfWeek: List<Int>?,
-        lateClockInAllowed: Boolean,
         isActive: Boolean
     ) -> Unit,
     onDelete: (() -> Unit)? = null
@@ -580,10 +559,10 @@ private fun EditShiftModal(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var name by remember(template) { mutableStateOf(template.name) }
+    var dayName by remember(template) { mutableStateOf(template.dayName) }
     var start by remember(template) { mutableStateOf(template.startTime.take(5)) }
     var end by remember(template) { mutableStateOf(template.endTime.take(5)) }
     var halfDayThreshold by remember(template) { mutableStateOf(template.halfDayThreshold.take(5)) }
-    var lateClockInAllowed by remember(template) { mutableStateOf(template.lateClockInAllowed) }
     var isActive by remember(template) { mutableStateOf(template.isActive) }
 
     val valid = name.trim().length >= 2 &&
@@ -591,7 +570,6 @@ private fun EditShiftModal(
             end.matches(Regex("^\\d{2}:\\d{2}$"))
 
     val premiseObj = premisesList.find { it.id == template.premisesId }
-    val dayNames = template.daysOfWeek?.let { Dates.formatDaysOfWeek(it) } ?: "All Days"
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -619,12 +597,13 @@ private fun EditShiftModal(
                     if (premiseObj != null) {
                         PresenceDetailRow(label = "Premises", value = Dates.cleanPremisesName(premiseObj.name))
                     }
-                    PresenceDetailRow(label = "Applicable Days", value = dayNames)
+                    PresenceDetailRow(label = "Applicable Days", value = dayName)
                 }
             }
 
             PresenceFieldGroup(title = "Details") {
                 PresenceTextField(value = name, onValueChange = { name = it }, label = "Shift name")
+                PresenceTextField(value = dayName, onValueChange = { dayName = it }, label = "Day Name (e.g. Monday, ALL)")
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -642,7 +621,7 @@ private fun EditShiftModal(
                 }
             }
 
-            PresenceFieldGroup(title = "Timing & Shift Flags") {
+            PresenceFieldGroup(title = "Timing") {
                 PresenceTextField(
                     value = start,
                     onValueChange = { start = it },
@@ -658,14 +637,6 @@ private fun EditShiftModal(
                     onValueChange = { halfDayThreshold = it },
                     label = "Half-day threshold (HH:MM)"
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Allow Late Clock-in (lateclockin)", style = MaterialTheme.typography.bodyMedium)
-                    Switch(checked = lateClockInAllowed, onCheckedChange = { lateClockInAllowed = it })
-                }
             }
 
             PresenceButton(
@@ -675,12 +646,9 @@ private fun EditShiftModal(
                         name.trim(),
                         start.trim(),
                         end.trim(),
-                        template.breakMinutes,
-                        template.lateGraceMinutes,
-                        template.halfDayThresholdMinutes,
+                        dayName.trim(),
+                        halfDayThreshold.trim(),
                         template.premisesId,
-                        template.daysOfWeek,
-                        lateClockInAllowed,
                         isActive
                     )
                 },

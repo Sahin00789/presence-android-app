@@ -49,7 +49,7 @@ import com.als.presence.domain.model.Role
 @Composable
 fun LeaveScreen(
     role: Role,
-    staffProfileId: String? = null,
+    employeeId: String? = null,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: LeaveViewModel = hiltViewModel()
@@ -173,7 +173,7 @@ fun LeaveScreen(
                     endDate = endDate,
                     type = type,
                     reason = reason,
-                    staffProfileId = staffProfileId,
+                    employeeId = employeeId,
                     shiftName = shiftName
                 )
                 showRequestDialog = false
@@ -255,10 +255,10 @@ private fun LeaveCard(
             PresenceMetaStrip(
                 items = listOf(
                     "Shift" to (leave.shiftName?.ifBlank { null } ?: "All Shifts"),
-                    "From" to leave.startDate,
-                    "To" to leave.endDate,
+                    "From" to (leave.startDate),
+                    "To" to (leave.endDate),
                     "Requested" to (leave.createdAt?.take(10) ?: "—")
-                )
+                ).filter { it.second != null } as List<Pair<String, String>>
             )
             leave.reason?.takeIf { it.isNotBlank() }?.let { reason ->
                 Spacer(modifier = Modifier.height(7.dp))

@@ -61,7 +61,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.als.presence.data.local.notification.NotificationEntity
+import com.als.presence.data.local.NotificationEntity
 import com.als.presence.domain.model.User
 
 data class NotificationItem(
@@ -85,12 +85,11 @@ private fun NotificationEntity.toItem(): NotificationItem = NotificationItem(
     title = title,
     message = message,
     timestamp = android.text.format.DateUtils.getRelativeTimeSpanString(
-        timestamp,
+        createdAt,
         System.currentTimeMillis(),
         android.text.format.DateUtils.MINUTE_IN_MILLIS
     ).toString(),
-    type = runCatching { NotificationType.valueOf(type.uppercase()) }
-        .getOrDefault(NotificationType.SYSTEM),
+    type = NotificationType.SYSTEM,
     isRead = isRead
 )
 

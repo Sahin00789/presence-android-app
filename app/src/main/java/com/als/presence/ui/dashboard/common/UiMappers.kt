@@ -6,7 +6,7 @@ import com.als.presence.core.common.UiState
 /** Maps a repository [Resource] onto the UI [UiState] contract. */
 fun <T> Resource<T>.toUiState(): UiState<T> = when (this) {
     is Resource.Success -> UiState.Success(data)
-    is Resource.Error -> UiState.Error(message ?: exception.message ?: "Unexpected error")
+    is Resource.Error -> UiState.Error(message ?: exception.message ?: "Unexpected error", code = code)
     Resource.Loading -> UiState.Loading
 }
 

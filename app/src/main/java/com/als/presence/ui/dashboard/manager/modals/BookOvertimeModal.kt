@@ -40,11 +40,11 @@ import com.als.presence.ui.dashboard.common.Dates
 fun BookOvertimeModal(
     staff: List<StaffDto>,
     onDismiss: () -> Unit,
-    onBook: (staffProfileId: String, workDate: String, startTime: String, endTime: String, reason: String) -> Unit
+    onBook: (employeeId: String, workDate: String, startTime: String, endTime: String, reason: String) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var selectedStaffId by remember { mutableStateOf(staff.firstOrNull()?.id) }
+    var selectedEmployeeId by remember { mutableStateOf(staff.firstOrNull()?.id) }
     var workDate by remember { mutableStateOf(Dates.todayIso()) }
     var startTime by remember { mutableStateOf("18:00") }
     var endTime by remember { mutableStateOf("21:00") }
@@ -122,14 +122,14 @@ fun BookOvertimeModal(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                if (member.id == selectedStaffId) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                                if (member.id == selectedEmployeeId) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
                                 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                                 RoundedCornerShape(12.dp)
                             )
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(selected = member.id == selectedStaffId, onClick = { selectedStaffId = member.id })
+                        RadioButton(selected = member.id == selectedEmployeeId, onClick = { selectedEmployeeId = member.id })
                         Column(modifier = Modifier.padding(vertical = 6.dp)) {
                             Text(member.fullName, fontWeight = FontWeight.SemiBold)
                             Text(member.staffCode, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -140,12 +140,12 @@ fun BookOvertimeModal(
 
             Button(
                 onClick = {
-                    val staffId = selectedStaffId
+                    val staffId = selectedEmployeeId
                     if (staffId != null) {
                         onBook(staffId, workDate, startTime, endTime, reason)
                     }
                 },
-                enabled = selectedStaffId != null &&
+                enabled = selectedEmployeeId != null &&
                     workDate.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) &&
                     startTime.matches(Regex("\\d{2}:\\d{2}")) &&
                     endTime.matches(Regex("\\d{2}:\\d{2}")),

@@ -2,8 +2,7 @@ package com.als.presence.ui.dashboard.common
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.als.presence.data.local.notification.NotificationDao
-import com.als.presence.data.local.notification.NotificationEntity
+import com.als.presence.data.local.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow

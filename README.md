@@ -1,6 +1,6 @@
-# Staff Attendance, Shift Management & Salary Wallet System (`presence`)
+# Staff Attendance, Shift Management & salary ledger System (`presence`)
 
-Production-ready, multi-tenant mobile and backend application for staff attendance tracking, facial verification, GPS geofencing, periodic active-shift location monitoring, shift management, real-time salary wallet ledger accounting, and monthly payroll processing.
+Production-ready, multi-tenant mobile and backend application for staff attendance tracking, facial verification, GPS geofencing, periodic active-shift location monitoring, shift management, real-time salary ledger ledger accounting, and monthly payroll processing.
 
 ---
 
@@ -18,7 +18,7 @@ Production-ready, multi-tenant mobile and backend application for staff attendan
                           ┌────────────────────────────────────────────────────────┐
                           │                 Fastify 5 TypeScript API               │
                           │        Zod Validation + Google OAuth 2.0 Auth          │
-                          │     Salary Calculation Engine + Wallet Ledger Service  │
+                          │     Salary Calculation Engine + ledger Ledger Service  │
                           └──────────────┬──────────────────────────┬──────────────┘
                                          │                          │
                                          ▼                          ▼
@@ -35,9 +35,10 @@ Production-ready, multi-tenant mobile and backend application for staff attendan
 
 | Role | Key Capabilities |
 | :--- | :--- |
-| **Owner** | Self-registers after verifying identity with Google or email OTP; creates and configures organization & premises; invites/deactivates Managers; views organization-wide reports & wallet liabilities; approves sensitive financial/attendance adjustments. |
-| **Manager** | Invited by Owner; creates & manages Staff; assigns shift schedules; reviews attendance exceptions; resolves manual corrections; manages leave & holiday records; prepares monthly payroll; records payments. |
-| **Staff** | Invited by Manager; authenticates via Google or email OTP; is enrolled in person by a Manager; performs face + GPS clock-in/out; undergoes ~10-min active-shift GPS checks; tracks real-time salary wallet; views payslips. |
+| **Owner** | Head of the organization (`organizations.owner_user_id`). Manages everything across the organization and all assigned premises: self-registers after verifying identity with Google or email OTP; creates organization & configures all premises; directly adds Managers with mandatory premises assignment; views organization-wide reports & workforce; approves financial adjustments and locks monthly payroll (`monthly_payrolls`). **The Owner is NOT an employee, has NO attendance tracking, and does NOT earn an employee salary.** |
+| **Manager** | Premises-level head (`premises_id`), NOT organization-level. Directly added by Owner with mandatory premises assignment; manages daily operations and staff at their assigned premises; defines premises shift rosters; conducts supervised face enrollment for premises staff; reviews attendance exceptions & leave requests. **Managers ARE employees (`role = 'MANAGER'`) who are assigned shifts, track attendance (`employee_attendance`), and earn salary through payroll (`monthly_payrolls`) and the earning ledger (`staff_earning_ledger`).** |
+| **Staff** | Premises-level workforce directly added by their premises Manager (`premises_id`). Authenticates via Google or email OTP; enrolled in person by Manager; performs face + GPS clock-in/out; undergoes ~10-min active-shift GPS checks; tracks shift schedules and attendance. **Staff ARE employees (`role = 'STAFF'`) who earn salary through payroll and access itemized monthly payslips.** |
+
 
 ---
 
@@ -47,7 +48,7 @@ Production-ready, multi-tenant mobile and backend application for staff attendan
 2. **Owner registration**: A three-step flow verifies identity with Google or email OTP, collects organization details, then configures and reviews the first premises. The privacy note changes with the selected verification method.
 3. **On-Device ONNX Biometrics**: Local face embedding extraction using CameraX & ONNX Runtime Mobile, with supervised enrollment by an Owner/Manager and server-side similarity verification. Only 128/512-dim encrypted embeddings are stored; raw images never leave the device.
 4. **50m Premises Geofence & Periodic GPS Checks**: GPS-based attendance with active-shift monitoring every ~10 minutes. 3 consecutive failures generate an alert without auto-marking absent.
-5. **Real-Time Salary Wallet**: Append-only double-entry ledger accounting system tracking Earned Salary, Approved Unpaid Salary, Disbursements, Advances, and Deductions.
+5. **Real-Time salary ledger**: Append-only double-entry ledger accounting system tracking Earned Salary, Approved Unpaid Salary, Disbursements, Advances, and Deductions.
 6. **Monthly Payroll Engine**: Complete lifecycle (`DRAFT` -> `CALCULATING` -> `REVIEW` -> `APPROVAL` -> `LOCKED` -> `PAID` -> `CLOSED`) with itemized payslip generation.
 
 ---
@@ -78,7 +79,7 @@ presence/
 │   ├── LOCATION_MONITORING.md  # Geofencing & periodic GPS checks
 │   ├── SHIFT_RULES.md          # Shift schedules & overnight rules
 │   ├── SALARY_RULES.md         # Calculation engine & compensation models
-│   ├── WALLET_LEDGER.md        # Double-entry ledger accounting
+│   ├── ledger_LEDGER.md        # Double-entry ledger accounting
 │   ├── PAYROLL.md              # Monthly payroll lifecycle & payslips
 │   ├── TESTING.md              # Automated testing strategy
 │   ├── DEPLOYMENT.md           # Docker, migration & release guide
@@ -102,6 +103,6 @@ Detailed specifications and domain logic rules are available in the [`docs/`](./
 - [Face Verification Policy](./docs/FACE_VERIFICATION.md)
 - [Location Monitoring & Geofencing](./docs/LOCATION_MONITORING.md)
 - [Salary Calculation & Rules](./docs/SALARY_RULES.md)
-- [Wallet Ledger Integrity](./docs/WALLET_LEDGER.md)
+- [ledger Ledger Integrity](./docs/ledger_LEDGER.md)
 - [Monthly Payroll Lifecycle](./docs/PAYROLL.md)
 - [Development Roadmap](./docs/DEVELOPMENT_STAGES.md)

@@ -5,9 +5,9 @@ import com.als.presence.domain.repository.AuthRepository
 import javax.inject.Inject
 
 class RevokeDeviceUseCase @Inject constructor(
-    private val repository: AuthRepository
+    private val authRepository: AuthRepository
 ) {
     suspend operator fun invoke(deviceId: String): Resource<Unit> {
-        return repository.revokeDevice(deviceId)
+        return authRepository.revokeDevice(deviceId)
     }
 }

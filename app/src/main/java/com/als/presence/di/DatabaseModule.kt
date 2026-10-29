@@ -2,14 +2,7 @@ package com.als.presence.di
 
 import android.content.Context
 import androidx.room.Room
-import com.als.presence.data.local.PresenceDatabase
-import com.als.presence.data.local.attendance.AttendanceDao
-import com.als.presence.data.local.location.LocationCheckDao
-import com.als.presence.data.local.notification.NotificationDao
-import com.als.presence.data.local.premises.PremisesDao
-import com.als.presence.data.local.shift.ShiftDao
-import com.als.presence.data.local.staff.StaffDao
-import com.als.presence.data.local.wallet.WalletDao
+import com.als.presence.data.local.*
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -41,10 +34,6 @@ object DatabaseModule {
 
     @Provides
     @Singleton
-    fun provideWalletDao(db: PresenceDatabase): WalletDao = db.walletDao()
-
-    @Provides
-    @Singleton
     fun provideAttendanceDao(db: PresenceDatabase): AttendanceDao = db.attendanceDao()
 
     @Provides
@@ -57,5 +46,5 @@ object DatabaseModule {
 
     @Provides
     @Singleton
-    fun provideStaffDao(db: PresenceDatabase): StaffDao = db.staffDao()
+    fun provideEmployeeDao(db: PresenceDatabase): EmployeeDao = db.employeeDao()
 }

@@ -6,9 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
 class ObserveCurrentUserUseCase @Inject constructor(
-    private val repository: AuthRepository
+    private val authRepository: AuthRepository
 ) {
-    operator fun invoke(): Flow<User?> {
-        return repository.observeCurrentUser()
-    }
+    operator fun invoke(): Flow<User?> = authRepository.observeCurrentUser()
 }

@@ -65,6 +65,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -115,6 +116,7 @@ fun LoginScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val isOnline by viewModel.isOnline.collectAsState()
     val otpState by viewModel.otpState.collectAsState()
     val pincodeState by viewModel.pincodeState.collectAsState()
     val gpsLocationState by viewModel.gpsLocationState.collectAsState()
@@ -176,6 +178,17 @@ fun LoginScreen(
             }
         } catch (error: ApiException) {
             viewModel.showError("Google sign-in failed (${error.statusCode}). Please try again.")
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.tryAutoLogin()
+    }
+
+    LaunchedEffect(uiState) {
+        if (uiState is UiState.Success && !showOwnerRegistrationWizard) {
+            val user = (uiState as UiState.Success<User>).data
+            onLoginSuccess(user)
         }
     }
 
@@ -691,9 +704,52 @@ fun LoginScreen(
                         }
                     }
 
+                    // Network Offline Warning Banner
+                    AnimatedVisibility(visible = !isOnline) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFFFF3E0)
+                            ),
+                            border = BorderStroke(1.dp, Color(0xFFFFB74D)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = Color(0xFFE65100),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Server is not connected. Device is currently offline.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFFE65100),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
                     // Error Banner
                     AnimatedVisibility(visible = uiState is UiState.Error) {
                         val errorMsg = (uiState as? UiState.Error)?.message ?: "Authentication failed"
+                        val isNotRegisteredErr = errorMsg.contains("not registered", ignoreCase = true) || errorMsg.contains("NOT_REGISTERED", ignoreCase = true)
+
+                        val displayMsg = when {
+                            isNotRegisteredErr && selectedRole != Role.OWNER ->
+                                "You are not registered. Please contact your Administrator to receive an invitation."
+                            isNotRegisteredErr && selectedRole == Role.OWNER ->
+                                "No Owner account found for this email. Please register your organization below."
+                            else -> errorMsg
+                        }
+
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -704,7 +760,7 @@ fun LoginScreen(
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(
-                                modifier = Modifier.padding(10.dp),
+                                modifier = Modifier.padding(12.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -714,17 +770,17 @@ fun LoginScreen(
                                         tint = MaterialTheme.colorScheme.onErrorContainer,
                                         modifier = Modifier.size(18.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = errorMsg,
+                                        text = displayMsg,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onErrorContainer,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
 
-                                if (errorMsg.contains("not registered", ignoreCase = true)) {
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                if (isNotRegisteredErr && selectedRole == Role.OWNER) {
+                                    Spacer(modifier = Modifier.height(10.dp))
                                     Button(
                                         onClick = { showOwnerRegistrationWizard = true },
                                         colors = ButtonDefaults.buttonColors(
@@ -733,7 +789,7 @@ fun LoginScreen(
                                         shape = RoundedCornerShape(8.dp),
                                         modifier = Modifier.height(36.dp)
                                     ) {
-                                        Text("Register Organization Now", style = MaterialTheme.typography.labelMedium)
+                                        Text("Register Organization Now", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -744,66 +800,98 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 3. Compact Bottom Register Prompt Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.dp, Color(0xFFDCDFFF)),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFEFEEFF)
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+            // 3. Role-Based Bottom Action / Note
+            if (selectedRole == Role.OWNER) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color(0xFFDCDFFF)),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFEFEEFF)
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(30.dp)
-                                .clip(CircleShape)
-                                .background(RoleOwnerPrimary.copy(alpha = 0.18f)),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Business,
-                                contentDescription = null,
-                                tint = RoleOwnerPrimary,
-                                modifier = Modifier.size(16.dp)
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(RoleOwnerPrimary.copy(alpha = 0.18f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Business,
+                                    contentDescription = null,
+                                    tint = RoleOwnerPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "New Owner? Register business",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = RoleOwnerPrimary
                             )
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "New Owner? Register business",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = RoleOwnerPrimary
-                        )
-                    }
 
-                    Button(
-                        onClick = { showOwnerRegistrationWizard = true },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = RoleOwnerPrimary
-                        ),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                        modifier = Modifier.height(36.dp),
-                        shape = RoundedCornerShape(10.dp)
+                        Button(
+                            onClick = { showOwnerRegistrationWizard = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = RoleOwnerPrimary
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                            modifier = Modifier.height(36.dp),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(
+                                text = "Register",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            } else {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFFF0F4F9),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = Color(0xFF5A6B82),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Register",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
+                            text = if (selectedRole == Role.MANAGER)
+                                "Managers are added directly by the Organization Owner."
+                            else
+                                "Staff members are added directly by their Manager or Owner.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF5A6B82),
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
+            }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -844,7 +932,7 @@ fun LoginScreen(
             onFetchGpsLocation = {
                 viewModel.fetchGpsLocation()
             },
-            onCompleteWithOtp = { ownerEmail, code, ownerName, orgName, timezone, currency, premisesName, radius ->
+            onCompleteWithOtp = { ownerEmail, code, ownerName, orgName, timezone, currency, premisesName, radius, address, latitude, longitude ->
                 viewModel.verifyOtp(
                     email = ownerEmail,
                     code = code,
@@ -854,18 +942,24 @@ fun LoginScreen(
                     timezone = timezone,
                     currency = currency,
                     premisesName = premisesName,
+                    premisesAddress = address,
+                    latitude = latitude,
+                    longitude = longitude,
                     radiusMeters = radius
                 )
                 showOwnerRegistrationWizard = false
             },
-            onCompleteWithGoogle = { idToken, orgName, timezone, currency, premisesName, radius ->
+            onCompleteWithGoogle = { idToken, orgName, timezone, currency, premisesName, radius, address, latitude, longitude ->
                 viewModel.registerOwnerWithGoogle(
                     idToken = idToken,
                     organizationName = orgName,
                     timezone = timezone,
                     currency = currency,
                     premisesName = premisesName,
-                    radiusMeters = radius
+                    radiusMeters = radius,
+                    premisesAddress = address,
+                    latitude = latitude,
+                    longitude = longitude
                 )
                 showOwnerRegistrationWizard = false
             }

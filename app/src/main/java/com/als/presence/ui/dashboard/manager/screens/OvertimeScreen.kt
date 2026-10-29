@@ -136,9 +136,7 @@ fun OvertimeScreen(
                             state.data.forEach { entry ->
                                 OvertimeCard(
                                     entry = entry,
-                                    onApprove = { viewModel.approveOvertime(entry.id) },
-                                    onReject = { viewModel.rejectOvertime(entry.id, "Not approved") },
-                                    onMarkWorked = { viewModel.markOvertimeWorked(entry.id) },
+                                    onDelete = { viewModel.cancel(entry.id) },
                                     isSubmitting = isSubmitting
                                 )
                             }
@@ -156,8 +154,8 @@ fun OvertimeScreen(
         BookOvertimeModal(
             staff = staffList,
             onDismiss = { showBook = false },
-            onBook = { staffProfileId, workDate, startTime, endTime, reason ->
-                viewModel.bookOvertime(staffProfileId, workDate, startTime, endTime, reason)
+            onBook = { employeeId, workDate, startTime, endTime, reason ->
+                viewModel.bookOvertime(employeeId, workDate, startTime, endTime, reason)
                 showBook = false
             }
         )
@@ -167,9 +165,7 @@ fun OvertimeScreen(
 @Composable
 private fun OvertimeCard(
     entry: OvertimeDto,
-    onApprove: () -> Unit,
-    onReject: () -> Unit,
-    onMarkWorked: () -> Unit,
+    onDelete: () -> Unit,
     isSubmitting: Boolean
 ) {
     Surface(
@@ -223,7 +219,7 @@ private fun OvertimeCard(
             }
 
             KeyValueRow(label = "Planned", value = Dates.formatMinutes(entry.plannedMinutes))
-            KeyValueRow(label = "Rate", value = Money.format(entry.paymentCents))
+            KeyValueRow(label = "Rate", value = Money.format(entry.paymentInr))
             KeyValueRow(
                 label = "Worked",
                 value = if (entry.workedMinutes > 0) Dates.formatMinutes(entry.workedMinutes) else "Not recorded"
@@ -241,16 +237,12 @@ private fun OvertimeCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                when (entry.status) {
-                    "PENDING" -> {
-                        ActionPill(label = "Approve", onClick = onApprove, enabled = !isSubmitting, primary = true)
-                        ActionPill(label = "Reject", onClick = onReject, enabled = !isSubmitting)
-                    }
-                    "APPROVED" -> {
-                        ActionPill(label = "Mark worked", onClick = onMarkWorked, enabled = !isSubmitting, primary = true)
-                    }
-                    else -> Unit
-                }
+                ActionPill(
+                    label = "Delete overtime",
+                    onClick = onDelete,
+                    enabled = !isSubmitting,
+                    primary = false
+                )
             }
         }
     }

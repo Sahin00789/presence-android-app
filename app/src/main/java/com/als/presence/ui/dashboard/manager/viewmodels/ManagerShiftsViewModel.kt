@@ -6,17 +6,17 @@ import com.als.presence.core.common.Resource
 import com.als.presence.core.common.UiState
 import com.als.presence.data.model.CreateHolidayRequest
 import com.als.presence.data.model.CreateShiftAssignmentRequest
-import com.als.presence.data.model.CreateShiftTemplateRequest
-import com.als.presence.data.model.DayShiftAssignmentRequest
-import com.als.presence.data.model.UpdateShiftTemplateRequest
+import com.als.presence.data.model.CreateShiftRequest
+import com.als.presence.data.model.DomainWebSocketEvent
 import com.als.presence.data.model.HolidayDto
 import com.als.presence.data.model.PremisesDto
 import com.als.presence.data.model.ShiftAssignmentDto
-import com.als.presence.data.model.ShiftTemplateDto
+import com.als.presence.data.model.ShiftDto
 import com.als.presence.data.model.StaffDto
+import com.als.presence.data.model.UpdateShiftRequest
+import com.als.presence.data.remote.EventsWebSocketService
 import com.als.presence.domain.repository.OperationsRepository
 import com.als.presence.ui.dashboard.common.Dates
-import com.als.presence.ui.dashboard.common.Money
 import com.als.presence.ui.dashboard.common.toUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,20 +25,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-import com.als.presence.data.remote.DomainWebSocketEvent
-import com.als.presence.data.remote.EventsWebSocketService
-
-/**
- * Shifts domain: templates, roster assignments and holiday calendar.
- */
+/** Shifts domain: shifts, roster assignments and holiday calendar. */
 @HiltViewModel
 class ManagerShiftsViewModel @Inject constructor(
     private val repository: OperationsRepository,
     private val webSocketService: EventsWebSocketService
 ) : ViewModel() {
 
-    private val _templates = MutableStateFlow<UiState<List<ShiftTemplateDto>>>(UiState.Loading)
-    val templates: StateFlow<UiState<List<ShiftTemplateDto>>> = _templates.asStateFlow()
+    private val _templates = MutableStateFlow<UiState<List<ShiftDto>>>(UiState.Loading)
+    val templates: StateFlow<UiState<List<ShiftDto>>> = _templates.asStateFlow()
 
     private val _assignments = MutableStateFlow<UiState<List<ShiftAssignmentDto>>>(UiState.Loading)
     val assignments: StateFlow<UiState<List<ShiftAssignmentDto>>> = _assignments.asStateFlow()
@@ -46,8 +41,8 @@ class ManagerShiftsViewModel @Inject constructor(
     private val _holidays = MutableStateFlow<UiState<List<HolidayDto>>>(UiState.Loading)
     val holidays: StateFlow<UiState<List<HolidayDto>>> = _holidays.asStateFlow()
 
-    private val _staff = MutableStateFlow<UiState<List<StaffDto>>>(UiState.Loading)
-    val staff: StateFlow<UiState<List<StaffDto>>> = _staff.asStateFlow()
+    private val _employee = MutableStateFlow<UiState<List<StaffDto>>>(UiState.Loading)
+    val staff: StateFlow<UiState<List<StaffDto>>> = _employee.asStateFlow()
 
     private val _premises = MutableStateFlow<UiState<List<PremisesDto>>>(UiState.Loading)
     val premises: StateFlow<UiState<List<PremisesDto>>> = _premises.asStateFlow()
@@ -79,22 +74,15 @@ class ManagerShiftsViewModel @Inject constructor(
     fun refresh() {
         loadTemplates()
         loadAssignments()
-        loadStaff()
         loadHolidays()
+        loadStaff()
         loadPremises()
-    }
-
-    fun loadPremises() {
-        viewModelScope.launch {
-            _premises.value = UiState.Loading
-            _premises.value = repository.getPremises().toUiState()
-        }
     }
 
     fun loadTemplates() {
         viewModelScope.launch {
             _templates.value = UiState.Loading
-            _templates.value = repository.getShiftTemplates().toUiState()
+            _templates.value = repository.getShifts().toUiState()
         }
     }
 
@@ -105,45 +93,54 @@ class ManagerShiftsViewModel @Inject constructor(
         }
     }
 
-    fun loadHolidays(from: String? = null, to: String? = null) {
+    fun loadHolidays() {
         viewModelScope.launch {
             _holidays.value = UiState.Loading
-            _holidays.value = repository.getHolidays(from, to).toUiState()
+            _holidays.value = repository.getHolidays().toUiState()
         }
     }
 
     fun loadStaff() {
         viewModelScope.launch {
-            _staff.value = UiState.Loading
-            _staff.value = repository.getStaff().toUiState()
+            _employee.value = UiState.Loading
+            _employee.value = repository.getEmployees().toUiState()
+        }
+    }
+
+    fun loadPremises() {
+        viewModelScope.launch {
+            _premises.value = UiState.Loading
+            _premises.value = repository.getPremises().toUiState()
         }
     }
 
     fun assignShift(
-        staffProfileId: String,
+        employeeId: String,
         shiftTemplateId: String,
-        startDate: String,
         premisesId: String? = null,
-        daysOfWeek: List<Int>? = null,
-        paymentAmount: String? = null
+        presentPay: Double = 0.0,
+        halfDayPay: Double = 0.0,
+        leavePay: Double = 0.0,
+        absentPay: Double = 0.0
     ) {
-        val paymentCents = paymentAmount?.let { Money.parseToCents(it) }
         viewModelScope.launch {
             _isSubmitting.value = true
             when (
                 val result = repository.createShiftAssignment(
                     CreateShiftAssignmentRequest(
-                        staffProfileId = staffProfileId,
-                        shiftTemplateId = shiftTemplateId,
-                        premisesId = premisesId,
-                        startDate = startDate,
-                        paymentCents = paymentCents,
-                        daysOfWeek = daysOfWeek
+                        employeeId = employeeId,
+                        staffId = employeeId,
+                        shiftId = shiftTemplateId,
+                        premisesId = premisesId.orEmpty(),
+                        presentPay = presentPay,
+                        halfDayPay = halfDayPay,
+                        leavePay = leavePay,
+                        absentPay = absentPay
                     )
                 )
             ) {
                 is Resource.Success -> {
-                    _message.value = "Shift assigned from ${Dates.formatDate(startDate)}."
+                    _message.value = "Shift assigned successfully."
                     loadAssignments()
                 }
                 is Resource.Error -> _message.value = result.message
@@ -154,9 +151,9 @@ class ManagerShiftsViewModel @Inject constructor(
     }
 
     fun assignShifts(
-        staffProfileId: String,
-        assignmentsList: List<DayShiftAssignmentRequest>,
-        startDate: String,
+        employeeId: String,
+        assignmentsList: List<CreateShiftAssignmentRequest>,
+        startDate: String? = null,
         premisesId: String? = null
     ) {
         viewModelScope.launch {
@@ -165,15 +162,11 @@ class ManagerShiftsViewModel @Inject constructor(
             var lastError: String? = null
 
             for (item in assignmentsList) {
-                val paymentCents = item.presentPay?.let { Money.parseToCents(it) }
                 val result = repository.createShiftAssignment(
-                    CreateShiftAssignmentRequest(
-                        staffProfileId = staffProfileId,
-                        shiftTemplateId = item.shiftTemplateId,
-                        premisesId = premisesId,
-                        startDate = startDate,
-                        paymentCents = paymentCents,
-                        daysOfWeek = item.daysOfWeek
+                    item.copy(
+                        employeeId = employeeId,
+                        staffId = employeeId,
+                        premisesId = premisesId ?: item.premisesId
                     )
                 )
                 when (result) {
@@ -184,7 +177,7 @@ class ManagerShiftsViewModel @Inject constructor(
             }
 
             if (successCount > 0) {
-                _message.value = "Assigned $successCount shift schedule(s) from ${Dates.formatDate(startDate)}."
+                _message.value = "Assigned $successCount shift schedule(s)."
                 loadAssignments()
             } else if (lastError != null) {
                 _message.value = lastError
@@ -197,32 +190,26 @@ class ManagerShiftsViewModel @Inject constructor(
         name: String,
         startTime: String,
         endTime: String,
-        breakMinutes: Int = 0,
-        lateGraceMinutes: Int = 15,
-        halfDayThresholdMinutes: Int = 240,
         premisesId: String? = null,
-        daysOfWeek: List<Int>? = null,
-        lateClockInAllowed: Boolean = true
+        dayName: String = "ALL",
+        halfDayThreshold: String = "11:00:00"
     ) {
         viewModelScope.launch {
             _isSubmitting.value = true
             when (
-                val result = repository.createShiftTemplate(
-                    CreateShiftTemplateRequest(
-                        name = name.trim(),
-                        premisesId = premisesId,
+                val result = repository.createShift(
+                    CreateShiftRequest(
+                        shiftName = name.trim(),
+                        premisesId = premisesId.orEmpty(),
+                        dayName = dayName.trim(),
                         startTime = startTime.trim(),
                         endTime = endTime.trim(),
-                        breakMinutes = breakMinutes,
-                        lateGraceMinutes = lateGraceMinutes,
-                        halfDayThresholdMinutes = halfDayThresholdMinutes,
-                        daysOfWeek = daysOfWeek,
-                        lateClockInAllowed = lateClockInAllowed
+                        halfDayThreshold = halfDayThreshold.trim()
                     )
                 )
             ) {
                 is Resource.Success -> {
-                    _message.value = "Shift template “${result.data.name}” created."
+                    _message.value = "Shift “${result.data.shiftName}” created."
                     loadTemplates()
                 }
                 is Resource.Error -> _message.value = result.message
@@ -237,35 +224,28 @@ class ManagerShiftsViewModel @Inject constructor(
         name: String,
         startTime: String,
         endTime: String,
-        breakMinutes: Int = 0,
-        lateGraceMinutes: Int = 15,
-        halfDayThresholdMinutes: Int = 240,
+        dayName: String? = null,
+        halfDayThreshold: String? = null,
         premisesId: String? = null,
-        daysOfWeek: List<Int>? = null,
-        lateClockInAllowed: Boolean = true,
         isActive: Boolean = true
     ) {
         viewModelScope.launch {
             _isSubmitting.value = true
             when (
-                val result = repository.updateShiftTemplate(
+                val result = repository.updateShift(
                     templateId,
-                    UpdateShiftTemplateRequest(
-                        name = name.trim(),
-                        premisesId = premisesId,
+                    UpdateShiftRequest(
+                        shiftName = name.trim(),
+                        dayName = dayName?.trim(),
                         startTime = startTime.trim(),
                         endTime = endTime.trim(),
-                        breakMinutes = breakMinutes,
-                        lateGraceMinutes = lateGraceMinutes,
-                        halfDayThresholdMinutes = halfDayThresholdMinutes,
-                        daysOfWeek = daysOfWeek,
-                        lateClockInAllowed = lateClockInAllowed,
+                        halfDayThreshold = halfDayThreshold?.trim(),
                         isActive = isActive
                     )
                 )
             ) {
                 is Resource.Success -> {
-                    _message.value = "Shift template “${result.data.name}” updated."
+                    _message.value = "Shift “${result.data.shiftName}” updated."
                     loadTemplates()
                 }
                 is Resource.Error -> _message.value = result.message
@@ -278,9 +258,9 @@ class ManagerShiftsViewModel @Inject constructor(
     fun deleteTemplate(templateId: String) {
         viewModelScope.launch {
             _isSubmitting.value = true
-            when (val result = repository.deleteShiftTemplate(templateId)) {
+            when (val result = repository.deleteShift(templateId)) {
                 is Resource.Success -> {
-                    _message.value = "Shift template removed."
+                    _message.value = "Shift removed."
                     loadTemplates()
                 }
                 is Resource.Error -> _message.value = result.message
@@ -297,13 +277,13 @@ class ManagerShiftsViewModel @Inject constructor(
                 val result = repository.createHoliday(
                     CreateHolidayRequest(
                         name = name.trim(),
-                        date = date.trim(),
+                        holidayDate = date.trim(),
                         isPaid = isPaid
                     )
                 )
             ) {
                 is Resource.Success -> {
-                    _message.value = "Holiday “${result.data.name}” added for ${Dates.formatDate(result.data.date)}."
+                    _message.value = "Holiday “${result.data.name}” added for ${Dates.formatDate(result.data.holidayDate)}."
                     loadHolidays()
                 }
                 is Resource.Error -> _message.value = result.message

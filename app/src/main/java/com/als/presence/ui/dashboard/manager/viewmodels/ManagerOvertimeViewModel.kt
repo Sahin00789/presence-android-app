@@ -27,8 +27,8 @@ class ManagerOvertimeViewModel @Inject constructor(
     private val _entries = MutableStateFlow<UiState<List<OvertimeDto>>>(UiState.Loading)
     val overtime: StateFlow<UiState<List<OvertimeDto>>> = _entries.asStateFlow()
 
-    private val _staff = MutableStateFlow<UiState<List<StaffDto>>>(UiState.Loading)
-    val staff: StateFlow<UiState<List<StaffDto>>> = _staff.asStateFlow()
+    private val _employee = MutableStateFlow<UiState<List<StaffDto>>>(UiState.Loading)
+    val staff: StateFlow<UiState<List<StaffDto>>> = _employee.asStateFlow()
 
     private val _isSubmitting = MutableStateFlow(false)
     val isSubmitting: StateFlow<Boolean> = _isSubmitting.asStateFlow()
@@ -54,13 +54,13 @@ class ManagerOvertimeViewModel @Inject constructor(
 
     private fun loadStaff() {
         viewModelScope.launch {
-            _staff.value = UiState.Loading
-            _staff.value = repository.getStaff().toUiState()
+            _employee.value = UiState.Loading
+            _employee.value = repository.getEmployees().toUiState()
         }
     }
 
     fun create(
-        staffProfileId: String?,
+        employeeId: String?,
         workDate: String,
         startTime: String,
         endTime: String,
@@ -73,11 +73,11 @@ class ManagerOvertimeViewModel @Inject constructor(
             when (
                 val result = repository.createOvertime(
                     CreateOvertimeRequest(
-                        staffProfileId = staffProfileId,
+                        employeeId = employeeId,
                         workDate = workDate,
                         startTime = startTime,
                         endTime = endTime,
-                        paymentCents = cents,
+                        paymentInr = cents,
                         reason = reason.trim().ifBlank { "Overtime" }
                     )
                 )
@@ -94,14 +94,14 @@ class ManagerOvertimeViewModel @Inject constructor(
     }
 
     fun bookOvertime(
-        staffProfileId: String,
+        employeeId: String,
         workDate: String,
         startTime: String,
         endTime: String,
         reason: String
     ) {
         create(
-            staffProfileId = staffProfileId,
+            employeeId = employeeId,
             workDate = workDate,
             startTime = startTime,
             endTime = endTime,

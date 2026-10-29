@@ -6,9 +6,9 @@ import com.als.presence.domain.repository.AuthRepository
 import javax.inject.Inject
 
 class GetLoggedDevicesUseCase @Inject constructor(
-    private val repository: AuthRepository
+    private val authRepository: AuthRepository
 ) {
     suspend operator fun invoke(): Resource<List<LoggedDevice>> {
-        return repository.getLoggedDevices()
+        return authRepository.getLoggedDevices()
     }
 }

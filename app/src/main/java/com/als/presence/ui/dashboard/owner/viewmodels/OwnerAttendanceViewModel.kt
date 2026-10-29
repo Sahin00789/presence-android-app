@@ -64,7 +64,8 @@ class OwnerAttendanceViewModel @Inject constructor(
             when (
                 val result = repository.resolveException(
                     exceptionId,
-                    ResolveExceptionRequest(correctedStatus = correctedStatus, reason = reason)
+                    correctedStatus,
+                    reason
                 )
             ) {
                 is Resource.Success -> {

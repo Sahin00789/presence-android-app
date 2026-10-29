@@ -6,12 +6,13 @@ import com.als.presence.core.common.Resource
 import com.als.presence.core.common.UiState
 import com.als.presence.core.location.GpsLocation
 import com.als.presence.data.model.OtpResponse
-import com.als.presence.data.remote.PostOffice
+import com.als.presence.data.model.PostOffice
 import com.als.presence.domain.model.LoggedDevice
 import com.als.presence.domain.model.Role
 import com.als.presence.domain.model.User
 import com.als.presence.domain.usecase.auth.GoogleExchangeUseCase
 import com.als.presence.domain.usecase.auth.LogoutUseCase
+import com.als.presence.data.local.SessionManager
 import com.als.presence.domain.usecase.auth.ObserveCurrentUserUseCase
 import com.als.presence.domain.usecase.auth.RequestOtpUseCase
 import com.als.presence.domain.usecase.auth.VerifyOtpUseCase
@@ -37,6 +38,7 @@ import javax.inject.Inject
 class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val operationsRepository: OperationsRepository,
+    private val sessionManager: SessionManager,
     private val requestOtpUseCase: RequestOtpUseCase,
     private val verifyOtpUseCase: VerifyOtpUseCase,
     private val googleExchangeUseCase: GoogleExchangeUseCase,
@@ -87,16 +89,22 @@ class AuthViewModel @Inject constructor(
 
     fun requestOtp(email: String, role: Role = Role.STAFF) {
         viewModelScope.launch {
+            if (!isOnline.value) {
+                _uiState.value = UiState.Error(
+                    message = "Server is not connected. Device is currently offline."
+                )
+                return@launch
+            }
             _uiState.value = UiState.Loading
-            when (val result = requestOtpUseCase(email, role)) {
+            when (val result = requestOtpUseCase(email, role.name)) {
                 is Resource.Success -> {
                     _otpState.value = result.data
                     _uiState.value = UiState.Idle
                 }
                 is Resource.Error -> {
-                    _uiState.value = UiState.Error(
-                        message = result.message ?: "Failed to request OTP"
-                    )
+                    val errorMsg = result.message?.takeIf { it.isNotBlank() }
+                        ?: "Failed to send verification code. Server is not connected."
+                    _uiState.value = UiState.Error(message = errorMsg)
                 }
                 is Resource.Loading -> {
                     _uiState.value = UiState.Loading
@@ -114,28 +122,40 @@ class AuthViewModel @Inject constructor(
         timezone: String? = null,
         currency: String? = null,
         premisesName: String? = null,
+        premisesAddress: String? = null,
+        latitude: String? = null,
+        longitude: String? = null,
         radiusMeters: Int? = null
     ) {
         viewModelScope.launch {
+            if (!isOnline.value) {
+                _uiState.value = UiState.Error(
+                    message = "Server is not connected. Device is currently offline."
+                )
+                return@launch
+            }
             _uiState.value = UiState.Loading
             when (val result = verifyOtpUseCase(
                 email = email,
-                code = code,
-                role = role,
+                otp = code,
+                role = role.name,
                 fullName = fullName,
                 organizationName = organizationName,
                 timezone = timezone,
                 currency = currency,
                 premisesName = premisesName,
+                premisesAddress = premisesAddress,
+                latitude = latitude,
+                longitude = longitude,
                 radiusMeters = radiusMeters
             )) {
                 is Resource.Success -> {
                     _uiState.value = UiState.Success(result.data)
                 }
                 is Resource.Error -> {
-                    _uiState.value = UiState.Error(
-                        message = result.message ?: "OTP Verification failed"
-                    )
+                    val errorMsg = result.message?.takeIf { it.isNotBlank() }
+                        ?: "OTP Verification failed. Server is not connected."
+                    _uiState.value = UiState.Error(message = errorMsg)
                 }
                 is Resource.Loading -> {
                     _uiState.value = UiState.Loading
@@ -146,15 +166,21 @@ class AuthViewModel @Inject constructor(
 
     fun loginWithGoogle(code: String, redirectUri: String? = null) {
         viewModelScope.launch {
+            if (!isOnline.value) {
+                _uiState.value = UiState.Error(
+                    message = "Server is not connected. Device is currently offline."
+                )
+                return@launch
+            }
             _uiState.value = UiState.Loading
-            when (val result = googleExchangeUseCase(code = code, redirectUri = redirectUri)) {
+            when (val result = googleExchangeUseCase(code = code, redirectUri = redirectUri ?: "")) {
                 is Resource.Success -> {
                     _uiState.value = UiState.Success(result.data)
                 }
                 is Resource.Error -> {
-                    _uiState.value = UiState.Error(
-                        message = result.message ?: result.exception.localizedMessage ?: "Google login failed"
-                    )
+                    val errorMsg = result.message?.takeIf { it.isNotBlank() }
+                        ?: "Google login failed. Server is not connected."
+                    _uiState.value = UiState.Error(message = errorMsg)
                 }
                 is Resource.Loading -> {
                     _uiState.value = UiState.Loading
@@ -169,22 +195,36 @@ class AuthViewModel @Inject constructor(
         timezone: String,
         currency: String,
         premisesName: String,
-        radiusMeters: Int
+        radiusMeters: Int,
+        premisesAddress: String? = null,
+        latitude: String? = null,
+        longitude: String? = null
     ) {
         viewModelScope.launch {
+            if (!isOnline.value) {
+                _uiState.value = UiState.Error(
+                    message = "Server is not connected. Device is currently offline."
+                )
+                return@launch
+            }
             _uiState.value = UiState.Loading
             when (val result = registerOwnerWithGoogleUseCase(
                 idToken = idToken,
-                organizationName = organizationName,
+                orgName = organizationName,
                 timezone = timezone,
                 currency = currency,
                 premisesName = premisesName,
-                radiusMeters = radiusMeters
+                radius = radiusMeters,
+                premisesAddress = premisesAddress,
+                latitude = latitude,
+                longitude = longitude
             )) {
                 is Resource.Success -> _uiState.value = UiState.Success(result.data)
-                is Resource.Error -> _uiState.value = UiState.Error(
-                    message = result.message ?: "Owner registration failed"
-                )
+                is Resource.Error -> {
+                    val errorMsg = result.message?.takeIf { it.isNotBlank() }
+                        ?: "Owner registration failed. Server is not connected."
+                    _uiState.value = UiState.Error(message = errorMsg)
+                }
                 is Resource.Loading -> _uiState.value = UiState.Loading
             }
         }
@@ -197,6 +237,24 @@ class AuthViewModel @Inject constructor(
                 is Resource.Success -> _pincodeState.value = UiState.Success(result.data)
                 is Resource.Error -> _pincodeState.value = UiState.Error(result.message ?: "Failed to lookup pincode")
                 is Resource.Loading -> _pincodeState.value = UiState.Loading
+            }
+        }
+    }
+
+    fun tryAutoLogin() {
+        val currentRefreshToken = sessionManager.refreshToken
+        if (currentRefreshToken.isNullOrBlank()) return
+        viewModelScope.launch {
+            if (!isOnline.value) return@launch
+            _uiState.value = UiState.Loading
+            when (val result = authRepository.refreshToken()) {
+                is Resource.Success -> {
+                    _uiState.value = UiState.Success(result.data)
+                }
+                is Resource.Error -> {
+                    _uiState.value = UiState.Idle
+                }
+                is Resource.Loading -> Unit
             }
         }
     }

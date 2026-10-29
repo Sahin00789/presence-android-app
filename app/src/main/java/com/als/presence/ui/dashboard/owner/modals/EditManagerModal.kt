@@ -40,7 +40,7 @@ fun EditManagerModal(
     manager: OrganizationMemberDto,
     premisesList: List<PremisesDto> = emptyList(),
     onDismiss: () -> Unit,
-    onSave: (userId: String, staffProfileId: String?, email: String, name: String, department: String, premisesId: String?) -> Unit
+    onSave: (userId: String, employeeId: String?, email: String, name: String, department: String, premisesId: String?) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -135,7 +135,7 @@ fun EditManagerModal(
                 onClick = {
                     onSave(
                         manager.userId,
-                        manager.staffProfileId,
+                        manager.employeeId,
                         manager.email,
                         name.trim(),
                         department.trim(),

@@ -46,7 +46,7 @@ class LeaveViewModel @Inject constructor(
         endDate: String,
         type: String,
         reason: String,
-        staffProfileId: String? = null,
+        employeeId: String? = null,
         shiftName: String? = null,
         shiftAssignmentId: String? = null,
         shiftTemplateId: String? = null
@@ -64,14 +64,12 @@ class LeaveViewModel @Inject constructor(
             when (
                 val result = repository.requestLeave(
                     LeaveRequestCreate(
-                        staffProfileId = staffProfileId,
-                        shiftAssignmentId = shiftAssignmentId,
-                        shiftTemplateId = shiftTemplateId,
-                        shiftName = shiftName?.trim()?.ifBlank { null },
-                        startDate = startDate,
-                        endDate = endDate,
-                        type = type,
-                        reason = reason.trim()
+                        shiftAssignmentId = shiftAssignmentId.orEmpty(),
+                        workDate = startDate,
+                        reason = buildString {
+                            if (!shiftName.isNullOrBlank()) append("Shift: ").append(shiftName).append(". ")
+                            append(reason.trim())
+                        }
                     )
                 )
             ) {

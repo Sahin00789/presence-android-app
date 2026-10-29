@@ -156,7 +156,7 @@ fun PayStaffModal(
             }
 
             // 5. Paid Leave
-            val leaveDaysCount = attendanceSummary.paidLeaveDays.takeIf { it > 0 } ?: attendanceSummary.leaveDays
+            val leaveDaysCount = attendanceSummary.leaveDays
             if (leaveDaysCount > 0) {
                 val line = breakdown.earnings.firstOrNull { it.code == "PAID_LEAVE" }
                 val amount = line?.amountCents ?: 0L
@@ -170,7 +170,7 @@ fun PayStaffModal(
             }
 
             // 6. Completed Overtime
-            val overtimeMins = attendanceSummary.totalOvertimeMinutes.takeIf { it > 0 } ?: attendanceSummary.overtimeMinutes
+            val overtimeMins = attendanceSummary.totalOvertimeMinutes.toInt()
             val overtimeLine = breakdown.earnings.firstOrNull { it.code == "OVERTIME" || it.code == "COMPLETED_OVERTIME" }
             if (overtimeMins > 0 || (overtimeLine != null && overtimeLine.amountCents > 0)) {
                 val hrs = if (overtimeMins > 0) "${overtimeMins / 60} hrs" else "Approved"
@@ -467,7 +467,7 @@ fun PayStaffModal(
                                                     fontWeight = FontWeight.Bold,
                                                     color = MaterialTheme.colorScheme.onSurface
                                                 )
-                                                if (record.referenceNumber.isNotBlank()) {
+                                                if (record.referenceNumber?.isNotBlank() == true) {
                                                     Text(
                                                         text = "Ref: ${record.referenceNumber}",
                                                         style = MaterialTheme.typography.labelSmall,

@@ -115,7 +115,7 @@ fun SalaryPaymentScreen(
                 payrollPeriodsState = periodsState,
                 payrollItemsMap = payrollItemsMap,
                 isSubmitting = isSubmitting,
-                onRecordPayment = viewModel::recordPayment
+                onRecordPayment = { _, _, _, _ -> }
             )
         }
 
@@ -291,7 +291,7 @@ fun SalaryPaymentScreenContent(
                                 val itemId = cardData.payrollItemId
                                     ?: periods.firstNotNullOfOrNull { period ->
                                         payrollItemsMap[period.id]?.firstOrNull {
-                                            it.staffProfileId == member.id || it.staffEmail.equals(member.email, ignoreCase = true)
+                                            it.employeeId == member.id || it.staffEmail.equals(member.email, ignoreCase = true)
                                         }
                                     }?.id
                                     ?: periods.firstOrNull()?.id
@@ -356,7 +356,7 @@ fun SalaryPaymentScreenContent(
                                     val itemId = cardData.payrollItemId
                                         ?: periods.firstNotNullOfOrNull { period ->
                                             payrollItemsMap[period.id]?.firstOrNull {
-                                                it.staffProfileId == manager.staffProfileId ||
+                                                it.employeeId == manager.employeeId ||
                                                 it.staffEmail.equals(manager.email, ignoreCase = true) ||
                                                 (!manager.staffCode.isNullOrBlank() && it.staffCode.equals(manager.staffCode, ignoreCase = true))
                                             }
@@ -524,7 +524,7 @@ private fun SalaryEmployeeCard(
             val monthlyCards = remember(staff, payrollPeriods, payrollItemsMap) {
                 computeSalaryMonthlyCards(
                     joiningDateIso = staff.hireDate,
-                    staffProfileId = staff.id,
+                    employeeId = staff.id,
                     email = staff.email,
                     staffCode = staff.staffCode,
                     earnedBalanceCents = staff.earnedBalanceCents,
@@ -605,7 +605,7 @@ private fun SalaryManagerCard(
             val monthlyCards = remember(member, payrollPeriods, payrollItemsMap) {
                 computeSalaryMonthlyCards(
                     joiningDateIso = member.joinedAt,
-                    staffProfileId = member.staffProfileId,
+                    employeeId = member.employeeId,
                     email = member.email,
                     staffCode = member.staffCode,
                     earnedBalanceCents = 0L,
@@ -651,17 +651,17 @@ private data class SalaryMonthlyCardData(
     val paymentHistory: List<PaymentRecordDto> = emptyList(),
     val breakdown: PayrollBreakdownDto = PayrollBreakdownDto(),
     val attendanceSummary: AttendanceSummaryDto = AttendanceSummaryDto(),
-    val presentDays: Int = 0,
-    val halfDays: Int = 0,
-    val leaveDays: Int = 0,
-    val absentDays: Int = 0,
-    val holidayDays: Int = 0,
-    val weeklyOffDays: Int = 0
+    val presentShiftsCount: Int = 0,
+    val halfDayShiftsCount: Int = 0,
+    val leaveShiftsCount: Int = 0,
+    val absentShiftsCount: Int = 0,
+    val holidayCount: Int = 0,
+    val offDayCount: Int = 0
 )
 
 private fun computeSalaryMonthlyCards(
     joiningDateIso: String?,
-    staffProfileId: String?,
+    employeeId: String?,
     email: String?,
     staffCode: String?,
     earnedBalanceCents: Long,
@@ -706,7 +706,7 @@ private fun computeSalaryMonthlyCards(
                 periodStatus = period.status
                 val items = payrollItemsMap[period.id].orEmpty()
                 foundItem = items.firstOrNull { item ->
-                    (staffProfileId != null && item.staffProfileId == staffProfileId) ||
+                    (employeeId != null && item.employeeId == employeeId) ||
                     (!email.isNullOrBlank() && item.staffEmail.equals(email, ignoreCase = true)) ||
                     (!staffCode.isNullOrBlank() && item.staffCode.equals(staffCode, ignoreCase = true))
                 }
@@ -730,12 +730,12 @@ private fun computeSalaryMonthlyCards(
                 paymentHistory = history,
                 breakdown = foundItem.breakdown,
                 attendanceSummary = summary,
-                presentDays = summary.presentDays,
-                halfDays = summary.halfDays,
-                leaveDays = summary.leaveDays,
-                absentDays = summary.absentDays,
-                holidayDays = summary.holidayDays,
-                weeklyOffDays = summary.weeklyOffDays
+                presentShiftsCount = summary.presentShiftsCount,
+                halfDayShiftsCount = summary.halfDayShiftsCount,
+                leaveShiftsCount = summary.leaveShiftsCount,
+                absentShiftsCount = summary.absentShiftsCount,
+                holidayCount = summary.holidayCount,
+                offDayCount = summary.offDayCount
             )
         } else {
             if (isCurrentMonth) {
@@ -744,12 +744,12 @@ private fun computeSalaryMonthlyCards(
                     earnedCents = earnedBalanceCents,
                     paidCents = 0L,
                     statusLabel = "UNPAID",
-                    presentDays = 0,
-                    halfDays = 0,
-                    leaveDays = 0,
-                    absentDays = 0,
-                    holidayDays = 0,
-                    weeklyOffDays = 0
+                    presentShiftsCount = 0,
+                    halfDayShiftsCount = 0,
+                    leaveShiftsCount = 0,
+                    absentShiftsCount = 0,
+                    holidayCount = 0,
+                    offDayCount = 0
                 )
             } else {
                 SalaryMonthlyCardData(
@@ -757,12 +757,12 @@ private fun computeSalaryMonthlyCards(
                     earnedCents = 0L,
                     paidCents = 0L,
                     statusLabel = "UNPAID",
-                    presentDays = 0,
-                    halfDays = 0,
-                    leaveDays = 0,
-                    absentDays = 0,
-                    holidayDays = 0,
-                    weeklyOffDays = 0
+                    presentShiftsCount = 0,
+                    halfDayShiftsCount = 0,
+                    leaveShiftsCount = 0,
+                    absentShiftsCount = 0,
+                    holidayCount = 0,
+                    offDayCount = 0
                 )
             }
         }
@@ -928,22 +928,22 @@ private fun SalaryMonthlyCardItem(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    SalaryAttendanceBadge(label = "Present", count = cardData.presentDays, color = SecondaryEmerald)
-                    SalaryAttendanceBadge(label = "Half-Day", count = cardData.halfDays, color = TertiaryAmber)
+                    SalaryAttendanceBadge(label = "Present", count = cardData.presentShiftsCount, color = SecondaryEmerald)
+                    SalaryAttendanceBadge(label = "Half-Day", count = cardData.halfDayShiftsCount, color = TertiaryAmber)
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    SalaryAttendanceBadge(label = "Leave", count = cardData.leaveDays, color = Color(0xFF3B82F6))
-                    SalaryAttendanceBadge(label = "Absent", count = cardData.absentDays, color = Color(0xFFEF4444))
+                    SalaryAttendanceBadge(label = "Leave", count = cardData.leaveShiftsCount, color = Color(0xFF3B82F6))
+                    SalaryAttendanceBadge(label = "Absent", count = cardData.absentShiftsCount, color = Color(0xFFEF4444))
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    SalaryAttendanceBadge(label = "Holidays", count = cardData.holidayDays, color = Color(0xFF8B5CF6))
-                    SalaryAttendanceBadge(label = "Off-Days", count = cardData.weeklyOffDays, color = Color(0xFF64748B))
+                    SalaryAttendanceBadge(label = "Holidays", count = cardData.holidayCount, color = Color(0xFF8B5CF6))
+                    SalaryAttendanceBadge(label = "Off-Days", count = cardData.offDayCount, color = Color(0xFF64748B))
                 }
             }
         }

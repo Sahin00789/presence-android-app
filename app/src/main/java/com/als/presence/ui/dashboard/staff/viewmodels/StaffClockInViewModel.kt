@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Staff "Clock-In" tab state management.
+ * employee "Clock-In" tab state management.
  */
 @HiltViewModel
 class StaffClockInViewModel @Inject constructor(

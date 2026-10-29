@@ -31,26 +31,26 @@ sequenceDiagram
         Work->>API: POST /api/v1/location/checks (Status: OUTSIDE / MOCKED)
         API->>DB: Record location_check_events (Failure)
         API->>API: Increment Consecutive Failure Counter for Active Session
-        alt Consecutive Failures == 3
+        alt Consecutive Failures >= 3 (Outside Count > 3)
             API->>DB: Create location_monitoring_exception record
-            API->>API: Send Real-Time Notification to Manager & Staff
+            API->>API: Send Real-Time Notification to Manager & Owner
         end
     end
 ```
 
 ---
 
-## 3. The 3-Consecutive-Failures Rule & Recovery
+## 3. The 3-Consecutive-Outside-Pings Rule & Manual Resolution Policy
 
 ### Policy Specification
-1. **Trigger**: When an active monitoring session records **3 consecutive** failed location checks (Outside premises, Mocked location, Stale reading, or Location disabled).
+1. **Trigger**: When active shift monitoring records **3 consecutive outside pings** (`consecutiveFailures >= 3`, outside count $> 3$).
 2. **Alert Broadcast**:
-   - High-priority push / SSE notification sent to Manager dashboard.
-   - Alert notification sent to Staff device explaining location check failure.
-3. **No Automatic Absence**:
-   - **CRITICAL**: The 3-failure rule does **NOT** automatically mark the employee absent or penalize salary.
-   - It creates an open `location_monitoring_exception` item in the Manager's review queue.
-4. **Counter Reset**:
+   - High-priority push / real-time notification sent to Manager and Owner dashboards.
+   - Notification sent to Staff device.
+3. **Manual Attendance Marking & Action Buttons**:
+   - Action buttons appear on the Owner and Manager dashboard and remain visible and active **until the shift or overtime is completely finished/completed**.
+   - Owner or Manager can manually mark attendance as `ABSENT`, `HALF_DAY`, `LEAVE`, or resume tracking (`RESUME`).
+4. **Default Present Rule (No Action Taken)**:
+   - **CRITICAL**: If the owner or manager **does not press any button** before the shift or overtime completes, the system **defaults to Present** (`PRESENT`).
+5. **Counter Reset**:
    - A single valid `IN_PREMISES` check resets the consecutive failure counter to 0.
-   - Manager manual resolution closes the open exception.
-5. **Deduplication**: Repeated failed pings after the 3rd failure update the existing open exception rather than spamming duplicate alert notifications.

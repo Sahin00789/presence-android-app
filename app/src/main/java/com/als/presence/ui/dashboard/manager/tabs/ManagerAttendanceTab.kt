@@ -29,7 +29,7 @@ import com.als.presence.data.model.AttendanceExceptionDto
 import com.als.presence.data.model.AttendanceRecordDto
 import com.als.presence.domain.model.User
 import com.als.presence.ui.dashboard.common.AttendanceRegisterTab
-import com.als.presence.ui.dashboard.staff.tabs.StaffClockInTab
+import com.als.presence.ui.dashboard.staff.tabs.employeeClockInTab
 import com.als.presence.ui.dashboard.staff.viewmodels.StaffClockInViewModel
 
 /**
@@ -101,7 +101,7 @@ fun ManagerAttendanceTab(
         // Tab Content based on segmented control
         when (selectedSegment) {
             0 -> {
-                StaffClockInTab(
+                employeeClockInTab(
                     user = user,
                     state = clockState,
                     onRefresh = onRefresh,

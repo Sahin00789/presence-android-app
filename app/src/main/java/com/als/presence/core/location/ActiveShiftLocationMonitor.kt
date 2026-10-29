@@ -1,8 +1,7 @@
 package com.als.presence.core.location
 
 import com.als.presence.core.common.Resource
-import com.als.presence.data.local.location.LocationCheckDao
-import com.als.presence.data.local.location.LocationCheckEntity
+import com.als.presence.data.local.*
 import com.als.presence.domain.repository.OperationsRepository
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -34,9 +33,9 @@ class ActiveShiftLocationMonitor @Inject constructor(
         drainOutbox()
 
         val session = repository.getActiveLocationSession()
-        val active = (session as? Resource.Success)?.data
-        val eventId = active?.attendanceEventId
-        if (active?.isActive != true || eventId.isNullOrBlank()) {
+        val active = (session as? Resource.Success<*>)?.data as? com.als.presence.data.model.LocationSessionDto
+        val eventId = active?.attendanceEventId ?: ""
+        if (active?.isActive != true || eventId.isBlank()) {
             return@withLock Outcome(active = false)
         }
 
@@ -64,12 +63,13 @@ class ActiveShiftLocationMonitor @Inject constructor(
         )
 
         when (result) {
-            is Resource.Success -> {
+            is Resource.Success<*> -> {
+                val data = result.data as com.als.presence.data.model.LocationCheckResultDto
                 outbox.delete(id)
                 Outcome(
                     active = true,
-                    result = result.data.result,
-                    exceptionCreated = result.data.exceptionCreated
+                    result = data.result,
+                    exceptionCreated = data.exceptionCreated
                 )
             }
             is Resource.Error -> {
@@ -92,7 +92,7 @@ class ActiveShiftLocationMonitor @Inject constructor(
                     capturedAt = entry.capturedAt
                 )
             ) {
-                is Resource.Success -> outbox.delete(entry.id)
+                is Resource.Success<*> -> outbox.delete(entry.id)
                 is Resource.Error -> outbox.markFailed(entry.id, result.message)
                 Resource.Loading -> Unit
             }

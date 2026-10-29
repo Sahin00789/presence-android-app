@@ -1,5 +1,11 @@
 package com.als.presence.ui.auth
 
+import android.location.Geocoder
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.ui.platform.LocalContext
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -12,6 +18,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,6 +44,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MyLocation
@@ -43,6 +52,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -82,17 +92,9 @@ import com.als.presence.R
 import com.als.presence.core.common.UiState
 import com.als.presence.core.location.GpsLocation
 import com.als.presence.data.model.OtpResponse
-import com.als.presence.data.remote.PostOffice
+import com.als.presence.data.model.PostOffice
 
-private val INDIAN_STATES = listOf(
-    "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
-    "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
-    "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram",
-    "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
-    "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
-    "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
-    "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
-)
+
 
 data class GoogleRegistrationIdentity(
     val idToken: String,
@@ -115,8 +117,8 @@ fun OwnerRegistrationWizard(
     onStartGoogle: () -> Unit,
     onLookupPincode: (String) -> Unit = {},
     onFetchGpsLocation: () -> Unit = {},
-    onCompleteWithOtp: (String, String, String, String, String, String, String, Int) -> Unit,
-    onCompleteWithGoogle: (String, String, String, String, String, Int) -> Unit
+    onCompleteWithOtp: (email: String, otp: String, ownerName: String, orgName: String, timezone: String, currency: String, premisesName: String, radius: Int, address: String?, latitude: String?, longitude: String?) -> Unit,
+    onCompleteWithGoogle: (idToken: String, orgName: String, timezone: String, currency: String, premisesName: String, radius: Int, address: String?, latitude: String?, longitude: String?) -> Unit
 ) {
     var step by remember { mutableIntStateOf(1) }
     var verificationMethod by remember { mutableStateOf("email") }
@@ -129,33 +131,37 @@ fun OwnerRegistrationWizard(
     var premisesName by remember { mutableStateOf("") }
     var radius by remember { mutableStateOf("50") }
 
-    // ADDRESS DROPDOWNS & MANUAL FIELDS
-    var pincodeInput by remember { mutableStateOf("") }
-    var selectedState by remember { mutableStateOf("") }
-    var stateDropdownExpanded by remember { mutableStateOf(false) }
-    var selectedDistrict by remember { mutableStateOf("") }
-    var districtDropdownExpanded by remember { mutableStateOf(false) }
-    var selectedBlock by remember { mutableStateOf("") }
-    var blockDropdownExpanded by remember { mutableStateOf(false) }
-    var selectedNearestPo by remember { mutableStateOf("") }
-    var poDropdownExpanded by remember { mutableStateOf(false) }
-
     var streetAddressInput by remember { mutableStateOf("") }
-    var landmarkInput by remember { mutableStateOf("") }
+
+    val context = LocalContext.current
+    var capturedLat by remember { mutableStateOf<String?>(null) }
+    var capturedLng by remember { mutableStateOf<String?>(null) }
 
     val scrollState = rememberScrollState()
     val loading = uiState is UiState.Loading
 
-    // Auto-update dropdown selections strictly from Pincode lookup response
-    LaunchedEffect(pincodeState) {
-        if (pincodeState is UiState.Success) {
-            val offices = pincodeState.data
-            val first = offices.firstOrNull()
-            if (first != null) {
-                selectedNearestPo = first.name.orEmpty()
-                selectedBlock = first.division.orEmpty().ifBlank { first.region.orEmpty() }
-                selectedDistrict = first.district.orEmpty()
-                selectedState = first.state.orEmpty()
+    LaunchedEffect(gpsLocationState) {
+        if (gpsLocationState is UiState.Success) {
+            val gps = gpsLocationState.data
+            capturedLat = gps.latitude.toString()
+            capturedLng = gps.longitude.toString()
+            withContext(Dispatchers.IO) {
+                try {
+                    val geocoder = Geocoder(context, Locale.getDefault())
+                    @Suppress("DEPRECATION")
+                    val addresses = geocoder.getFromLocation(gps.latitude, gps.longitude, 1)
+                    val first = addresses?.firstOrNull()
+                    if (first != null) {
+                        val addr = first.getAddressLine(0) ?: first.locality
+                        if (!addr.isNullOrBlank()) {
+                            withContext(Dispatchers.Main) {
+                                if (streetAddressInput.isBlank()) {
+                                    streetAddressInput = addr
+                                }
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
             }
         }
     }
@@ -172,7 +178,18 @@ fun OwnerRegistrationWizard(
             modifier = Modifier.fillMaxSize(),
             color = Color(0xFFF5F6FB)
         ) {
-            Scaffold(
+            if (uiState is UiState.Success) {
+                val registeredUser = (uiState as? UiState.Success<*>)?.data as? com.als.presence.domain.model.User
+                RegistrationSuccessGreetScreen(
+                    user = registeredUser,
+                    organizationName = organizationName,
+                    ownerName = googleIdentity?.fullName?.ifBlank { null } ?: ownerName,
+                    email = googleIdentity?.email ?: email,
+                    premisesName = premisesName,
+                    onOkClick = onDismiss
+                )
+            } else {
+                Scaffold(
                 topBar = {
                     Column(
                         modifier = Modifier
@@ -313,12 +330,8 @@ fun OwnerRegistrationWizard(
                                 Button(
                                     onClick = {
                                         val radiusMeters = radius.toIntOrNull() ?: 50
-                                        val fullPremisesName = buildString {
-                                            append(premisesName.trim())
-                                            if (selectedNearestPo.isNotBlank()) {
-                                                append(", $selectedNearestPo")
-                                            }
-                                        }
+                                        val streetAddr = streetAddressInput.trim().ifBlank { null }
+
                                         if (verificationMethod == "email") {
                                             onCompleteWithOtp(
                                                 email.trim(),
@@ -327,8 +340,11 @@ fun OwnerRegistrationWizard(
                                                 organizationName.trim(),
                                                 timezone.trim(),
                                                 currency.trim(),
-                                                fullPremisesName,
-                                                radiusMeters
+                                                premisesName.trim(),
+                                                radiusMeters,
+                                                streetAddr,
+                                                capturedLat,
+                                                capturedLng
                                             )
                                         } else {
                                             googleIdentity?.let {
@@ -337,8 +353,11 @@ fun OwnerRegistrationWizard(
                                                     organizationName.trim(),
                                                     timezone.trim(),
                                                     currency.trim(),
-                                                    fullPremisesName,
-                                                    radiusMeters
+                                                    premisesName.trim(),
+                                                    radiusMeters,
+                                                    streetAddr,
+                                                    capturedLat,
+                                                    capturedLng
                                                 )
                                             }
                                         }
@@ -436,6 +455,36 @@ fun OwnerRegistrationWizard(
                             .padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+                        if (uiState is UiState.Error) {
+                            val errorMsg = uiState.message.ifBlank { "An error occurred" }
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer
+                                ),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = errorMsg,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+
                         when (step) {
                             1 -> {
                                 Text(
@@ -719,230 +768,6 @@ fun OwnerRegistrationWizard(
                                     shape = RoundedCornerShape(16.dp)
                                 )
 
-                                // PINCODE INPUT
-                                OutlinedTextField(
-                                    value = pincodeInput,
-                                    onValueChange = { value ->
-                                        val digits = value.filter(Char::isDigit).take(6)
-                                        pincodeInput = digits
-                                        if (digits.length == 6) {
-                                            onLookupPincode(digits)
-                                        }
-                                    },
-                                    label = { Text("6-Digit Indian Pincode") },
-                                    leadingIcon = { Icon(Icons.Default.PinDrop, null) },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(16.dp)
-                                )
-
-                                if (pincodeState is UiState.Loading) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                        Text("Fetching postal area details...", style = MaterialTheme.typography.bodySmall, color = Color(0xFF74798D))
-                                    }
-                                }
-
-                                // 1. STATE DROPDOWN
-                                ExposedDropdownMenuBox(
-                                    expanded = stateDropdownExpanded,
-                                    onExpandedChange = { stateDropdownExpanded = !stateDropdownExpanded },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    OutlinedTextField(
-                                        value = selectedState,
-                                        onValueChange = {},
-                                        readOnly = true,
-                                        label = { Text("State (Dropdown)") },
-                                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateDropdownExpanded) },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .menuAnchor(),
-                                        shape = RoundedCornerShape(16.dp)
-                                    )
-                                    ExposedDropdownMenu(
-                                        expanded = stateDropdownExpanded,
-                                        onDismissRequest = { stateDropdownExpanded = false }
-                                    ) {
-                                        val statesList = if (pincodeState is UiState.Success) {
-                                            val pincodeStates = pincodeState.data.mapNotNull { it.state }.filter { it.isNotBlank() }.distinct()
-                                            pincodeStates.ifEmpty { INDIAN_STATES }
-                                        } else {
-                                            INDIAN_STATES
-                                        }
-                                        statesList.forEach { stateName ->
-                                            DropdownMenuItem(
-                                                text = { Text(stateName, fontWeight = FontWeight.SemiBold) },
-                                                onClick = {
-                                                    selectedState = stateName
-                                                    stateDropdownExpanded = false
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // 2. DISTRICT DROPDOWN
-                                ExposedDropdownMenuBox(
-                                    expanded = districtDropdownExpanded,
-                                    onExpandedChange = { districtDropdownExpanded = !districtDropdownExpanded },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    OutlinedTextField(
-                                        value = selectedDistrict,
-                                        onValueChange = {},
-                                        readOnly = true,
-                                        label = { Text("District (Dropdown)") },
-                                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = districtDropdownExpanded) },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .menuAnchor(),
-                                        shape = RoundedCornerShape(16.dp)
-                                    )
-                                    ExposedDropdownMenu(
-                                        expanded = districtDropdownExpanded,
-                                        onDismissRequest = { districtDropdownExpanded = false }
-                                    ) {
-                                        val districtsList = if (pincodeState is UiState.Success) {
-                                            pincodeState.data.mapNotNull { it.district }.distinct()
-                                        } else emptyList()
-
-                                        if (districtsList.isEmpty()) {
-                                            DropdownMenuItem(
-                                                text = { Text(if (selectedDistrict.isNotBlank()) selectedDistrict else "Enter 6-Digit Pincode to populate Districts", color = Color(0xFF74798D)) },
-                                                onClick = { districtDropdownExpanded = false }
-                                            )
-                                        } else {
-                                            districtsList.forEach { distName ->
-                                                DropdownMenuItem(
-                                                    text = { Text(distName, fontWeight = FontWeight.SemiBold) },
-                                                    onClick = {
-                                                        selectedDistrict = distName
-                                                        districtDropdownExpanded = false
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // 3. BLOCK / TEHSIL DROPDOWN
-                                ExposedDropdownMenuBox(
-                                    expanded = blockDropdownExpanded,
-                                    onExpandedChange = { blockDropdownExpanded = !blockDropdownExpanded },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    OutlinedTextField(
-                                        value = selectedBlock,
-                                        onValueChange = {},
-                                        readOnly = true,
-                                        label = { Text("Block / Tehsil / Division (Dropdown)") },
-                                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = blockDropdownExpanded) },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .menuAnchor(),
-                                        shape = RoundedCornerShape(16.dp)
-                                    )
-                                    ExposedDropdownMenu(
-                                        expanded = blockDropdownExpanded,
-                                        onDismissRequest = { blockDropdownExpanded = false }
-                                    ) {
-                                        val blocksList = if (pincodeState is UiState.Success) {
-                                            pincodeState.data.mapNotNull { it.division ?: it.region }.distinct()
-                                        } else emptyList()
-
-                                        if (blocksList.isEmpty()) {
-                                            DropdownMenuItem(
-                                                text = { Text(if (selectedBlock.isNotBlank()) selectedBlock else "Enter 6-Digit Pincode to populate Blocks", color = Color(0xFF74798D)) },
-                                                onClick = { blockDropdownExpanded = false }
-                                            )
-                                        } else {
-                                            blocksList.forEach { blockName ->
-                                                DropdownMenuItem(
-                                                    text = { Text(blockName, fontWeight = FontWeight.SemiBold) },
-                                                    onClick = {
-                                                        selectedBlock = blockName
-                                                        blockDropdownExpanded = false
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // 4. NEAREST POST OFFICE DROPDOWN
-                                ExposedDropdownMenuBox(
-                                    expanded = poDropdownExpanded,
-                                    onExpandedChange = { poDropdownExpanded = !poDropdownExpanded },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    OutlinedTextField(
-                                        value = selectedNearestPo,
-                                        onValueChange = {},
-                                        readOnly = true,
-                                        label = { Text("Nearest Post Office (Dropdown)") },
-                                        leadingIcon = { Icon(Icons.Default.Place, null) },
-                                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = poDropdownExpanded) },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .menuAnchor(),
-                                        shape = RoundedCornerShape(16.dp)
-                                    )
-                                    ExposedDropdownMenu(
-                                        expanded = poDropdownExpanded,
-                                        onDismissRequest = { poDropdownExpanded = false }
-                                    ) {
-                                        val poList = if (pincodeState is UiState.Success) {
-                                            pincodeState.data.mapNotNull { it.name }.distinct()
-                                        } else emptyList()
-
-                                        if (poList.isEmpty()) {
-                                            DropdownMenuItem(
-                                                text = { Text(if (selectedNearestPo.isNotBlank()) selectedNearestPo else "Enter 6-Digit Pincode to populate Post Offices", color = Color(0xFF74798D)) },
-                                                onClick = { poDropdownExpanded = false }
-                                            )
-                                        } else {
-                                            poList.forEach { poName ->
-                                                DropdownMenuItem(
-                                                    text = { Text(poName, fontWeight = FontWeight.SemiBold) },
-                                                    onClick = {
-                                                        selectedNearestPo = poName
-                                                        poDropdownExpanded = false
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // MANUAL ENTRY STREET ADDRESS & LANDMARK
-                                OutlinedTextField(
-                                    value = streetAddressInput,
-                                    onValueChange = { streetAddressInput = it },
-                                    label = { Text("Building / Street / Door No (Manual Entry)") },
-                                    leadingIcon = { Icon(Icons.Default.Home, null) },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(16.dp)
-                                )
-
-                                OutlinedTextField(
-                                    value = landmarkInput,
-                                    onValueChange = { landmarkInput = it },
-                                    label = { Text("Landmark (Optional Manual Entry)") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(16.dp)
-                                )
-
-                                HorizontalDivider(color = Color(0xFFEAECF2))
-
-                                // DETECT ACTUAL GPS COORDINATES SECTION
                                 OutlinedButton(
                                     onClick = onFetchGpsLocation,
                                     modifier = Modifier.fillMaxWidth(),
@@ -950,7 +775,7 @@ fun OwnerRegistrationWizard(
                                 ) {
                                     Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Detect Actual GPS Coordinates", fontWeight = FontWeight.SemiBold)
+                                    Text("Detect Location & Address via GPS", fontWeight = FontWeight.SemiBold)
                                 }
 
                                 when (gpsLocationState) {
@@ -961,7 +786,7 @@ fun OwnerRegistrationWizard(
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                            Text("Acquiring high-accuracy GPS coordinates...", style = MaterialTheme.typography.bodySmall, color = Color(0xFF74798D))
+                                            Text("Acquiring GPS coordinates & address...", style = MaterialTheme.typography.bodySmall, color = Color(0xFF74798D))
                                         }
                                     }
                                     is UiState.Success -> {
@@ -973,15 +798,10 @@ fun OwnerRegistrationWizard(
                                         ) {
                                             Column(modifier = Modifier.padding(12.dp)) {
                                                 Text(
-                                                    "🎯 GPS Captured: ${String.format("%.6f", gps.latitude)}, ${String.format("%.6f", gps.longitude)}",
+                                                    "🎯 Location Fix: ${String.format("%.6f", gps.latitude)}, ${String.format("%.6f", gps.longitude)} (±${gps.accuracyMeters.toInt()}m)",
                                                     fontWeight = FontWeight.Bold,
                                                     color = Color(0xFF2E7D32),
                                                     style = MaterialTheme.typography.labelMedium
-                                                )
-                                                Text(
-                                                    "Accuracy: ±${gps.accuracyMeters.toInt()}m",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = Color(0xFF388E3C)
                                                 )
                                             }
                                         }
@@ -993,6 +813,16 @@ fun OwnerRegistrationWizard(
                                 }
 
                                 OutlinedTextField(
+                                    value = streetAddressInput,
+                                    onValueChange = { streetAddressInput = it },
+                                    label = { Text("Premises Address (Auto-filled by GPS or manual)") },
+                                    leadingIcon = { Icon(Icons.Default.Home, null) },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+
+                                OutlinedTextField(
                                     value = radius,
                                     onValueChange = { radius = it.filter(Char::isDigit).take(5) },
                                     label = { Text("Geofence radius (metres)") },
@@ -1002,7 +832,7 @@ fun OwnerRegistrationWizard(
                                     shape = RoundedCornerShape(16.dp)
                                 )
                                 Text(
-                                    "You can update the geofence later in premises settings.",
+                                    "You can update the geofence radius later in premises settings.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color(0xFF74798D)
                                 )
@@ -1025,8 +855,8 @@ fun OwnerRegistrationWizard(
                                     ReviewRow("Email", googleIdentity?.email ?: email)
                                     ReviewRow("Organization", organizationName.ifBlank { "Not set" })
                                     ReviewRow("Premises", "${premisesName.ifBlank { "Not set" }} · $radius m radius")
-                                    if (selectedNearestPo.isNotBlank() || selectedDistrict.isNotBlank()) {
-                                        ReviewRow("Location", "$selectedNearestPo, $selectedBlock, $selectedDistrict $selectedState")
+                                    if (streetAddressInput.isNotBlank()) {
+                                        ReviewRow("Address", streetAddressInput)
                                     }
                                 }
                                 Text(
@@ -1039,6 +869,236 @@ fun OwnerRegistrationWizard(
                     }
                 }
             }
+        }
+    }
+}
+}
+
+@Composable
+private fun RegistrationSuccessGreetScreen(
+    user: com.als.presence.domain.model.User?,
+    organizationName: String,
+    ownerName: String,
+    email: String,
+    premisesName: String,
+    onOkClick: () -> Unit
+) {
+    val displayOrg = user?.organizationName?.ifBlank { null } ?: organizationName.ifBlank { "My Organization" }
+    val displayOwner = user?.fullName?.ifBlank { null } ?: ownerName.ifBlank { "Organization Owner" }
+    val displayEmail = user?.email?.ifBlank { null } ?: email
+    val displayPremises = user?.premisesName?.ifBlank { null } ?: premisesName.ifBlank { "Main Premises" }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF5F6FB))
+            .navigationBarsPadding()
+            .statusBarsPadding()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .clip(CircleShape)
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFF10B981),
+                            Color(0xFF5265D8),
+                            Color(0xFF10B981).copy(alpha = 0.2f)
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(76.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF0F172A)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Success",
+                    tint = Color(0xFF10B981),
+                    modifier = Modifier.size(44.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "Welcome to Presence!",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Black,
+            color = Color(0xFF1E293B),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Your organization setup is complete.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xFF64748B),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Surface(
+                        color = Color(0xFFEEF2FF),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Business,
+                                contentDescription = null,
+                                tint = Color(0xFF5265D8),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Organization",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF64748B)
+                        )
+                        Text(
+                            text = displayOrg,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1E293B)
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = Color(0xFFF1F5F9))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Surface(
+                        color = Color(0xFFECFDF5),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = Color(0xFF059669),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Owner Account",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF64748B)
+                        )
+                        Text(
+                            text = displayOwner,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1E293B)
+                        )
+                        Text(
+                            text = displayEmail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+                }
+
+                if (displayPremises.isNotBlank()) {
+                    HorizontalDivider(color = Color(0xFFF1F5F9))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            color = Color(0xFFFFF7ED),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.LocationOn,
+                                    contentDescription = null,
+                                    tint = Color(0xFFEA580C),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Initial Premises",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF64748B)
+                            )
+                            Text(
+                                text = displayPremises,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1E293B)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        Button(
+            onClick = onOkClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF5265D8)
+            ),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+        ) {
+            Text(
+                text = "OK • Get Started",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

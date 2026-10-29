@@ -56,12 +56,12 @@ import com.als.presence.ui.dashboard.common.StatusPill
 import com.als.presence.ui.dashboard.staff.viewmodels.StaffClockInViewModel
 
 /**
- * Staff "Clock-In" tab. Every action posts to the server — nothing is simulated
+ * employee "Clock-In" tab. Every action posts to the server — nothing is simulated
  * locally. GPS comes from the fused location provider, the face step is the
  * on-device capture pipeline and the server re-validates the geofence.
  */
 @Composable
-fun StaffClockInTab(
+fun employeeClockInTab(
     user: User,
     state: StaffClockInViewModel.ClockInUiState,
     onRefresh: () -> Unit,
@@ -116,7 +116,7 @@ fun StaffClockInTab(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = user.organizationName,
+                        text = user.organizationName.orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -383,7 +383,7 @@ private fun OvertimeCheckInCard(
                 label = "Window",
                 value = Dates.formatWindow(entry.startTime, entry.endTime)
             )
-            KeyValueRow(label = "Agreed payment", value = Money.format(entry.paymentCents))
+            KeyValueRow(label = "Agreed payment", value = Money.format(entry.paymentInr))
             entry.reason?.let { reason ->
                 Text(
                     text = reason,

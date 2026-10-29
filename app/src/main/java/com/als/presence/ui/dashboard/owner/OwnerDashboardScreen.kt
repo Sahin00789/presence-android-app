@@ -71,7 +71,6 @@ fun OwnerDashboardScreen(
                 payrollItemsMap = payrollItemsMap,
                 isRecordingPayment = workforceViewModel.isSubmitting.collectAsStateWithLifecycle().value,
                 onRetry = workforceViewModel::refresh,
-                onSetSalary = workforceViewModel::setSalary,
                 onRecordPayment = workforceViewModel::recordPayment,
                 onEditOrgClick = onEditOrgClick
             )
@@ -87,21 +86,16 @@ fun OwnerDashboardScreen(
                     locationsViewModel.refresh()
                     workforceViewModel.refresh()
                 },
-                onResolveGpsException = locationsViewModel::resolveGpsException
+                onResolveGpsException = locationsViewModel::resolveGpsException,
+                onCancelOvertime = locationsViewModel::cancelOvertime
             )
-            2 -> OwnerReportsTab(
+            else -> OwnerReportsTab(
                 recordsState = recordsState,
                 premisesState = premisesState,
                 onRefresh = {
                     attendanceViewModel.refresh()
                     workforceViewModel.refresh()
                 }
-            )
-            else -> OwnerApprovalsTab(
-                exceptionsState = exceptionsState,
-                isSubmitting = attendanceSubmitting,
-                onRefresh = attendanceViewModel::refresh,
-                onResolve = attendanceViewModel::resolve
             )
         }
 

@@ -9,12 +9,13 @@ class GetGpsLocationUseCase @Inject constructor(
     private val locationManager: LocationManager
 ) {
     suspend operator fun invoke(): Resource<GpsLocation> {
-        val location = locationManager.getCurrentLocation()
-        return if (location != null) {
-            Resource.Success(location)
-        } else {
-            val msg = "Unable to fetch GPS location. Ensure location permission and GPS are enabled."
-            Resource.Error(IllegalStateException(msg), msg)
+        return when (val result = locationManager.getCurrentLocationResult()) {
+            is LocationManager.LocationResult.Success -> Resource.Success(result.location)
+            is LocationManager.LocationResult.Error -> Resource.Error(
+                Exception(result.message),
+                result.message
+            )
         }
     }
 }
+

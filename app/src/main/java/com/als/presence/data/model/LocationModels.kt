@@ -4,12 +4,17 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class GpsPingSummaryDto(
-    val id: String,
-    val checkTime: String,
-    val distanceMeters: Double? = null,
-    val accuracyMeters: Double? = null,
-    val status: String
-)
+    val id: String = "",
+    val employeeId: String = "",
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val distanceMeters: Double = 0.0,
+    val isOutside: Boolean = false,
+    val pingTime: String = ""
+) {
+    val status: String get() = if (isOutside) "Outside" else "Inside"
+    val checkTime: String get() = pingTime
+}
 
 @Serializable
 data class GpsCountsDto(
@@ -20,47 +25,60 @@ data class GpsCountsDto(
 
 @Serializable
 data class LocationStaffCardDto(
-    val staffProfileId: String,
-    val userId: String,
-    val fullName: String,
+    val employeeId: String = "",
+    val employeeName: String = "",
+    val employeeCode: String = "",
     val role: String = "STAFF",
-    val staffCode: String,
-    val avatarUrl: String? = null,
-    val premisesId: String? = null,
-    val premisesName: String,
-    val attendanceStatus: String,
-    val locationStatus: String,
-    val dayOfWeek: String = "Today",
-    val shiftName: String = "Regular Shift",
-    val overtimeName: String? = null,
-    val regularShiftStartTime: String? = null,
-    val regularShiftEndTime: String? = null,
-    val overtimeStartTime: String? = null,
-    val overtimeEndTime: String? = null,
+    val premisesName: String = "",
+    val attendanceStatus: String = "PRESENT",
     val clockInTime: String? = null,
     val clockOutTime: String? = null,
+    val outsidePingCount: Int = 0,
+    val locationStatus: String = if (outsidePingCount > 0) "Outside" else "Inside",
+    val exceptionId: String? = null,
+    val dayOfWeek: String = "",
+    val shiftName: String = "",
+    val regularShiftStartTime: String = "",
+    val regularShiftEndTime: String = "",
+    val hasOvertimeToday: Boolean = false,
+    val overtimeId: String? = null,
+    val overtimeName: String? = null,
+    val overtimeStartTime: String? = null,
+    val overtimeEndTime: String? = null,
     val overtimeClockInTime: String? = null,
     val overtimeClockOutTime: String? = null,
-    val shiftStatus: String,
-    val hasOvertimeToday: Boolean = false,
-    val consecutiveFailures: Int = 0,
-    val exceptionId: String? = null,
-    val counts: GpsCountsDto = GpsCountsDto(),
-    val latestPings: List<GpsPingSummaryDto> = emptyList()
-)
+    val latestPings: List<GpsPingSummaryDto> = emptyList(),
+    val counts: GpsCountsDto = GpsCountsDto(outside = outsidePingCount)
+) {
+    val fullName: String get() = employeeName
+    val staffCode: String get() = employeeCode
+}
 
 @Serializable
 data class LocationTodayPresenceResponseDto(
     val premisesId: String? = null,
     val premisesName: String? = null,
-    val latitude: String? = null,
-    val longitude: String? = null,
-    val radiusMeters: Int? = null,
-    val date: String,
-    val staff: List<LocationStaffCardDto> = emptyList()
+    val address: String? = null,
+    val radiusMeters: Int? = 50,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val summaryDate: String = "",
+    val totalActiveStaff: Int = 0,
+    val totalClockedIn: Int = 0,
+    val outsideGeofenceCount: Int = 0,
+    val staffCards: List<LocationStaffCardDto> = emptyList()
+) {
+    val staff: List<LocationStaffCardDto> get() = staffCards
+}
+
+@Serializable
+data class LocationSessionDto(
+    val isActive: Boolean = false,
+    val attendanceEventId: String? = null
 )
 
 @Serializable
-data class AssignStaffPremisesRequest(
-    val premisesId: String? = null
+data class LocationCheckResultDto(
+    val result: String = "OK",
+    val exceptionCreated: Boolean = false
 )

@@ -562,6 +562,56 @@ fun PresenceIconButton(
     }
 }
 
+/** Filter/Selection Chip for premises, tabs, and status toggles. */
+@Composable
+fun PresenceFilterChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+    enabled: Boolean = true
+) {
+    androidx.compose.material3.FilterChip(
+        selected = selected,
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+        label = {
+            Text(
+                text = label,
+                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+            )
+        },
+        leadingIcon = leadingIcon?.let { icon ->
+            {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = if (selected) PresenceDesign.Brand else PresenceDesign.Muted
+                )
+            }
+        },
+        shape = RoundedCornerShape(20.dp),
+        border = androidx.compose.material3.FilterChipDefaults.filterChipBorder(
+            enabled = enabled,
+            selected = selected,
+            borderColor = PresenceDesign.Line,
+            selectedBorderColor = PresenceDesign.Brand,
+            borderWidth = 1.dp,
+            selectedBorderWidth = 1.5.dp
+        ),
+        colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+            containerColor = PresenceDesign.Surface,
+            labelColor = PresenceDesign.Ink,
+            selectedContainerColor = PresenceDesign.BrandSoft,
+            selectedLabelColor = PresenceDesign.BrandDark
+        )
+    )
+}
+
 /** The dashed empty state. */
 @Composable
 fun PresenceEmptyState(
