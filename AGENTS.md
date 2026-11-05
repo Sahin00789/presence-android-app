@@ -1,7 +1,7 @@
-# AGENTS.md - Staff Attendance, Shift Management & Salary Ledger System (`presence`)
+# AGENTS.md - Employee Attendance, Shift Management & Salary Ledger System (`presence`)
 
 ## 1. Project Purpose & Scope
-The **Staff Attendance, Shift Management & Salary Ledger System** (`presence`) is a production-ready, multi-tenant mobile and backend platform designed for business staff management, automated GPS and facial verification attendance tracking, flexible shift scheduling, append-only staff earning ledger accounting, and monthly payroll processing.
+The **Employee Attendance, Shift Management & Salary Ledger System** (`presence`) is a production-ready, multi-tenant mobile and backend platform designed for business workforce management, automated GPS and facial verification attendance tracking, flexible shift scheduling, append-only employee earning ledger accounting, and monthly payroll processing.
 
 ### Key Roles & Data Representation
 1. **Owner**: Independent self-registration, organization creation, premises configuration, direct addition of Employees across all premises, high-level organization oversight, payroll locking (`monthly_payrolls`), and approval of sensitive operational/financial adjustments.
