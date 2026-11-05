@@ -95,7 +95,7 @@ fun AddPremisesModal(
             )
 
             Text(
-                text = "Staff clock-ins and active shift periodic GPS checks are verified against this geofence boundary.",
+                text = "Employee clock-ins and active shift periodic GPS checks are verified against this geofence boundary.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

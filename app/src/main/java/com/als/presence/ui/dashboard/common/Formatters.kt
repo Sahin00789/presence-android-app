@@ -13,40 +13,35 @@ import java.time.format.DateTimeParseException
 
 /**
  * Formatting helpers shared by every dashboard. Money is always handled in Indian Rupees (INR / ₹)
- * using integer minor units (paise: 1 Rupee = 100 Paise).
+ * as exact whole integer units (no decimal fraction, no paise, no cents: e.g. ₹12,500).
  */
 object Money {
-    fun format(paise: Long?, withDecimals: Boolean = true): String {
-        val value = paise ?: return "—"
+    fun format(amount: Long?, withDecimals: Boolean = false): String {
+        val value = amount ?: return "—"
         val negative = value < 0
         val absolute = if (negative) -value else value
-        val whole = absolute / 100
-        val fraction = absolute % 100
-        val grouped = whole.toString()
+        val grouped = absolute.toString()
             .reversed()
             .chunked(3)
             .joinToString(",")
             .reversed()
-        val body = if (withDecimals) {
-            "$grouped.${fraction.toString().padStart(2, '0')}"
-        } else {
-            grouped
-        }
-        return if (negative) "-₹$body" else "₹$body"
+        return if (negative) "-₹$grouped" else "₹$grouped"
     }
 
-    /** Parses a human currency string ("12,500.50") into paise (minor currency units). */
-    fun parseToPaise(raw: String): Long? {
+    /** Parses a human currency string ("12,500") directly into integer INR rupees. */
+    fun parseToInr(raw: String): Long? {
         val cleaned = raw.replace("₹", "").replace(",", "").trim()
         if (cleaned.isEmpty()) return null
         return cleaned.toBigDecimalOrNull()
-            ?.multiply(java.math.BigDecimal(100))
             ?.setScale(0, java.math.RoundingMode.HALF_UP)
             ?.toLong()
     }
 
-    @Deprecated("Use parseToPaise", ReplaceWith("parseToPaise(raw)"))
-    fun parseToCents(raw: String): Long? = parseToPaise(raw)
+    @Deprecated("Use parseToInr", ReplaceWith("parseToInr(raw)"))
+    fun parseToPaise(raw: String): Long? = parseToInr(raw)
+
+    @Deprecated("Use parseToInr", ReplaceWith("parseToInr(raw)"))
+    fun parseToCents(raw: String): Long? = parseToInr(raw)
 }
 
 object Dates {
@@ -124,6 +119,76 @@ object Dates {
         }
     }
 
+    /**
+     * Fetches full English day name (e.g. "Monday", "Tuesday") by date.
+     * If [dateIso] is null or blank, defaults to the current day.
+     */
+    fun getDayNameByDate(dateIso: String? = null): String {
+        val targetDate = if (dateIso.isNullOrBlank()) {
+            LocalDate.now()
+        } else {
+            try {
+                LocalDate.parse(dateIso.take(10))
+            } catch (_: Exception) {
+                LocalDate.now()
+            }
+        }
+        return targetDate.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }
+    }
+
+    /**
+     * Checks if a shift's assigned [shiftDayName] or [daysOfWeek] list matches the target date.
+     * Returns `true` if the shift applies to [targetDateIso]'s day of week.
+     */
+    fun isShiftMatchingDay(
+        shiftDayName: String?,
+        targetDateIso: String? = null,
+        daysOfWeek: List<Int>? = null
+    ): Boolean {
+        val dayName = getDayNameByDate(targetDateIso)
+        val dn = shiftDayName?.trim() ?: ""
+
+        if (dn.isEmpty() || dn.equals("ALL", ignoreCase = true) ||
+            dn.equals("Everyday", ignoreCase = true) || dn.equals("Every Day", ignoreCase = true)
+        ) {
+            return true
+        }
+
+        if (!daysOfWeek.isNullOrEmpty()) {
+            val targetLocalDate = if (targetDateIso.isNullOrBlank()) LocalDate.now() else runCatching { LocalDate.parse(targetDateIso.take(10)) }.getOrDefault(LocalDate.now())
+            val javaDow = targetLocalDate.dayOfWeek.value // 1 (Mon) .. 7 (Sun)
+            val dow0Based = if (javaDow == 7) 0 else javaDow // 0 (Sun) .. 6 (Sat)
+            if (daysOfWeek.contains(javaDow) || daysOfWeek.contains(dow0Based)) {
+                return true
+            }
+        }
+
+        val shortDayName = dayName.take(3)
+        return dn.contains(dayName, ignoreCase = true) || dn.contains(shortDayName, ignoreCase = true)
+    }
+
+    /**
+     * Checks if a shift matches the specified day and its time window is currently running or upcoming.
+     */
+    fun isShiftMatchingRunningOrUpcoming(
+        shiftDayName: String?,
+        startTime: String?,
+        endTime: String?,
+        targetDateIso: String? = null,
+        daysOfWeek: List<Int>? = null,
+        bufferMinutesBeforeStart: Long = 120L,
+        bufferMinutesAfterEnd: Long = 120L
+    ): Boolean {
+        val matchesDay = isShiftMatchingDay(shiftDayName, targetDateIso, daysOfWeek)
+        if (!matchesDay) return false
+        return isWithinTimeWindow(
+            startTimeRaw = startTime,
+            endTimeRaw = endTime,
+            bufferMinutesBeforeStart = bufferMinutesBeforeStart,
+            bufferMinutesAfterEnd = bufferMinutesAfterEnd
+        )
+    }
+
     fun isToday(iso: String?): Boolean {
         if (iso.isNullOrBlank()) return false
         return iso.take(10) == todayIso()
@@ -144,6 +209,83 @@ object Dates {
         return sorted.mapNotNull { dayLabels.getOrNull(it) }.joinToString(", ")
     }
 
+    /**
+     * Checks if current time is within specified shift/overtime window
+     * with an optional buffer before start time and after end time (in minutes).
+     */
+    fun isWithinTimeWindow(
+        startTimeRaw: String?,
+        endTimeRaw: String?,
+        bufferMinutesBeforeStart: Long = 120L,
+        bufferMinutesAfterEnd: Long = 120L
+    ): Boolean {
+        if (startTimeRaw.isNullOrBlank() || endTimeRaw.isNullOrBlank()) {
+            return true
+        }
+        return try {
+            val now = LocalTime.now()
+
+            val parseTime = { raw: String ->
+                if (raw.contains('T')) {
+                    OffsetDateTime.parse(raw).toLocalTime()
+                } else {
+                    LocalTime.parse(raw.take(8))
+                }
+            }
+
+            val start = parseTime(startTimeRaw)
+            val end = parseTime(endTimeRaw)
+
+            val windowStart = start.minusMinutes(bufferMinutesBeforeStart)
+            val windowEnd = end.plusMinutes(bufferMinutesAfterEnd)
+
+            if (windowStart.isAfter(windowEnd)) {
+                now.isAfter(windowStart) || now.isBefore(windowEnd)
+            } else {
+                !now.isBefore(windowStart) && !now.isAfter(windowEnd)
+            }
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    /** Calculates late minutes given a clock-in time and assigned shift start time. */
+    fun calculateLateMinutes(clockIn: String?, assignedStartTime: String?): Int {
+        if (clockIn.isNullOrBlank() || assignedStartTime.isNullOrBlank()) return 0
+        return try {
+            val clockInTime = if (clockIn.contains('T')) {
+                val parsed = parseInstant(clockIn) ?: return 0
+                parsed.atZone(ZoneId.systemDefault()).toLocalTime()
+            } else {
+                LocalTime.parse(clockIn.take(8))
+            }
+            val startTime = LocalTime.parse(assignedStartTime.take(8))
+            val diffSeconds = clockInTime.toSecondOfDay() - startTime.toSecondOfDay()
+            if (diffSeconds > 0) diffSeconds / 60 else 0
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    /** Formats late minutes into human-readable duration text (e.g. "Late: 15 mins", "Late: 1 hr 10 mins"). */
+    fun formatLateMinutes(minutes: Int): String {
+        if (minutes <= 0) return ""
+        val hrs = minutes / 60
+        val mins = minutes % 60
+        return when {
+            hrs == 0 -> "Late: $mins mins"
+            mins == 0 -> "Late: $hrs hr"
+            else -> "Late: $hrs hr $mins mins"
+        }
+    }
+
+    /** Helper to format late duration directly from clock-in and assigned start time. */
+    fun formatLateText(clockIn: String?, assignedStartTime: String?, lateMinutes: Int = 0): String {
+        if (lateMinutes > 0) return formatLateMinutes(lateMinutes)
+        val mins = calculateLateMinutes(clockIn, assignedStartTime)
+        return formatLateMinutes(mins)
+    }
+
     private fun parseInstant(raw: String): Instant? = try {
         OffsetDateTime.parse(raw).toInstant()
     } catch (_: DateTimeParseException) {
@@ -158,7 +300,8 @@ object Dates {
 object StatusStyle {
     fun color(status: String?): Color = when (status?.uppercase()) {
         "PRESENT", "APPROVED", "COMPLETED", "PAID", "ACTIVE", "IN_PROGRESS" -> SecondaryEmerald
-        "LATE", "HALF_DAY", "PENDING", "REQUESTED", "OPEN", "CALCULATED" -> TertiaryAmber
+        "HALF_DAY", "PENDING", "REQUESTED", "OPEN", "CALCULATED" -> TertiaryAmber
+        "LEAVE", "LEAVE_REQUESTED" -> Color(0xFF0284C7)
         "ABSENT", "REJECTED", "CANCELLED", "FAILED" -> Color(0xFFDC2626)
         else -> Color(0xFF64748B)
     }

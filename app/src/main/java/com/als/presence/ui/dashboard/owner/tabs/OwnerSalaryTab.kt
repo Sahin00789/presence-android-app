@@ -22,7 +22,7 @@ fun OwnerSalaryTab(
     onRefresh: () -> Unit,
     onSelectPeriod: (String) -> Unit,
     onCalculate: (String) -> Unit,
-    onRecordPayment: (itemId: String, amountCents: Long, paymentMethod: String, reference: String) -> Unit,
+    onRecordPayment: (itemId: String, amountPaise: Long, paymentMethod: String, reference: String) -> Unit,
     onCreatePeriod: (startDate: String, endDate: String) -> Unit,
     onApprove: (String) -> Unit,
     modifier: Modifier = Modifier

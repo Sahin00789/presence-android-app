@@ -2,9 +2,9 @@
 
 ## 1. Append-Only Earning Ledger Principle
 > [!NOTE]
-> The earning ledger applies exclusively to employees (**Staff** and **Managers** residing in the `employees` table). The **Owner** is the head of the organization, is NOT an employee, has NO attendance tracking, and does NOT have an earning ledger or salary.
+> The earning ledger applies exclusively to **Employees** residing in the `employees` table. The **Owner** is the head of the organization, is NOT an employee, has NO attendance tracking, and does NOT have an earning ledger or salary.
 
-Employee earnings (covering both staff and managers via the `employees` table) are recorded in an append-only ledger table `staff_earning_ledger`. Direct mutable balance updates and legacy transaction tables are not used. Every earning record is tied to specific work events (shift attendance, holidays, off-days, overtime).
+Employee earnings (via the `employees` table) are recorded in an append-only ledger table `staff_earning_ledger`. Direct mutable balance updates and legacy transaction tables are not used. Every earning record is tied to specific work events (shift attendance, holidays, off-days, overtime).
 
 ---
 

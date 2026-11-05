@@ -15,6 +15,9 @@ data class StaffDto(
     val staffCode: String = "",
     val department: String? = null,
     val designation: String? = null,
+    val phone: String? = null,
+    val address: String? = null,
+    val avatarUrl: String? = null,
     val role: String = "STAFF",
     val token: String? = null,
     val addedBy: String? = null,
@@ -24,13 +27,19 @@ data class StaffDto(
     val joinedAt: String? = null,
     val createdAt: String? = null,
     val isActive: Boolean = true,
-    val earnedBalanceCents: Long = 0L,
-    val approvedUnpaidBalanceCents: Long = 0L,
-    val paidBalanceCents: Long = 0L
+    val earnedBalancePaise: Long = 0L,
+    val approvedUnpaidBalancePaise: Long = 0L,
+    val paidBalancePaise: Long = 0L
 ) {
     val name: String get() = fullName
     val employeeId: String get() = id
     val startDate: String get() = joinedAt ?: hireDate ?: createdAt ?: ""
+    val earnedBalanceInr: Long get() = earnedBalancePaise
+    val approvedUnpaidBalanceInr: Long get() = approvedUnpaidBalancePaise
+    val paidBalanceInr: Long get() = paidBalancePaise
+    val earnedBalanceCents: Long get() = earnedBalanceInr
+    val approvedUnpaidBalanceCents: Long get() = approvedUnpaidBalanceInr
+    val paidBalanceCents: Long get() = paidBalanceInr
 }
 
 typealias CreateEmployee = CreateEmployeeRequest
@@ -43,5 +52,9 @@ data class CreateEmployeeRequest(
     val staffCode: String? = null,
     val department: String? = null,
     val designation: String? = null,
+    val phone: String? = null,
+    val address: String? = null,
+    val avatarBase64: String? = null,
+    val avatarUrl: String? = null,
     val premisesId: String? = null
 )

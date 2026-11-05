@@ -17,12 +17,15 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 import com.als.presence.data.model.DomainWebSocketEvent
+import com.als.presence.core.network.NetworkMonitor
 import com.als.presence.data.remote.EventsWebSocketService
 
 @HiltViewModel
 class LocationsViewModel @Inject constructor(
     private val repository: OperationsRepository,
-    private val webSocketService: EventsWebSocketService
+    private val webSocketService: EventsWebSocketService,
+    private val networkMonitor: NetworkMonitor,
+    private val syncCoordinator: com.als.presence.data.sync.SyncCoordinator
 ) : ViewModel() {
 
     private val _premises = MutableStateFlow<UiState<List<PremisesDto>>>(UiState.Loading)
@@ -46,6 +49,17 @@ class LocationsViewModel @Inject constructor(
     init {
         refresh()
         observeWebSocketEvents()
+        observeConnectivity()
+    }
+
+    private fun observeConnectivity() {
+        viewModelScope.launch {
+            networkMonitor.isOnline.collect { online ->
+                if (online) {
+                    refresh()
+                }
+            }
+        }
     }
 
     private fun observeWebSocketEvents() {
@@ -64,6 +78,7 @@ class LocationsViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
+            syncCoordinator.performSelectiveSync(com.als.presence.data.sync.SyncCoordinator.SyncDomain.LOCATIONS)
             _premises.value = UiState.Loading
             when (val res = repository.getPremises()) {
                 is Resource.Success -> {

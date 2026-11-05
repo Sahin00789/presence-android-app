@@ -26,6 +26,14 @@ object DatabaseModule {
 
     @Provides
     @Singleton
+    fun provideUserDao(db: PresenceDatabase): UserDao = db.userDao()
+
+    @Provides
+    @Singleton
+    fun provideOrganizationDao(db: PresenceDatabase): OrganizationDao = db.organizationDao()
+
+    @Provides
+    @Singleton
     fun provideNotificationDao(db: PresenceDatabase): NotificationDao = db.notificationDao()
 
     @Provides
@@ -42,9 +50,81 @@ object DatabaseModule {
 
     @Provides
     @Singleton
+    fun provideOvertimeDao(db: PresenceDatabase): OvertimeDao = db.overtimeDao()
+
+    @Provides
+    @Singleton
     fun providePremisesDao(db: PresenceDatabase): PremisesDao = db.premisesDao()
 
     @Provides
     @Singleton
     fun provideEmployeeDao(db: PresenceDatabase): EmployeeDao = db.employeeDao()
+
+    @Provides
+    @Singleton
+    fun provideLocationPingDao(db: PresenceDatabase): LocationPingDao = db.locationPingDao()
+
+    @Provides
+    @Singleton
+    fun providePingSummaryDao(db: PresenceDatabase): PingSummaryDao = db.pingSummaryDao()
+
+    @Provides
+    @Singleton
+    fun providePaymentRuleDao(db: PresenceDatabase): PaymentRuleDao = db.paymentRuleDao()
+
+    @Provides
+    @Singleton
+    fun provideSalaryRecordDao(db: PresenceDatabase): SalaryRecordDao = db.salaryRecordDao()
+
+    @Provides
+    @Singleton
+    fun provideSalaryTransactionDao(db: PresenceDatabase): SalaryTransactionDao = db.salaryTransactionDao()
+
+    @Provides
+    @Singleton
+    fun provideHolidayDao(db: PresenceDatabase): HolidayDao = db.holidayDao()
+
+    @Provides
+    @Singleton
+    fun provideLeaveRequestDao(db: PresenceDatabase): LeaveRequestDao = db.leaveRequestDao()
+
+    @Provides
+    @Singleton
+    fun providePayrollSnapshotDao(db: PresenceDatabase): PayrollSnapshotDao = db.payrollSnapshotDao()
+
+    @Provides
+    @Singleton
+    fun provideEmployeeHomeSnapshotDao(db: PresenceDatabase): EmployeeHomeSnapshotDao = db.employeeHomeSnapshotDao()
+
+    @Provides
+    @Singleton
+    fun provideEmployeeAttendanceSnapshotDao(db: PresenceDatabase): EmployeeAttendanceSnapshotDao = db.employeeAttendanceSnapshotDao()
+
+    @Provides
+    @Singleton
+    fun provideEmployeeSalarySnapshotDao(db: PresenceDatabase): EmployeeSalarySnapshotDao = db.employeeSalarySnapshotDao()
+
+    @Provides
+    @Singleton
+    fun provideOwnerEmployeesSnapshotDao(db: PresenceDatabase): OwnerEmployeesSnapshotDao = db.ownerEmployeesSnapshotDao()
+
+    @Provides
+    @Singleton
+    fun provideOwnerPingsSnapshotDao(db: PresenceDatabase): OwnerPingsSnapshotDao = db.ownerPingsSnapshotDao()
+
+    @Provides
+    @Singleton
+    fun provideOwnerReportsSnapshotDao(db: PresenceDatabase): OwnerReportsSnapshotDao = db.ownerReportsSnapshotDao()
+
+    @Provides
+    @Singleton
+    fun providePendingActionDao(db: PresenceDatabase): PendingActionDao = db.pendingActionDao()
+
+    @Provides
+    @Singleton
+    fun provideSyncMetadataDao(db: PresenceDatabase): SyncMetadataDao = db.syncMetadataDao()
+
+    @Provides
+    @Singleton
+    fun provideProcessedEventDao(db: PresenceDatabase): ProcessedEventDao = db.processedEventDao()
 }

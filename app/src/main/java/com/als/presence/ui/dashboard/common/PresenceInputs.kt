@@ -82,14 +82,18 @@ fun PresenceTextField(
     keyboardType: KeyboardType = KeyboardType.Text,
     singleLine: Boolean = true,
     supporting: String? = null,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    readOnly: Boolean = false,
+    trailingIcon: @Composable (() -> Unit)? = null
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth(),
         enabled = enabled,
+        readOnly = readOnly,
         singleLine = singleLine,
+        trailingIcon = trailingIcon,
         textStyle = LocalTextStyle.current.copy(
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,

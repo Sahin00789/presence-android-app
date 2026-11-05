@@ -8,6 +8,10 @@ import com.als.presence.core.face.FaceEmbeddingEngine
 
 import com.als.presence.data.model.CreatePremisesRequest
 import com.als.presence.data.model.CreateShiftAssignmentRequest
+import com.als.presence.data.model.CreateShiftRequest
+import com.als.presence.data.model.UpdateShiftRequest
+import com.als.presence.data.model.CreateOvertimeRequest
+import com.als.presence.data.model.OvertimeDto
 
 import com.als.presence.data.model.FaceStatusDto
 import com.als.presence.data.model.CreateEmployee
@@ -21,14 +25,15 @@ import com.als.presence.data.model.ShiftTemplateDto
 import com.als.presence.data.model.StaffDto
 import com.als.presence.data.model.UpdatePremisesRequest
 import com.als.presence.domain.repository.OperationsRepository
-import com.als.presence.ui.dashboard.common.Money
 import com.als.presence.ui.dashboard.common.toUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import com.als.presence.core.location.LocationManager
 import com.als.presence.core.location.ReverseGeocodedAddress
+import com.als.presence.core.network.NetworkMonitor
 import kotlinx.coroutines.launch
 import java.time.Instant
 import javax.inject.Inject
@@ -46,11 +51,14 @@ data class PremisesLocationState(
 class OwnerWorkforceViewModel @Inject constructor(
     private val repository: OperationsRepository,
     private val locationManager: LocationManager,
-    val faceEmbeddingEngine: FaceEmbeddingEngine
+    private val networkMonitor: NetworkMonitor,
+    val faceEmbeddingEngine: FaceEmbeddingEngine,
+    private val syncCoordinator: com.als.presence.data.sync.SyncCoordinator
 ) : ViewModel() {
 
     private val _employee = MutableStateFlow<UiState<List<StaffDto>>>(UiState.Loading)
     val staff: StateFlow<UiState<List<StaffDto>>> = _employee.asStateFlow()
+    val staffState: StateFlow<UiState<List<StaffDto>>> get() = staff
 
     private val _faceStatuses = MutableStateFlow<Map<String, FaceStatusDto>>(emptyMap())
     val faceStatuses: StateFlow<Map<String, FaceStatusDto>> = _faceStatuses.asStateFlow()
@@ -63,6 +71,7 @@ class OwnerWorkforceViewModel @Inject constructor(
 
     private val _premises = MutableStateFlow<UiState<List<PremisesDto>>>(UiState.Loading)
     val premises: StateFlow<UiState<List<PremisesDto>>> = _premises.asStateFlow()
+    val premisesState: StateFlow<UiState<List<PremisesDto>>> get() = premises
 
     private val _locationAddressState = MutableStateFlow<PremisesLocationState?>(null)
     val locationAddressState: StateFlow<PremisesLocationState?> = _locationAddressState.asStateFlow()
@@ -103,31 +112,63 @@ class OwnerWorkforceViewModel @Inject constructor(
 
     private val _shiftAssignments = MutableStateFlow<UiState<List<ShiftAssignmentDto>>>(UiState.Loading)
     val shiftAssignments: StateFlow<UiState<List<ShiftAssignmentDto>>> = _shiftAssignments.asStateFlow()
+    val shiftAssignmentsState: StateFlow<UiState<List<ShiftAssignmentDto>>> get() = shiftAssignments
 
     private val _shiftTemplates = MutableStateFlow<UiState<List<ShiftTemplateDto>>>(UiState.Loading)
     val shiftTemplates: StateFlow<UiState<List<ShiftTemplateDto>>> = _shiftTemplates.asStateFlow()
+    val shiftTemplatesState: StateFlow<UiState<List<ShiftTemplateDto>>> get() = shiftTemplates
+
+    private val _overtime = MutableStateFlow<UiState<List<OvertimeDto>>>(UiState.Loading)
+    val overtime: StateFlow<UiState<List<OvertimeDto>>> = _overtime.asStateFlow()
+    val overtimeState: StateFlow<UiState<List<OvertimeDto>>> get() = overtime
 
     private val _isSubmitting = MutableStateFlow(false)
     val isSubmitting: StateFlow<Boolean> = _isSubmitting.asStateFlow()
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
+    val actionMessage: StateFlow<String?> get() = message
+
+    fun clearActionMessage() {
+        _message.value = null
+    }
+
+    fun consumeMessage() {
+        _message.value = null
+    }
 
     init {
         refresh()
+        observeConnectivity()
+    }
+
+    private fun observeConnectivity() {
+        viewModelScope.launch {
+            networkMonitor.isOnline.drop(1).collect { online ->
+                if (online) {
+                    refresh()
+                }
+            }
+        }
     }
 
     fun refresh() {
-        loadStaff()
-        loadMembers()
-        loadPremises()
-        loadPayrollData()
-        loadShiftsData()
+        viewModelScope.launch {
+            syncCoordinator.performSelectiveSync(com.als.presence.data.sync.SyncCoordinator.SyncDomain.WORKFORCE)
+            loadStaff()
+            loadMembers()
+            loadPremises()
+            loadPayrollData()
+            loadShiftsData()
+            loadOvertime()
+        }
     }
 
     fun loadStaff() {
         viewModelScope.launch {
-            _employee.value = UiState.Loading
+            if (_employee.value !is UiState.Success) {
+                _employee.value = UiState.Loading
+            }
             val result = repository.getEmployees()
             _employee.value = result.toUiState()
             if (result is Resource.Success) {
@@ -164,6 +205,10 @@ class OwnerWorkforceViewModel @Inject constructor(
         }
     }
 
+    fun enrollFaceTemplates(employeeId: String, embeddings: Map<String, FaceEmbeddingEngine.Embedding>) {
+        enrollFace(employeeId, embeddings)
+    }
+
     fun revokeFace(employeeId: String) {
         viewModelScope.launch {
             _faceSubmittingFor.value = employeeId
@@ -190,7 +235,9 @@ class OwnerWorkforceViewModel @Inject constructor(
 
     fun loadMembers() {
         viewModelScope.launch {
-            _members.value = UiState.Loading
+            if (_members.value !is UiState.Success) {
+                _members.value = UiState.Loading
+            }
             val result = repository.getMembers()
             _members.value = result.toUiState()
             if (result is Resource.Success) {
@@ -210,14 +257,18 @@ class OwnerWorkforceViewModel @Inject constructor(
 
     fun loadPremises() {
         viewModelScope.launch {
-            _premises.value = UiState.Loading
+            if (_premises.value !is UiState.Success) {
+                _premises.value = UiState.Loading
+            }
             _premises.value = repository.getPremises().toUiState()
         }
     }
 
     fun loadPayrollData() {
         viewModelScope.launch {
-            _payrollPeriods.value = UiState.Loading
+            if (_payrollPeriods.value !is UiState.Success) {
+                _payrollPeriods.value = UiState.Loading
+            }
             val now = java.time.LocalDate.now()
             val generatedPeriods = (0..5).map { i ->
                 val date = now.minusMonths(i.toLong())
@@ -250,24 +301,52 @@ class OwnerWorkforceViewModel @Inject constructor(
 
     fun loadShiftsData() {
         viewModelScope.launch {
-            _shiftAssignments.value = UiState.Loading
+            if (_shiftAssignments.value !is UiState.Success) {
+                _shiftAssignments.value = UiState.Loading
+            }
+            if (_shiftTemplates.value !is UiState.Success) {
+                _shiftTemplates.value = UiState.Loading
+            }
             _shiftAssignments.value = repository.getShiftAssignments().toUiState()
 
-            _shiftTemplates.value = UiState.Loading
             _shiftTemplates.value = repository.getShifts().toUiState()
         }
     }
 
-    fun recordPayment(itemId: String, amountCents: Long, paymentMethod: String = "BANK_TRANSFER", reference: String = "") {
-        _message.value = "Payment of ${Money.format(amountCents)} recorded."
-        refresh()
+    fun recordPayment(itemId: String, amountPaise: Long, paymentMethod: String = "BANK_TRANSFER", reference: String = "") {
+        viewModelScope.launch {
+            _isSubmitting.value = true
+            val result = repository.recordPayrollTransaction(
+                com.als.presence.data.model.RecordPayrollTransactionRequest(
+                    monthlyPayrollId = itemId,
+                    amount = amountPaise.toDouble(),
+                    paymentDate = java.time.LocalDate.now().toString(),
+                    paymentMethod = paymentMethod,
+                    reference = reference.ifBlank { null }
+                )
+            )
+            _isSubmitting.value = false
+            when (result) {
+                is Resource.Success -> {
+                    _message.value = "Payment recorded successfully!"
+                    refresh()
+                }
+                is Resource.Error -> {
+                    _message.value = result.message ?: "Failed to record payment"
+                }
+                else -> {}
+            }
+        }
     }
 
     fun addStaff(
         fullName: String,
         email: String,
-        department: String,
+        department: String?,
+        designation: String? = null,
         address: String? = null,
+        phone: String? = null,
+        avatarBase64: String? = null,
         premisesId: String? = null
     ) {
         val generatedCode = "EMP-${(1000..9999).random()}"
@@ -279,8 +358,12 @@ class OwnerWorkforceViewModel @Inject constructor(
                         email = email.trim(),
                         fullName = fullName.trim(),
                         staffCode = generatedCode,
-                        department = department.trim().ifBlank { null },
-                        role = "STAFF",
+                        department = department?.trim()?.ifBlank { null },
+                        designation = designation?.trim()?.ifBlank { null },
+                        address = address?.trim()?.ifBlank { null },
+                        phone = phone?.trim()?.ifBlank { null },
+                        avatarBase64 = avatarBase64,
+                        role = "EMPLOYEE",
                         premisesId = premisesId
                     )
                 )
@@ -296,37 +379,8 @@ class OwnerWorkforceViewModel @Inject constructor(
         }
     }
 
-    fun inviteManager(
-        fullName: String,
-        email: String,
-        department: String,
-        address: String? = null,
-        premisesId: String? = null
-    ) {
-        val generatedCode = "MGR-${(1000..9999).random()}"
-        viewModelScope.launch {
-            _isSubmitting.value = true
-            when (
-                val result = repository.createEmployee(
-                    CreateEmployee(
-                        email = email.trim(),
-                        fullName = fullName.trim(),
-                        staffCode = generatedCode,
-                        department = department.trim().ifBlank { null },
-                        role = "MANAGER",
-                        premisesId = premisesId
-                    )
-                )
-            ) {
-                is Resource.Success<*> -> {
-                    _message.value = "Manager added successfully."
-                    refresh()
-                }
-                is Resource.Error -> _message.value = result.message
-                Resource.Loading -> Unit
-            }
-            _isSubmitting.value = false
-        }
+    fun revokeStaff(employeeId: String) {
+        deactivateMember(employeeId, "Employee")
     }
 
     fun deactivateMember(userId: String, name: String) {
@@ -434,42 +488,164 @@ class OwnerWorkforceViewModel @Inject constructor(
         }
     }
 
-    fun assignShifts(
-        employeeId: String,
-        assignmentsList: List<CreateShiftAssignmentRequest>,
+    fun assignShiftWithRules(
+        staffProfileId: String,
+        shiftId: String,
         startDate: String,
-        premisesId: String? = null
+        endDate: String,
+        paymentRules: Map<String, Long>,
+        daysOfWeek: List<Int>
+    ) {
+        assignShift(staffProfileId, shiftId, startDate, null, daysOfWeek)
+    }
+
+    fun loadOvertime() {
+        viewModelScope.launch {
+            if (_overtime.value !is UiState.Success) {
+                _overtime.value = UiState.Loading
+            }
+            _overtime.value = repository.getOvertime().toUiState()
+        }
+    }
+
+    fun createOvertime(
+        employeeId: String,
+        workDate: String,
+        startTime: String,
+        endTime: String,
+        paymentInr: Long,
+        reason: String
     ) {
         viewModelScope.launch {
             _isSubmitting.value = true
-            var successCount = 0
-            var lastError: String? = null
-
-            for (item in assignmentsList) {
-                val result = repository.createShiftAssignment(
-                    item.copy(
-                        employeeId = employeeId,
-                        staffId = employeeId,
-                        premisesId = premisesId ?: item.premisesId
+            when (
+                val result = repository.createOvertime(
+                    CreateOvertimeRequest(
+                        staffProfileId = employeeId,
+                        workDate = workDate,
+                        startTime = startTime,
+                        endTime = endTime,
+                        paymentInr = paymentInr,
+                        reason = reason
                     )
                 )
-                when (result) {
-                    is Resource.Success -> successCount++
-                    is Resource.Error -> lastError = result.message
-                    Resource.Loading -> Unit
+            ) {
+                is Resource.Success -> {
+                    _message.value = "Overtime assigned to employee successfully."
+                    loadOvertime()
                 }
-            }
-
-            if (successCount > 0) {
-                _message.value = "Assigned $successCount shift schedule(s) successfully."
-            } else if (lastError != null) {
-                _message.value = lastError
+                is Resource.Error -> {
+                    _message.value = result.message ?: "Failed to book overtime"
+                }
+                Resource.Loading -> Unit
             }
             _isSubmitting.value = false
         }
     }
 
-    fun consumeMessage() {
-        _message.value = null
+    fun cancelOvertime(overtimeId: String) {
+        viewModelScope.launch {
+            _isSubmitting.value = true
+            when (val result = repository.cancelOvertime(overtimeId)) {
+                is Resource.Success -> {
+                    _message.value = "Overtime entry cancelled."
+                    loadOvertime()
+                }
+                is Resource.Error -> {
+                    _message.value = result.message ?: "Failed to cancel overtime"
+                }
+                Resource.Loading -> Unit
+            }
+            _isSubmitting.value = false
+        }
+    }
+
+    fun createShift(
+        premisesId: String,
+        shiftName: String,
+        startTime: String,
+        endTime: String,
+        dayName: String,
+        halfDayThreshold: String
+    ) {
+        viewModelScope.launch {
+            _isSubmitting.value = true
+            when (
+                val result = repository.createShift(
+                    CreateShiftRequest(
+                        premisesId = premisesId,
+                        shiftName = shiftName,
+                        startTime = startTime,
+                        endTime = endTime,
+                        dayName = dayName,
+                        halfDayThreshold = halfDayThreshold
+                    )
+                )
+            ) {
+                is Resource.Success -> {
+                    _message.value = "Shift created successfully."
+                    loadShiftsData()
+                }
+                is Resource.Error -> {
+                    _message.value = result.message ?: "Failed to create shift"
+                }
+                Resource.Loading -> Unit
+            }
+            _isSubmitting.value = false
+        }
+    }
+
+    fun updateShift(
+        id: String,
+        shiftName: String,
+        startTime: String,
+        endTime: String,
+        dayName: String,
+        halfDayThreshold: String,
+        isActive: Boolean
+    ) {
+        viewModelScope.launch {
+            _isSubmitting.value = true
+            when (
+                val result = repository.updateShift(
+                    id,
+                    UpdateShiftRequest(
+                        shiftName = shiftName,
+                        startTime = startTime,
+                        endTime = endTime,
+                        dayName = dayName,
+                        halfDayThreshold = halfDayThreshold,
+                        isActive = isActive
+                    )
+                )
+            ) {
+                is Resource.Success -> {
+                    _message.value = "Shift updated successfully."
+                    loadShiftsData()
+                }
+                is Resource.Error -> {
+                    _message.value = result.message ?: "Failed to update shift"
+                }
+                Resource.Loading -> Unit
+            }
+            _isSubmitting.value = false
+        }
+    }
+
+    fun deleteShift(id: String) {
+        viewModelScope.launch {
+            _isSubmitting.value = true
+            when (val result = repository.deleteShift(id)) {
+                is Resource.Success -> {
+                    _message.value = "Shift deleted successfully."
+                    loadShiftsData()
+                }
+                is Resource.Error -> {
+                    _message.value = result.message ?: "Failed to delete shift"
+                }
+                Resource.Loading -> Unit
+            }
+            _isSubmitting.value = false
+        }
     }
 }

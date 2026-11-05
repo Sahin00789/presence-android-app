@@ -28,7 +28,6 @@ data class OvertimeDto(
 @Serializable
 data class CreateOvertimeRequest(
     val staffProfileId: String? = null,
-    val employeeId: String? = null,
     val workDate: String = "",
     val startTime: String = "",
     val endTime: String = "",

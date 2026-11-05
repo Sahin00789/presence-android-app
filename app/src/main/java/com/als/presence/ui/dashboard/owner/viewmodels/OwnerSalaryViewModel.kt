@@ -19,7 +19,8 @@ import javax.inject.Inject
 /** Owner "Salary" tab state management. */
 @HiltViewModel
 class OwnerSalaryViewModel @Inject constructor(
-    private val repository: OperationsRepository
+    private val repository: OperationsRepository,
+    private val syncCoordinator: com.als.presence.data.sync.SyncCoordinator
 ) : ViewModel() {
 
     private val _periods = MutableStateFlow<UiState<List<PayrollPeriodDto>>>(UiState.Loading)
@@ -45,8 +46,11 @@ class OwnerSalaryViewModel @Inject constructor(
     }
 
     fun refresh() {
-        loadPeriods()
-        loadStaff()
+        viewModelScope.launch {
+            syncCoordinator.performSelectiveSync(com.als.presence.data.sync.SyncCoordinator.SyncDomain.PAYROLL)
+            loadPeriods()
+            loadStaff()
+        }
     }
 
     fun loadPeriods() {

@@ -58,7 +58,12 @@ fun AttendanceRegisterTab(
     val scrollState = rememberScrollState()
     var resolving by remember { mutableStateOf<AttendanceExceptionDto?>(null) }
 
-    val records = (recordsState as? UiState.Success)?.data.orEmpty()
+    val rawRecords = (recordsState as? UiState.Success)?.data.orEmpty()
+    val records = remember(rawRecords) {
+        rawRecords.filter { r ->
+            !r.clockIn.isNullOrBlank() || r.status in listOf("PRESENT", "HALF_DAY", "ABSENT", "LEAVE")
+        }
+    }
     val exceptions = (exceptionsState as? UiState.Success)?.data.orEmpty()
     val open = exceptions.filter { it.status == "OPEN" }
 
@@ -118,7 +123,7 @@ fun AttendanceRegisterTab(
             )
             MetricTile(
                 label = "Present",
-                value = records.count { it.status == "PRESENT" }.toString(),
+                value = records.count { it.status == "PRESENT" || it.status == "COMPLETED" }.toString(),
                 modifier = Modifier.weight(1f),
                 accent = MaterialTheme.colorScheme.secondary
             )
@@ -148,7 +153,7 @@ fun AttendanceRegisterTab(
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = exception.staffName ?: exception.staffCode ?: "Staff",
+                                            text = exception.staffName ?: exception.staffCode ?: "Employee",
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -222,33 +227,61 @@ private fun AttendanceRow(record: AttendanceRecordDto) {
             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
         )
     ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = record.staffName ?: record.staffCode ?: "Staff",
+                        text = record.staffName ?: record.staffCode ?: "Employee",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = Dates.formatDate(record.workDate),
+                        text = "${Dates.formatDate(record.workDate)} • ${record.shiftName ?: if (record.overtimeId != null) "Overtime" else "Shift"}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 StatusPill(record.status)
             }
+
+            if (!record.assignedStartTime.isNullOrBlank() || !record.assignedEndTime.isNullOrBlank()) {
+                val lateText = Dates.formatLateText(record.clockIn, record.assignedStartTime, record.lateMinutes)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Assigned Time: ${Dates.formatTime(record.assignedStartTime)} – ${Dates.formatTime(record.assignedEndTime)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (lateText.isNotEmpty()) {
+                        Text(
+                            text = "⏰ $lateText",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    text = "In ${Dates.formatTime(record.clockIn)}",
+                    text = if (!record.clockIn.isNullOrBlank()) "In: ${Dates.formatTime(record.clockIn)}" else "In: --",
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
-                    text = "Out ${Dates.formatTime(record.clockOut)}",
+                    text = if (!record.clockOut.isNullOrBlank()) "Out: ${Dates.formatTime(record.clockOut)}" else "Out: --",
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
-                    text = Dates.formatMinutes(record.workedMinutes),
+                    text = "Worked: ${Dates.formatMinutes(record.workedMinutes)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -271,7 +304,7 @@ private fun ResolveExceptionDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, String) -> Unit
 ) {
-    val statuses = listOf("PRESENT", "LATE", "HALF_DAY", "ABSENT")
+    val statuses = listOf("PRESENT", "HALF_DAY", "ABSENT")
     var status by remember { mutableStateOf(statuses.first()) }
     var reason by remember { mutableStateOf("") }
 
@@ -281,7 +314,7 @@ private fun ResolveExceptionDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "${exception.staffName ?: "Staff"} • ${exception.reason?.replace('_', ' ').orEmpty()}",
+                    text = "${exception.staffName ?: "Employee"} • ${exception.reason?.replace('_', ' ').orEmpty()}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -307,7 +340,7 @@ private fun ResolveExceptionDialog(
                     shape = RoundedCornerShape(12.dp)
                 )
                 Text(
-                    text = "The correction is written to the tamper-evident audit log.",
+                    text = "The correction will update the employee's attendance record.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

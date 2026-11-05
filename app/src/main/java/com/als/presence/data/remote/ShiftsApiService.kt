@@ -12,4 +12,15 @@ interface ShiftsApiService {
 
     @POST("api/v1/shifts")
     suspend fun create(@Body request: ShiftTemplateDto): Response<ShiftTemplateDto>
+
+    @PUT("api/v1/shifts/{id}")
+    suspend fun update(
+        @Path("id") id: String,
+        @Body request: UpdateShiftRequest
+    ): Response<ShiftTemplateDto>
+
+    @DELETE("api/v1/shifts/{id}")
+    suspend fun delete(
+        @Path("id") id: String
+    ): Response<Unit>
 }

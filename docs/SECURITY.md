@@ -28,4 +28,3 @@
    - Auth endpoints: 5 requests per minute per IP.
    - Clock-in / Location checks: 30 requests per minute per user.
    - General API endpoints: 100 requests per minute per user.
-3. **Audit Logging**: All write operations, attendance corrections, and payroll approvals write an entry to `audit_logs`.

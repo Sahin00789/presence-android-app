@@ -38,6 +38,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -53,6 +55,8 @@ import com.als.presence.ui.dashboard.common.PresenceErrorState
 import com.als.presence.ui.dashboard.common.SectionHeader
 import com.als.presence.ui.dashboard.common.SectionLoading
 import com.als.presence.ui.dashboard.common.StatusPill
+import com.als.presence.domain.model.Role
+import com.als.presence.domain.model.User
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
@@ -66,13 +70,18 @@ fun OwnerReportsTab(
     recordsState: UiState<List<AttendanceRecordDto>>,
     premisesState: UiState<List<PremisesDto>> = UiState.Success(emptyList()),
     onRefresh: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    user: User? = null,
+    initialPremisesId: String? = null
 ) {
     val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
     val premisesScrollState = rememberScrollState()
-    var selectedRoleFilter by remember { mutableStateOf("ALL") } // "ALL", "MANAGER", "STAFF"
-    var selectedPremisesId by remember { mutableStateOf<String?>(null) } // null = All Premises
+
+
+    val premisesList = (premisesState as? UiState.Success)?.data.orEmpty()
+    val defaultPremisesId = initialPremisesId ?: if (user?.role == Role.EMPLOYEE || premisesList.size == 1) premisesList.firstOrNull()?.id else null
+    var selectedPremisesId by remember(defaultPremisesId) { mutableStateOf(defaultPremisesId) }
 
     val records = (recordsState as? UiState.Success)?.data.orEmpty()
     // Sub-tabs for Daily / Monthly
@@ -83,21 +92,22 @@ fun OwnerReportsTab(
     val currentMonth = YearMonth.now()
     var selectedMonth by remember { mutableStateOf(currentMonth) }
 
-    val premisesList = (premisesState as? UiState.Success)?.data.orEmpty()
-
-    // Filter records based on selected Period, Role, and Premises
+    // Filter records based on selected Period and Premises
     val filteredRecords = records.filter { record ->
-        val matchesPremises = selectedPremisesId == null || record.premisesId == selectedPremisesId
-        val matchesRole = when (selectedRoleFilter) {
-            "MANAGER" -> record.staffCode?.startsWith("M", ignoreCase = true) == true || record.staffName?.contains("Manager", ignoreCase = true) == true
-            "STAFF" -> !(record.staffCode?.startsWith("M", ignoreCase = true) == true || record.staffName?.contains("Manager", ignoreCase = true) == true)
-            else -> true
+        val matchesPremises = if (selectedPremisesId != null) {
+            record.premisesId == selectedPremisesId
+        } else if (user?.role == Role.EMPLOYEE || initialPremisesId != null || premisesList.size == 1) {
+            val allowedIds = premisesList.map { it.id }.toSet()
+            allowedIds.isEmpty() || allowedIds.contains(record.premisesId)
+        } else {
+            true
         }
         
         val matchesDate = if (record.workDate.isNullOrBlank()) {
             false
         } else {
-            val recordDate = runCatching { LocalDate.parse(record.workDate) }.getOrNull()
+            val dateStr = record.workDate.take(10)
+            val recordDate = runCatching { LocalDate.parse(dateStr) }.getOrNull()
             if (reportTab == "DAILY") {
                 recordDate == selectedDate
             } else {
@@ -105,15 +115,15 @@ fun OwnerReportsTab(
             }
         }
         
-        matchesPremises && matchesRole && matchesDate
+        matchesPremises && matchesDate
     }
 
     val totalRecords = filteredRecords.size
     val presentCount = filteredRecords.count { it.status == "PRESENT" || it.status == "COMPLETED" }
-    val lateCount = filteredRecords.count { it.status == "LATE" }
     val halfDayCount = filteredRecords.count { it.status == "HALF_DAY" }
+    val leaveCount = filteredRecords.count { it.status == "LEAVE" }
     val absentCount = filteredRecords.count { it.status == "ABSENT" }
-    val attendanceRate = if (totalRecords > 0) ((presentCount + lateCount).toFloat() / totalRecords * 100).toInt() else 100
+    val attendanceRate = if (totalRecords > 0) ((presentCount + leaveCount + halfDayCount).toFloat() / totalRecords * 100).toInt() else 100
 
     Column(
         modifier = modifier
@@ -155,8 +165,60 @@ fun OwnerReportsTab(
                 )
             }
         }
-        // Premises-wise Filter chips (Scrollable)
-        if (premisesList.isNotEmpty()) {
+        // Assigned Premises Info Card for Manager or Premises Filter Chips for Owner
+        if (user?.role == Role.EMPLOYEE) {
+            val assignedPremisesName = remember(user, premisesList, initialPremisesId) {
+                val matched = premisesList.find { it.id == (initialPremisesId ?: user?.premisesId) }
+                matched?.name?.let { Dates.cleanPremisesName(it) }
+                    ?: user?.premisesName?.let { Dates.cleanPremisesName(it) }
+                    ?.takeIf { it.isNotBlank() }
+                    ?: premisesList.firstOrNull()?.name?.let { Dates.cleanPremisesName(it) }
+                    ?: "Assigned Premises"
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Business,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "ASSIGNED PREMISES",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                        Text(
+                            text = assignedPremisesName,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        } else if (premisesList.size > 1) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -182,8 +244,7 @@ fun OwnerReportsTab(
                     label = { Text("All Premises") }
                 )
                 premisesList.forEach { premises ->
-                    val parts = premises.premisesName.split(",", limit = 2)
-                    val shortName = parts[0].trim()
+                    val shortName = Dates.cleanPremisesName(premises.name)
                     FilterChip(
                         selected = selectedPremisesId == premises.id,
                         onClick = { selectedPremisesId = premises.id },
@@ -194,9 +255,11 @@ fun OwnerReportsTab(
         }
 
         // Sub-tabs for Daily / Monthly
-        val coroutineScope = rememberCoroutineScope()
-        val dayListState = rememberLazyListState(initialFirstVisibleItemIndex = 5000 - 2)
-        val monthListState = rememberLazyListState(initialFirstVisibleItemIndex = 5000 - 2)
+        val dayOffsetList = remember { (-365..0).toList() }
+        val monthOffsetList = remember { (-60..0).toList() }
+
+        val dayListState = rememberLazyListState(initialFirstVisibleItemIndex = dayOffsetList.lastIndex)
+        val monthListState = rememberLazyListState(initialFirstVisibleItemIndex = monthOffsetList.lastIndex)
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -219,10 +282,10 @@ fun OwnerReportsTab(
                 onClick = {
                     if (reportTab == "DAILY") {
                         selectedDate = today
-                        coroutineScope.launch { dayListState.animateScrollToItem(5000 - 2) }
+                        coroutineScope.launch { dayListState.animateScrollToItem(dayOffsetList.lastIndex) }
                     } else {
                         selectedMonth = currentMonth
-                        coroutineScope.launch { monthListState.animateScrollToItem(5000 - 2) }
+                        coroutineScope.launch { monthListState.animateScrollToItem(monthOffsetList.lastIndex) }
                     }
                 },
                 modifier = Modifier
@@ -245,8 +308,9 @@ fun OwnerReportsTab(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(10000) { index ->
-                    val date = today.plusDays((index - 5000).toLong())
+                items(dayOffsetList.size, key = { dayOffsetList[it] }) { index ->
+                    val offset = dayOffsetList[index]
+                    val date = today.plusDays(offset.toLong())
                     val isSelected = date == selectedDate
                     val isFuture = date.isAfter(today)
                     Surface(
@@ -291,8 +355,9 @@ fun OwnerReportsTab(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(10000) { index ->
-                    val month = currentMonth.plusMonths((index - 5000).toLong())
+                items(monthOffsetList.size, key = { monthOffsetList[it] }) { index ->
+                    val offset = monthOffsetList[index]
+                    val month = currentMonth.plusMonths(offset.toLong())
                     val isSelected = month == selectedMonth
                     FilterChip(
                         selected = isSelected,
@@ -349,8 +414,8 @@ fun OwnerReportsTab(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     StatusCountItem(label = "Present", count = presentCount, color = MaterialTheme.colorScheme.primary)
-                    StatusCountItem(label = "Late", count = lateCount, color = MaterialTheme.colorScheme.tertiary)
                     StatusCountItem(label = "Half-Day", count = halfDayCount, color = MaterialTheme.colorScheme.secondary)
+                    StatusCountItem(label = "Leave", count = leaveCount, color = Color(0xFF0284C7))
                     StatusCountItem(label = "Absent", count = absentCount, color = MaterialTheme.colorScheme.error)
                 }
             }
@@ -372,6 +437,7 @@ fun OwnerReportsTab(
                     )
                 } else {
                     filteredRecords.take(15).forEach { record ->
+                        val lateText = Dates.formatLateText(record.clockIn, record.assignedStartTime, record.lateMinutes)
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(14.dp),
@@ -386,7 +452,7 @@ fun OwnerReportsTab(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = record.staffName ?: record.staffCode ?: "Staff",
+                                        text = record.staffName ?: record.staffCode ?: "Employee",
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
@@ -394,6 +460,14 @@ fun OwnerReportsTab(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                    if (lateText.isNotEmpty()) {
+                                        Text(
+                                            text = "⏰ $lateText",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                                 StatusPill(record.status)
                             }

@@ -15,12 +15,10 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -55,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -116,9 +115,7 @@ fun NotificationsDrawer(
     // and takes back over while the panel is on screen.
     BackHandler(enabled = visible, onBack = onDismiss)
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val panelWidth = minOf(maxWidth * 0.92f, 420.dp)
-
+    Box(modifier = modifier.fillMaxSize()) {
         AnimatedVisibility(
             visible = visible,
             enter = fadeIn(animationSpec = tween(220)),
@@ -146,10 +143,7 @@ fun NotificationsDrawer(
                 animationSpec = tween(280, easing = FastOutSlowInEasing),
                 targetOffsetX = { it }
             ),
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight()
-                .width(panelWidth)
+            modifier = Modifier.fillMaxSize()
         ) {
             Surface(
                 modifier = Modifier
@@ -158,7 +152,7 @@ fun NotificationsDrawer(
                     // through to the scrim behind it and dismiss the drawer.
                     .pointerInput(Unit) { detectTapGestures { } },
                 color = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp),
+                shape = RectangleShape,
                 shadowElevation = 20.dp
             ) {
                 Column(

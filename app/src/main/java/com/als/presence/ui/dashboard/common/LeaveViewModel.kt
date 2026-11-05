@@ -18,7 +18,8 @@ import javax.inject.Inject
 /** State for the shared leave request / review screen. */
 @HiltViewModel
 class LeaveViewModel @Inject constructor(
-    private val repository: OperationsRepository
+    private val repository: OperationsRepository,
+    private val syncCoordinator: com.als.presence.data.sync.SyncCoordinator
 ) : ViewModel() {
 
     private val _leaves = MutableStateFlow<UiState<List<LeaveDto>>>(UiState.Loading)
@@ -36,6 +37,7 @@ class LeaveViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
+            syncCoordinator.performSelectiveSync(com.als.presence.data.sync.SyncCoordinator.SyncDomain.LEAVES)
             _leaves.value = UiState.Loading
             _leaves.value = repository.getLeaves().toUiState()
         }

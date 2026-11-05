@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -217,7 +218,7 @@ fun PresenceAvatar(
     }
 }
 
-/** The uppercase micro-label that sits above a value. */
+/** The micro-label that sits above a value. */
 @Composable
 fun PresenceKicker(
     text: String,
@@ -225,26 +226,27 @@ fun PresenceKicker(
     color: Color = PresenceDesign.LabelText
 ) {
     Text(
-        text = text.uppercase(),
-        fontSize = 10.sp,
+        text = text,
+        fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
-        letterSpacing = 1.4.sp,
+        letterSpacing = 0.5.sp,
         color = color,
         modifier = modifier
     )
 }
 
-/** A hairline card on the workspace surface. */
+/** A modern Material 3 elevated card. */
 @Composable
 fun PresenceCard(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(PresenceDesign.RadiusCard))
-            .background(PresenceDesign.Surface)
-            .border(1.dp, PresenceDesign.Line, RoundedCornerShape(PresenceDesign.RadiusCard))
+    androidx.compose.material3.Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
     ) {
         content()
     }
@@ -258,9 +260,9 @@ fun PresencePanel(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(PresenceDesign.RadiusPanel))
-            .background(PresenceDesign.Panel)
-            .border(1.dp, PresenceDesign.Line, RoundedCornerShape(PresenceDesign.RadiusPanel))
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
     ) {
         content()
     }
@@ -282,21 +284,19 @@ fun PresencePageIntro(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             PresenceKicker(eyebrow)
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = title,
-                fontSize = 22.sp,
-                lineHeight = 28.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.6).sp,
-                color = PresenceDesign.Ink
-            )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.4).sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
                 text = description,
-                fontSize = 12.sp,
-                lineHeight = 17.sp,
-                color = PresenceDesign.Muted
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         if (action != null) {
@@ -322,19 +322,16 @@ fun PresenceSectionTitle(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 15.sp,
-                lineHeight = 20.sp,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.3).sp,
-                color = PresenceDesign.Ink
+                color = MaterialTheme.colorScheme.onSurface
             )
             if (description != null) {
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = description,
-                    fontSize = 10.5.sp,
-                    lineHeight = 15.sp,
-                    color = PresenceDesign.LabelText
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -346,8 +343,7 @@ fun PresenceSectionTitle(
 }
 
 /**
- * The inline label/value strip. It answers "how much of this is there" without
- * spending a row of panels on it.
+ * The inline label/value strip.
  */
 @Composable
 fun PresenceMetaStrip(
@@ -357,36 +353,34 @@ fun PresenceMetaStrip(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(PresenceDesign.RadiusControl))
-            .background(PresenceDesign.Panel)
-            .border(1.dp, PresenceDesign.Line, RoundedCornerShape(PresenceDesign.RadiusControl))
-            .padding(horizontal = 12.dp, vertical = 9.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         items.forEach { (label, value) ->
-            Row(verticalAlignment = Alignment.Bottom) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = label.uppercase(),
-                    fontSize = 9.sp,
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.9.sp,
-                    color = PresenceDesign.LabelText
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = value,
-                    fontSize = 11.5.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.1).sp,
-                    color = PresenceDesign.Ink
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
     }
 }
 
-/** A single number with its label, trend indicator, and optional click action. */
+/** A single stat number with its label, trend indicator, and optional click action. */
 @Composable
 fun PresenceStatTile(
     label: String,
@@ -399,9 +393,9 @@ fun PresenceStatTile(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(PresenceDesign.Panel)
-            .border(1.dp, PresenceDesign.Line, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
             .then(
                 if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
             )
@@ -420,52 +414,49 @@ fun PresenceStatTile(
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = value,
-            fontSize = 18.sp,
-            lineHeight = 23.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.4).sp,
-            color = PresenceDesign.Ink
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurface
         )
         if (hint != null) {
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = hint,
-                fontSize = 10.5.sp,
-                color = PresenceDesign.LabelText
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
 }
 
-/** One label/value pair on its own hairline row. */
+/** One label/value pair on its own row. */
 @Composable
 fun PresenceDetailRow(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    valueColor: Color = PresenceDesign.Ink
+    valueColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(9.dp))
-            .background(PresenceDesign.Panel)
-            .border(1.dp, PresenceDesign.Line, RoundedCornerShape(9.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = label.uppercase(),
-            fontSize = 10.5.sp,
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 0.6.sp,
-            color = PresenceDesign.LabelText
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = value,
-            fontSize = 12.5.sp,
+            style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
             color = valueColor,
             textAlign = TextAlign.End
@@ -473,7 +464,7 @@ fun PresenceDetailRow(
     }
 }
 
-/** The action button. */
+/** Modern Material 3 Action Button. */
 @Composable
 fun PresenceButton(
     label: String,
@@ -486,14 +477,14 @@ fun PresenceButton(
     loading: Boolean = false
 ) {
     val height = when (size) {
-        PresenceSize.Sm -> 38.dp
-        PresenceSize.Md -> 42.dp
-        PresenceSize.Lg -> 48.dp
+        PresenceSize.Sm -> 40.dp
+        PresenceSize.Md -> 44.dp
+        PresenceSize.Lg -> 50.dp
     }
     val (background, foreground, border) = when (variant) {
         PresenceVariant.Primary -> Triple(PresenceDesign.Brand, Color.White, null)
-        PresenceVariant.Secondary -> Triple(PresenceDesign.Surface, PresenceDesign.NavyLight, BorderStroke(1.dp, PresenceDesign.InputBorder))
-        PresenceVariant.Ghost -> Triple(Color.Transparent, PresenceDesign.NeutralText, null)
+        PresenceVariant.Secondary -> Triple(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.onSurface, BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant))
+        PresenceVariant.Ghost -> Triple(Color.Transparent, MaterialTheme.colorScheme.primary, null)
         PresenceVariant.Soft -> Triple(PresenceDesign.BrandSoft, PresenceDesign.BrandDark, null)
         PresenceVariant.Danger -> Triple(PresenceDesign.DangerSoft, PresenceDesign.DangerText, null)
         PresenceVariant.DangerSolid -> Triple(PresenceDesign.DangerText, Color.White, null)
@@ -502,19 +493,19 @@ fun PresenceButton(
     Row(
         modifier = modifier
             .height(height)
-            .clip(RoundedCornerShape(9.dp))
+            .clip(RoundedCornerShape(14.dp))
             .then(
-                if (border != null) Modifier.border(border, RoundedCornerShape(9.dp)) else Modifier
+                if (border != null) Modifier.border(border, RoundedCornerShape(14.dp)) else Modifier
             )
             .background(if (enabled && !loading) background else background.copy(alpha = 0.55f))
             .clickable(enabled = enabled && !loading, onClick = onClick)
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (loading) {
             CircularProgressIndicator(
-                modifier = Modifier.size(15.dp),
+                modifier = Modifier.size(16.dp),
                 strokeWidth = 2.dp,
                 color = foreground
             )
@@ -524,13 +515,13 @@ fun PresenceButton(
                 imageVector = icon,
                 contentDescription = null,
                 tint = foreground,
-                modifier = Modifier.size(15.dp)
+                modifier = Modifier.size(16.dp)
             )
-            Spacer(modifier = Modifier.width(7.dp))
+            Spacer(modifier = Modifier.width(8.dp))
         }
         Text(
             text = label,
-            fontSize = 12.5.sp,
+            style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
             color = foreground
         )
@@ -706,28 +697,33 @@ fun PresenceErrorState(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isConnectionErr = message.contains("server", ignoreCase = true) ||
+            message.contains("network", ignoreCase = true) ||
+            message.contains("connect", ignoreCase = true) ||
+            message.contains("timeout", ignoreCase = true)
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 34.dp),
+            .padding(vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             imageVector = Icons.Default.CloudOff,
             contentDescription = null,
-            tint = PresenceDesign.Danger,
-            modifier = Modifier.size(38.dp)
+            tint = if (isConnectionErr) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else PresenceDesign.Danger,
+            modifier = Modifier.size(34.dp)
         )
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = "Could not reach the server",
+            text = if (isConnectionErr) "Offline • Using Cached Data" else "Could not reach the server",
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = PresenceDesign.Ink
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = message,
+            text = if (isConnectionErr) "Server connection status is shown on top bar. Data will refresh automatically when connected." else message,
             fontSize = 11.sp,
             lineHeight = 16.sp,
             color = PresenceDesign.LabelText,
@@ -735,7 +731,7 @@ fun PresenceErrorState(
         )
         Spacer(modifier = Modifier.height(14.dp))
         PresenceButton(
-            label = "Retry",
+            label = "Retry connection",
             onClick = onRetry,
             variant = PresenceVariant.Secondary,
             size = PresenceSize.Sm,

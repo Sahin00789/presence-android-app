@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.als.presence.core.designsystem.PresenceTheme
+import com.als.presence.core.permission.RequestAppPermissionsOnOpen
 import com.als.presence.data.remote.EventsWebSocketService
 import com.als.presence.data.remote.PRESENCE_BASE_URL
 import com.als.presence.ui.auth.AuthViewModel
@@ -38,9 +39,23 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             PresenceTheme {
+                // Request missing permissions (Location, Camera, Notifications) when app opens
+                RequestAppPermissionsOnOpen()
+
                 val currentUser by authViewModel.currentUser.collectAsState()
                 val isOnline by authViewModel.isOnline.collectAsState()
-                var showSplash by remember { mutableStateOf(true) }
+                val isServerConnected by authViewModel.isServerConnected.collectAsState()
+                val isSessionChecking by authViewModel.isSessionChecking.collectAsState()
+                val isSyncing by authViewModel.isSyncing.collectAsState()
+                val context = androidx.compose.ui.platform.LocalContext.current
+                var splashTimeElapsed by remember { mutableStateOf(false) }
+
+                LaunchedEffect(Unit) {
+                    kotlinx.coroutines.delay(1200)
+                    splashTimeElapsed = true
+                }
+
+                val showSplash = isSessionChecking || !splashTimeElapsed
 
                 LaunchedEffect(currentUser?.id) {
                     if (currentUser != null) {
@@ -58,7 +73,7 @@ class MainActivity : ComponentActivity() {
                     ) { isSplashing ->
                         if (isSplashing) {
                             SplashScreen(
-                                onSplashFinished = { showSplash = false }
+                                onSplashFinished = { /* Driven by showSplash state */ }
                             )
                         } else {
                             val user = currentUser
@@ -66,7 +81,11 @@ class MainActivity : ComponentActivity() {
                                 DashboardScreen(
                                     user = user,
                                     onLogout = { authViewModel.logout() },
-                                    isOnline = isOnline
+                                    isOnline = isOnline,
+                                    isServerConnected = isServerConnected,
+                                    onCheckServerHealth = { authViewModel.checkServerHealth() },
+                                    isSyncing = isSyncing,
+                                    onSyncClick = { authViewModel.syncRoomDatabase(context) }
                                 )
                             } else {
                                 LoginScreen(

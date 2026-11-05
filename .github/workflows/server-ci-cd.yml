@@ -1,0 +1,158 @@
+name: Server CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+    paths:
+      - 'server/**'
+      - '.github/workflows/server-ci-cd.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+    paths:
+      - 'server/**'
+      - '.github/workflows/server-ci-cd.yml'
+  workflow_dispatch:
+
+jobs:
+  typecheck-and-lint:
+    name: Typecheck & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js (v20 LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: server/pnpm-lock.yaml
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run TypeScript Typecheck
+        run: pnpm run typecheck
+
+      - name: Verify Drizzle Migration Generation
+        run: pnpm run db:generate
+
+      - name: Build TypeScript Project
+        run: pnpm run build
+
+  unit-and-integration-tests:
+    name: Run Vitest Suite & DB Migrations
+    needs: typecheck-and-lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: presence_user
+          POSTGRES_PASSWORD: presence_password
+          POSTGRES_DB: presence_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js (v20 LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: server/pnpm-lock.yaml
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Drizzle Schema Migrations
+        run: pnpm run db:generate
+
+      - name: Run Drizzle Database Migrations
+        env:
+          DATABASE_URL: postgresql://presence_user:presence_password@localhost:5432/presence_db
+        run: pnpm run db:migrate
+
+      - name: Execute Vitest Tests
+        env:
+          NODE_ENV: test
+          PORT: 3000
+          HOST: 0.0.0.0
+          DATABASE_URL: postgresql://presence_user:presence_password@localhost:5432/presence_db
+          JWT_SECRET: super_secret_jwt_key_testing_environment_32chars
+          REFRESH_TOKEN_SECRET: super_secret_refresh_token_key_testing_32chars
+        run: pnpm run test
+
+  deploy:
+    name: Deploy Server & Migrate Production DB
+    needs: unit-and-integration-tests
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js (v20 LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: server/pnpm-lock.yaml
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Production Distribution
+        run: pnpm run build
+
+      - name: Run Production Database Migrations
+        if: ${{ secrets.DATABASE_URL != '' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: pnpm run db:migrate
+
+      - name: Complete Deployment Verification
+        run: |
+          echo "Drizzle database migrations and production server build completed successfully."
+          echo "Artifact dist/ is ready for production hosting."

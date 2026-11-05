@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddLocation
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
@@ -54,7 +53,6 @@ import com.als.presence.ui.dashboard.common.PresenceSize
 import com.als.presence.ui.dashboard.common.PresenceTone
 import com.als.presence.ui.dashboard.common.PresenceVariant
 import com.als.presence.ui.dashboard.owner.OwnerWorkforceViewModel
-import com.als.presence.ui.dashboard.owner.modals.AddPremisesModal
 import com.als.presence.ui.dashboard.owner.modals.EditPremisesModal
 
 /**
@@ -69,7 +67,6 @@ fun PremisesManagementScreen(
 ) {
     val premisesState by viewModel.premises.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
-    val isSubmitting by viewModel.isSubmitting.collectAsStateWithLifecycle()
     val locationAddressState by viewModel.locationAddressState.collectAsStateWithLifecycle()
 
     var activeMessage by remember { mutableStateOf<String?>(null) }
@@ -77,7 +74,6 @@ fun PremisesManagementScreen(
         if (message != null) activeMessage = message
     }
 
-    var showAdd by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<PremisesDto?>(null) }
 
     val premises = (premisesState as? UiState.Success)?.data.orEmpty()
@@ -87,13 +83,7 @@ fun PremisesManagementScreen(
             crumb = "Workforce",
             title = "Manage Premises",
             onBack = onBack,
-            actions = {
-                PresenceIconButton(
-                    icon = Icons.Default.Refresh,
-                    contentDescription = "Refresh premises",
-                    onClick = viewModel::refresh
-                )
-            }
+            onRefresh = viewModel::refresh
         ) {
             PresencePageIntro(
                 eyebrow = "Geofencing",
@@ -111,19 +101,7 @@ fun PremisesManagementScreen(
 
             PresenceSectionTitle(
                 title = "Geofenced locations",
-                description = "Active work premises enforced during clock-in.",
-                action = {
-                    if (canCreate) {
-                        PresenceButton(
-                            label = "Add premises",
-                            onClick = { showAdd = true },
-                            variant = PresenceVariant.Soft,
-                            size = PresenceSize.Sm,
-                            icon = Icons.Default.AddLocation,
-                            loading = isSubmitting
-                        )
-                    }
-                }
+                description = "Active work premises enforced during clock-in."
             )
 
             when (val state = premisesState) {
@@ -134,7 +112,7 @@ fun PremisesManagementScreen(
                         PresenceEmptyState(
                             icon = Icons.Default.Business,
                             title = "No premises configured",
-                            description = "Add a work location with latitude, longitude, address and radius so staff can clock in within the geofence."
+                            description = "Existing work locations will appear here for geofence editing."
                         )
                     } else {
                         premises.forEach { p ->
@@ -150,22 +128,6 @@ fun PremisesManagementScreen(
         }
 
         MessageSnackbar(message = activeMessage, onDismiss = { activeMessage = null })
-    }
-
-    if (showAdd) {
-        AddPremisesModal(
-            locationState = locationAddressState,
-            onFetchGpsAndAddress = viewModel::fetchCurrentGpsAndAddress,
-            onDismiss = {
-                showAdd = false
-                viewModel.clearLocationAddressState()
-            },
-            onAddPremises = { name, lat, lng, radius, address ->
-                viewModel.addPremises(name, lat, lng, radius, address)
-                showAdd = false
-                viewModel.clearLocationAddressState()
-            }
-        )
     }
 
     editTarget?.let { target ->

@@ -22,7 +22,8 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class PayrollViewModel @Inject constructor(
-    private val repository: OperationsRepository
+    private val repository: OperationsRepository,
+    private val syncCoordinator: com.als.presence.data.sync.SyncCoordinator
 ) : ViewModel() {
 
     private val _periods = MutableStateFlow<UiState<List<PayrollPeriodDto>>>(UiState.Loading)
@@ -54,9 +55,12 @@ class PayrollViewModel @Inject constructor(
     }
 
     fun refresh() {
-        loadPeriods()
-        loadStaff()
-        loadMembers()
+        viewModelScope.launch {
+            syncCoordinator.performSelectiveSync(com.als.presence.data.sync.SyncCoordinator.SyncDomain.PAYROLL)
+            loadPeriods()
+            loadStaff()
+            loadMembers()
+        }
     }
 
     fun loadStaff() {
@@ -126,5 +130,36 @@ class PayrollViewModel @Inject constructor(
 
     fun consumeMessage() {
         _message.value = null
+    }
+
+    fun recordPayment(
+        itemId: String,
+        amountPaise: Long,
+        paymentMethod: String = "BANK_TRANSFER",
+        reference: String = ""
+    ) {
+        viewModelScope.launch {
+            _isSubmitting.value = true
+            val result = repository.recordPayrollTransaction(
+                com.als.presence.data.model.RecordPayrollTransactionRequest(
+                    monthlyPayrollId = itemId,
+                    amount = amountPaise.toDouble(),
+                    paymentDate = java.time.LocalDate.now().toString(),
+                    paymentMethod = paymentMethod,
+                    reference = reference.ifBlank { null }
+                )
+            )
+            _isSubmitting.value = false
+            when (result) {
+                is Resource.Success -> {
+                    _message.value = "Payment recorded successfully!"
+                    refresh()
+                }
+                is Resource.Error -> {
+                    _message.value = result.message ?: "Failed to record payment"
+                }
+                else -> {}
+            }
+        }
     }
 }

@@ -61,24 +61,73 @@ class LocationManager @Inject constructor(
             return LocationResult.Error("Location services (GPS) are turned off. Please enable Location in your device settings.")
         }
 
-        val cancellationTokenSource = CancellationTokenSource()
-        val freshLocation: Location? = withTimeoutOrNull(timeoutMillis) {
+        // 1. Try Fused High Accuracy with a sub-timeout (e.g. 50% of timeoutMillis)
+        var tokenSource = CancellationTokenSource()
+        val highAccuracyTimeout = (timeoutMillis * 0.5).toLong().coerceAtLeast(2_000L)
+        var freshLocation: Location? = withTimeoutOrNull(highAccuracyTimeout) {
             try {
                 fusedLocationClient.getCurrentLocation(
                     Priority.PRIORITY_HIGH_ACCURACY,
-                    cancellationTokenSource.token
-                ).awaitTask(cancellationTokenSource)
+                    tokenSource.token
+                ).awaitTask(tokenSource)
             } catch (_: Exception) {
                 null
             }
         }
 
-        val locationToUse = freshLocation ?: run {
+        // 2. Try Fused Balanced Power Accuracy if High Accuracy returned null
+        if (freshLocation == null) {
+            tokenSource = CancellationTokenSource()
+            val balancedTimeout = (timeoutMillis * 0.3).toLong().coerceAtLeast(1_500L)
+            freshLocation = withTimeoutOrNull(balancedTimeout) {
+                try {
+                    fusedLocationClient.getCurrentLocation(
+                        Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                        tokenSource.token
+                    ).awaitTask(tokenSource)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+
+        // 3. Try Fused Last Location
+        var locationToUse = freshLocation ?: run {
             try {
                 fusedLocationClient.lastLocation.awaitTask()
             } catch (_: Exception) {
                 null
             }
+        }
+
+        // 4. Try System LocationManager providers (GPS, Network, Passive)
+        if (locationToUse == null) {
+            val providers = listOf(
+                android.location.LocationManager.GPS_PROVIDER,
+                android.location.LocationManager.NETWORK_PROVIDER,
+                android.location.LocationManager.PASSIVE_PROVIDER
+            )
+            for (provider in providers) {
+                try {
+                    val loc = sysLocationManager.getLastKnownLocation(provider)
+                    if (loc != null) {
+                        locationToUse = loc
+                        break
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        // 5. Fallback for Emulator / Debug environments
+        if (locationToUse == null && (isEmulator() || com.als.presence.BuildConfig.DEBUG)) {
+            return LocationResult.Success(
+                GpsLocation(
+                    latitude = 37.4220936,
+                    longitude = -122.083922,
+                    accuracyMeters = 5.0f,
+                    isMocked = true
+                )
+            )
         }
 
         return if (locationToUse != null) {
@@ -101,6 +150,19 @@ class LocationManager @Inject constructor(
         }
     }
 
+    private fun isEmulator(): Boolean {
+        return (Build.FINGERPRINT.startsWith("generic")
+                || Build.FINGERPRINT.startsWith("unknown")
+                || Build.MODEL.contains("google_sdk")
+                || Build.MODEL.contains("Emulator")
+                || Build.MODEL.contains("Android SDK built for x86")
+                || Build.MANUFACTURER.contains("Genymotion")
+                || (Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic"))
+                || "google_sdk" == Build.PRODUCT
+                || Build.HARDWARE.contains("goldfish")
+                || Build.HARDWARE.contains("ranchu"))
+    }
+
     suspend fun getCurrentLocation(timeoutMillis: Long = 10_000L): GpsLocation? {
         return when (val res = getCurrentLocationResult(timeoutMillis)) {
             is LocationResult.Success -> res.location
@@ -116,9 +178,15 @@ class LocationManager @Inject constructor(
         // 1. Try Ola Maps API if API Key is supplied or available
         if (olaApiKey.isNotBlank()) {
             try {
-                val response = olaMapsApiService.reverseGeocode("$latitude,$longitude", olaApiKey)
+                val requestId = java.util.UUID.randomUUID().toString()
+                val response = olaMapsApiService.reverseGeocode(
+                    latlng = "$latitude,$longitude",
+                    apiKey = olaApiKey,
+                    requestId = requestId
+                )
                 if (response.isSuccessful) {
-                    val result = response.body()?.results?.firstOrNull()
+                    val body = response.body()
+                    val result = body?.results?.firstOrNull() ?: body?.result
                     if (result != null) {
                         val components = result.addressComponents
                         val pincode = components.firstOrNull { it.types.contains("postal_code") }?.longName.orEmpty()
@@ -128,13 +196,16 @@ class LocationManager @Inject constructor(
                         val block = components.firstOrNull { it.types.contains("sublocality") || it.types.contains("sublocality_level_1") }?.longName
                             ?: components.firstOrNull { it.types.contains("locality") }?.longName.orEmpty()
 
-                        return@withContext ReverseGeocodedAddress(
-                            streetAddress = result.formattedAddress.ifBlank { result.name.orEmpty() },
-                            pincode = pincode,
-                            state = state,
-                            district = district,
-                            block = block
-                        )
+                        val formattedStreet = result.formattedAddress.ifBlank { result.name.orEmpty() }
+                        if (formattedStreet.isNotBlank()) {
+                            return@withContext ReverseGeocodedAddress(
+                                streetAddress = formattedStreet,
+                                pincode = pincode,
+                                state = state,
+                                district = district,
+                                block = block
+                            )
+                        }
                     }
                 }
             } catch (_: Exception) {

@@ -8,8 +8,15 @@ import javax.inject.Inject
 class GoogleExchangeUseCase @Inject constructor(
     private val authRepository: AuthRepository
 ) {
-    suspend operator fun invoke(code: String = "", redirectUri: String = "", idToken: String = ""): Resource<User> {
-        val token = idToken.ifBlank { code }
-        return authRepository.googleExchange(token)
-    }
+    /**
+     * Either credential works; the server prefers [idToken] when both are present.
+     * Keep them as distinct fields: an ID token sent as `code` is rejected by Google.
+     */
+    suspend operator fun invoke(
+        idToken: String = "",
+        serverAuthCode: String = ""
+    ): Resource<User> = authRepository.googleExchange(
+        idToken = idToken.ifBlank { null },
+        serverAuthCode = serverAuthCode.ifBlank { null }
+    )
 }

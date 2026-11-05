@@ -39,10 +39,28 @@ CORS_ORIGIN=https://presence.app
 
 ---
 
-## 3. Android Build & Release Configuration
-1. **Gradle Build Command**: `./gradlew assembleRelease`
-2. **Keystore Configuration**: Release signing keys injected via environment variables or `local.properties` (never committed to git).
-3. **ProGuard / R8 Rules**: Configured in `app/proguard-rules.pro` to keep ONNX Runtime native bindings, KotlinX Serialization DTOs, and Retrofit interfaces.
+## 3. Android Build & GitHub Release Distribution
+The project uses GitHub Releases for client APK distribution instead of Google Play Store.
+
+### 3.1 APK Output Configuration
+- **Gradle Task**: `./gradlew assembleRelease`
+- **Output File**: `app/build/outputs/apk/release/presence.apk`
+- **Filename Rule**: Configured in `app/build.gradle.kts` via `applicationVariants` to automatically set `outputFileName = "presence.apk"`.
+
+### 3.2 Git Remote & Repository Setup
+To push updates to the GitHub repository:
+```bash
+git remote add origin https://github.com/Sahin00789/presence-android-app.git
+git branch -M main
+git push -u origin main
+```
+
+### 3.3 GitHub Release Deployment Workflow
+1. **Automated CI/CD Release (GitHub Actions)**:
+   - On every push to `main` branch, `.github/workflows/android-release.yml` automatically compiles `presence.apk` and updates the `latest` GitHub Release tag.
+   - Users can always download the latest APK directly from `https://github.com/Sahin00789/presence-android-app/releases`.
+2. **Local PowerShell Release Script**:
+   - Run `.\scripts\release-github.ps1` in PowerShell to assemble the release APK and publish/update the `latest` release on GitHub via `gh` CLI.
 
 ---
 

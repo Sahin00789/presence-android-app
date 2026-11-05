@@ -13,7 +13,7 @@ Organizations define reusable shifts in `shifts`:
 ## 2. Shift Assignments & Weekday Filters (`employee_shift_assignments`)
 - **Premises Selection at Top**: Shifts management UI provides a top premises filter bar to view shift roster assignments and templates by premises.
 - **Independent Weekday Assignments**: Day-of-week assignments support specific days and rates (`present_pay`, `absent_pay`, `leave_pay`, `half_day_pay`).
-- **Direct Assignment from Staff/Manager Cards**: Managers and Owners can assign shifts directly from any Staff or Manager card in the dashboard.
+- **Direct Assignment from Employee Cards**: Owners can assign shifts directly from any Employee card in the dashboard.
 
 ---
 
@@ -28,4 +28,4 @@ For shifts crossing midnight:
 ## 4. Off-Day Schedules & Holidays
 - **Weekly Offs**: Automatically derived per employee in `weekly_offs` based on active shift assignments. Any weekday with **no active shift assigned** for that employee is treated as a weekly off. Weekly off configuration is read-only via API (GET only); assignment changes sync weekly offs automatically.
 - **Public Holidays**: Configured in `holiday_calendars` via the separate Holidays module (`/api/v1/holidays`).
-- **Off-Day / Holiday Work**: If Staff clocks in on a scheduled weekly off or public holiday, the attendance engine records it as a normal present day.
+- **Off-Day / Holiday Work**: If Employee clocks in on a scheduled weekly off or public holiday, the attendance engine records it as a normal present day.

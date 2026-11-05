@@ -27,7 +27,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -62,15 +64,22 @@ import coil.compose.AsyncImage
 import com.als.presence.ui.auth.AuthViewModel
 import com.als.presence.ui.dashboard.common.EditProfileModal
 import com.als.presence.ui.dashboard.owner.modals.EditOrganizationModal
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -93,6 +102,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -108,38 +118,60 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.als.presence.R
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.als.presence.core.designsystem.RoleManagerPrimary
 import com.als.presence.core.designsystem.RoleOwnerPrimary
 import com.als.presence.core.designsystem.RoleStaffPrimary
 import com.als.presence.domain.model.Role
 import com.als.presence.domain.model.User
-import com.als.presence.ui.dashboard.common.LeaveScreen
 import com.als.presence.ui.dashboard.common.SalaryPaymentScreen
-import com.als.presence.ui.dashboard.manager.ManagerDashboardScreen
-import com.als.presence.ui.dashboard.manager.screens.HolidayManagementScreen
-import com.als.presence.ui.dashboard.manager.screens.OvertimeScreen
-import com.als.presence.ui.dashboard.manager.screens.ShiftManagementScreen
 import com.als.presence.ui.dashboard.owner.OwnerDashboardScreen
 import com.als.presence.ui.dashboard.common.MyShiftsScreen
 import com.als.presence.ui.dashboard.owner.screens.EmployeesManagementScreen
+import com.als.presence.ui.dashboard.owner.screens.OwnerHolidayScreen
+import com.als.presence.ui.dashboard.owner.screens.OwnerLeaveScreen
 import com.als.presence.ui.dashboard.owner.screens.OrganizationSettingsScreen
+import com.als.presence.ui.dashboard.owner.screens.OwnerOvertimeScreen
+import com.als.presence.ui.dashboard.employee.screens.EmployeeHolidayScreen
+import com.als.presence.ui.dashboard.employee.screens.EmployeeLeaveScreen
+import com.als.presence.ui.dashboard.employee.screens.EmployeeOvertimeScreen
 import com.als.presence.ui.dashboard.owner.screens.PremisesManagementScreen
-import com.als.presence.ui.dashboard.staff.EmployeeDashboardScreen
+import com.als.presence.ui.dashboard.owner.screens.ShiftManagementScreen
+import com.als.presence.ui.dashboard.employee.EmployeeDashboardScreen
 import kotlinx.coroutines.launch
+
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import com.als.presence.ui.dashboard.common.MyAttendanceScreen
+import com.als.presence.ui.dashboard.common.MySalaryPaymentsScreen
+import com.als.presence.ui.dashboard.common.TopBarServerIcon
+import com.als.presence.ui.dashboard.common.TopBarSyncRefreshButton
+import com.als.presence.ui.dashboard.common.LocalSyncState
+import com.als.presence.ui.dashboard.common.SyncState
+import com.als.presence.ui.dashboard.owner.viewmodels.OwnerWorkforceViewModel
+import com.als.presence.ui.dashboard.owner.viewmodels.OwnerAttendanceViewModel
+import com.als.presence.ui.dashboard.common.LocationsViewModel
+import com.als.presence.ui.dashboard.employee.viewmodels.EmployeeClockInViewModel
+import com.als.presence.ui.dashboard.employee.viewmodels.EmployeeAttendanceViewModel
+import com.als.presence.ui.dashboard.employee.viewmodels.EmployeeLedgerViewModel
+import androidx.compose.runtime.CompositionLocalProvider
 
 private enum class SecondaryDestination(val label: String) {
     MY_SHIFTS("My Shifts"),
+    MY_SALARY_PAYMENTS("My Salary"),
+    MY_ATTENDANCE("My Attendance"),
     EMPLOYEES_MANAGEMENT("Employees Manager"),
     PREMISES_MANAGEMENT("Premises & Geofencing"),
     SHIFT_MANAGEMENT("Working Shifts"),
-    SALARY_PAYMENT("Salary Payments"),
+    SALARY_PAYMENT("Salary Payment Console"),
     HOLIDAY_MANAGEMENT("Holiday Calendar"),
     LEAVE("Leave Requests"),
     OVERTIME("Overtime Console"),
-    ORGANIZATION_SETTINGS("Organization & Owner")
+    ORGANIZATION_SETTINGS("Organization & Profile")
 }
 
 private const val PRIMARY_ROUTE_PREFIX = "dashboard/primary/"
@@ -178,6 +210,10 @@ fun DashboardScreen(
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
     isOnline: Boolean = true,
+    isServerConnected: Boolean = true,
+    onCheckServerHealth: () -> Unit = {},
+    isSyncing: Boolean = false,
+    onSyncClick: () -> Unit = {},
     notificationsViewModel: NotificationsViewModel = hiltViewModel()
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -207,6 +243,7 @@ fun DashboardScreen(
     var showNotificationsDrawer by remember { mutableStateOf(false) }
     var showEditProfileModal by remember { mutableStateOf(false) }
     var showEditOrgModal by remember { mutableStateOf(false) }
+    var showSignOutConfirmationDialog by remember { mutableStateOf(false) }
 
     // The drawer is opened *over* the secondary screen and the back stack only
     // unwinds once it is fully in place. Popping first would expose the tab under
@@ -230,16 +267,10 @@ fun DashboardScreen(
                 PresenceBottomItem("Locations", Icons.Default.LocationOn),
                 PresenceBottomItem("Reports", Icons.Default.BarChart)
             )
-            Role.MANAGER -> listOf(
-                PresenceBottomItem("Attendance", Icons.Default.EventAvailable),
-                PresenceBottomItem("Staff", Icons.Default.People),
-                PresenceBottomItem("Locations", Icons.Default.LocationOn)
-            )
-            Role.STAFF -> listOf(
-                PresenceBottomItem("Check-in", Icons.Default.Home),
-                PresenceBottomItem("Shifts", Icons.Default.Schedule),
-                PresenceBottomItem("Locations", Icons.Default.LocationOn),
-                PresenceBottomItem("Earnings", Icons.Default.AccountBalanceWallet)
+            Role.EMPLOYEE -> listOf(
+                PresenceBottomItem("Clock In", Icons.Default.Schedule),
+                PresenceBottomItem("Attendance", Icons.Default.Schedule),
+                PresenceBottomItem("Ledger", Icons.Default.AccountBalanceWallet)
             )
         }
     }
@@ -250,7 +281,6 @@ fun DashboardScreen(
                 DrawerSection(
                     title = "ORGANIZATION",
                     items = listOf(
-                        DrawerEntry(SecondaryDestination.ORGANIZATION_SETTINGS, Icons.Default.EditNote),
                         DrawerEntry(SecondaryDestination.EMPLOYEES_MANAGEMENT, Icons.Default.Badge),
                         DrawerEntry(SecondaryDestination.PREMISES_MANAGEMENT, Icons.Default.Business),
                         DrawerEntry(SecondaryDestination.SALARY_PAYMENT, Icons.Default.Payments)
@@ -266,28 +296,9 @@ fun DashboardScreen(
                     )
                 )
             )
-            Role.MANAGER -> listOf(
+            Role.EMPLOYEE -> listOf(
                 DrawerSection(
-                    title = "PERSONAL WORKSPACE",
-                    items = listOf(
-                        DrawerEntry(SecondaryDestination.MY_SHIFTS, Icons.Default.Schedule)
-                    )
-                ),
-                DrawerSection(
-                    title = "OPERATIONS & LEAVE",
-                    items = listOf(
-                        DrawerEntry(SecondaryDestination.EMPLOYEES_MANAGEMENT, Icons.Default.Badge),
-                        DrawerEntry(SecondaryDestination.PREMISES_MANAGEMENT, Icons.Default.Business),
-                        DrawerEntry(SecondaryDestination.SALARY_PAYMENT, Icons.Default.Payments),
-                        DrawerEntry(SecondaryDestination.OVERTIME, Icons.Default.VerifiedUser),
-                        DrawerEntry(SecondaryDestination.HOLIDAY_MANAGEMENT, Icons.Default.CalendarMonth),
-                        DrawerEntry(SecondaryDestination.LEAVE, Icons.Default.EventAvailable)
-                    )
-                )
-            )
-            Role.STAFF -> listOf(
-                DrawerSection(
-                    title = "SCHEDULING & LEAVE",
+                    title = "MY WORKSPACE",
                     items = listOf(
                         DrawerEntry(SecondaryDestination.MY_SHIFTS, Icons.Default.Schedule),
                         DrawerEntry(SecondaryDestination.OVERTIME, Icons.Default.VerifiedUser),
@@ -322,34 +333,74 @@ fun DashboardScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        ModalNavigationDrawer(
+    val ownerWorkforceViewModel: OwnerWorkforceViewModel = hiltViewModel()
+    val ownerAttendanceViewModel: OwnerAttendanceViewModel = hiltViewModel()
+    val locationsViewModel: LocationsViewModel = hiltViewModel()
+
+    val employeeClockInViewModel: EmployeeClockInViewModel = hiltViewModel()
+    val employeeAttendanceViewModel: EmployeeAttendanceViewModel = hiltViewModel()
+    val employeeLedgerViewModel: EmployeeLedgerViewModel = hiltViewModel()
+
+    val handleSelectiveRefresh = remember(user.role, selectedBottomTab) {
+        {
+            when (user.role) {
+                Role.OWNER -> {
+                    when (selectedBottomTab) {
+                        0 -> ownerWorkforceViewModel.refresh()
+                        1 -> {
+                            locationsViewModel.refresh()
+                            ownerWorkforceViewModel.refresh()
+                        }
+                        2 -> {
+                            ownerAttendanceViewModel.refresh()
+                            ownerWorkforceViewModel.refresh()
+                        }
+                        else -> ownerWorkforceViewModel.refresh()
+                    }
+                }
+                Role.EMPLOYEE -> {
+                    when (selectedBottomTab) {
+                        0 -> employeeClockInViewModel.refresh()
+                        1 -> employeeAttendanceViewModel.refresh()
+                        2 -> employeeLedgerViewModel.refresh()
+                        else -> employeeClockInViewModel.refresh()
+                    }
+                }
+            }
+        }
+    }
+
+    val syncState = remember(isSyncing, handleSelectiveRefresh) {
+        SyncState(isSyncing = isSyncing, onSyncClick = handleSelectiveRefresh)
+    }
+
+    CompositionLocalProvider(LocalSyncState provides syncState) {
+        Box(modifier = modifier.fillMaxSize()) {
+            ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
-                // The drawer covers the whole window. Backing out of a secondary
-                // screen swaps the destination underneath while the drawer is in
-                // place, so a partial-width sheet would expose that swap in the
-                // uncovered strip and read as a flash of the previous tab.
-                Surface(
+                ModalDrawerSheet(
+                    drawerShape = RectangleShape,
+                    drawerContainerColor = MaterialTheme.colorScheme.surface,
+                    drawerTonalElevation = 6.dp,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .semantics { paneTitle = "Navigation menu" },
-                    color = MaterialTheme.colorScheme.surface
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                        .semantics { paneTitle = "Navigation menu" }
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .statusBarsPadding()
-                            .navigationBarsPadding()
-                            .padding(16.dp)
+                            .padding(horizontal = 16.dp, vertical = 16.dp)
                             .verticalScroll(scrollState),
                         verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
+                            // Header Logo & App Title
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 16.dp),
+                                    .padding(bottom = 16.dp, top = 8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -362,23 +413,23 @@ fun DashboardScreen(
                                         painter = painterResource(R.drawable.ic_logo_presence),
                                         contentDescription = "Presence App Logo",
                                         modifier = Modifier
-                                            .size(42.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                            .size(44.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+                                            .padding(4.dp)
                                     )
 
                                     Column {
                                         Text(
                                             text = "Presence",
-                                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
+                                            style = MaterialTheme.typography.titleLarge,
                                             fontWeight = FontWeight.ExtraBold,
                                             letterSpacing = (-0.4).sp,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
-                                        Spacer(modifier = Modifier.height(1.dp))
                                         Text(
-                                            text = "Built by Arman Logical Systems",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                            text = "Staff & Shift Attendance",
+                                            style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Medium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -390,7 +441,7 @@ fun DashboardScreen(
                                     modifier = Modifier
                                         .size(36.dp)
                                         .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Close,
@@ -401,36 +452,36 @@ fun DashboardScreen(
                                 }
                             }
 
+                            // Modern Profile & Organization Hero Card
                             Card(
-                                shape = RoundedCornerShape(20.dp),
+                                shape = RoundedCornerShape(24.dp),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = roleColor.copy(alpha = 0.1f)
+                                    containerColor = roleColor.copy(alpha = 0.08f)
                                 ),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        scope.launch { drawerState.close() }
-                                        showEditProfileModal = true
+                                        openSecondary(SecondaryDestination.ORGANIZATION_SETTINGS)
                                     }
                                     .border(
                                         width = 1.dp,
-                                        color = roleColor.copy(alpha = 0.25f),
-                                        shape = RoundedCornerShape(20.dp)
+                                        color = roleColor.copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(24.dp)
                                     )
                             ) {
-                                Column(modifier = Modifier.padding(18.dp)) {
+                                Column(modifier = Modifier.padding(16.dp)) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
                                         Box(
                                             modifier = Modifier
-                                                .size(52.dp)
+                                                .size(50.dp)
                                                 .clip(CircleShape)
                                                 .background(roleColor)
-                                                .border(2.dp, Color.White.copy(alpha = 0.9f), CircleShape),
+                                                .border(2.dp, Color.White, CircleShape),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             if (!user.avatarUrl.isNullOrBlank()) {
@@ -455,68 +506,95 @@ fun DashboardScreen(
                                             Text(
                                                 text = user.fullName,
                                                 style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
-                                            Spacer(modifier = Modifier.height(2.dp))
                                             Text(
                                                 text = user.email,
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
                                         }
                                         IconButton(
                                             onClick = {
-                                                scope.launch { drawerState.close() }
-                                                showEditProfileModal = true
+                                                openSecondary(SecondaryDestination.ORGANIZATION_SETTINGS)
                                             },
-                                            modifier = Modifier.size(32.dp)
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .clip(CircleShape)
+                                                .background(roleColor.copy(alpha = 0.12f))
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.Edit,
                                                 contentDescription = "Edit Profile",
                                                 tint = roleColor,
-                                                modifier = Modifier.size(18.dp)
+                                                modifier = Modifier.size(16.dp)
                                             )
                                         }
                                     }
+
                                     Spacer(modifier = Modifier.height(12.dp))
-                                    Surface(
-                                        color = roleColor.copy(alpha = 0.18f),
-                                        shape = RoundedCornerShape(10.dp)
+                                    HorizontalDivider(color = roleColor.copy(alpha = 0.15f))
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.weight(1f)
                                         ) {
                                             Icon(
-                                                imageVector = getRoleIcon(user.role),
+                                                imageVector = Icons.Default.Business,
                                                 contentDescription = null,
                                                 tint = roleColor,
-                                                modifier = Modifier.size(16.dp)
+                                                modifier = Modifier.size(18.dp)
                                             )
                                             Text(
-                                                text = "${user.role.name} • ${user.organizationName}",
-                                                style = MaterialTheme.typography.labelMedium,
+                                                text = user.organizationName ?: "Organization",
+                                                style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.Bold,
-                                                color = roleColor
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+
+                                        Surface(
+                                            color = roleColor.copy(alpha = 0.18f),
+                                            shape = CircleShape
+                                        ) {
+                                            Text(
+                                                text = user.role.name,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = roleColor,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                             )
                                         }
                                     }
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                            // The drawer is the home of everything the bottom
-                            // row deliberately leaves out; the primary tabs stay
-                            // on the bottom bar and are not repeated here.
                             drawerSections.forEachIndexed { index, section ->
                                 if (index > 0) DrawerDivider()
                                 DrawerSectionHeader(section.title)
                                 section.items.forEach { entry ->
+                                    val itemLabel = when {
+                                        entry.destination == SecondaryDestination.OVERTIME && user.role == Role.EMPLOYEE -> "Assigned Overtimes"
+                                        entry.destination == SecondaryDestination.LEAVE && user.role == Role.EMPLOYEE -> "Apply Leave"
+                                        entry.destination == SecondaryDestination.LEAVE && user.role == Role.OWNER -> "Leave Requests"
+                                        else -> entry.destination.label
+                                    }
                                     DrawerActionItem(
-                                        label = entry.destination.label,
+                                        label = itemLabel,
                                         icon = entry.icon,
                                         selected = activeSecondary == entry.destination,
                                         accentColor = roleColor,
@@ -528,39 +606,40 @@ fun DashboardScreen(
 
                         Column {
                             Spacer(modifier = Modifier.height(16.dp))
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                            Spacer(modifier = Modifier.height(10.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                            Spacer(modifier = Modifier.height(12.dp))
 
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f))
                                     .clickable {
                                         scope.launch { drawerState.close() }
-                                        onLogout()
+                                        showSignOutConfirmationDialog = true
                                     }
-                                    .padding(horizontal = 10.dp, vertical = 11.dp),
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(RoundedCornerShape(9.dp))
-                                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.1f)),
+                                        .size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.15f)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.ExitToApp,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text(
                                     text = "Sign Out Account",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.error
                                 )
                             }
@@ -580,6 +659,7 @@ fun DashboardScreen(
                     // including the status-bar inset, so the workspace bar steps
                     // out while one is open.
                     if (activeSecondary == null) {
+                        val context = LocalContext.current
                         Column {
                             DashboardTopAppBar(
                                 user = user,
@@ -593,15 +673,27 @@ fun DashboardScreen(
                                     showNotificationsDrawer = true
                                 },
                                 onOrgClick = {
-                                    if (user.role == Role.OWNER) {
-                                        showEditOrgModal = true
-                                    } else {
-                                        showEditProfileModal = true
-                                    }
+                                    openSecondary(SecondaryDestination.ORGANIZATION_SETTINGS)
                                 },
-                                unreadCount = unreadNotifications
+                                unreadCount = unreadNotifications,
+                                isOnline = isOnline,
+                                isServerConnected = isServerConnected,
+                                onServerIconClick = {
+                                    if (!isOnline || !isServerConnected) {
+                                        onCheckServerHealth()
+                                        val toastText = if (!isOnline) {
+                                            "Offline: Check internet connection"
+                                        } else {
+                                            "Server Connection Error. Retrying…"
+                                        }
+                                        Toast.makeText(context, toastText, Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             )
-                            ConnectivityBanner(isOnline = isOnline)
+                            ConnectivityBanner(
+                                isOnline = isOnline,
+                                isServerConnected = isServerConnected
+                            )
                         }
                     }
                 },
@@ -655,38 +747,22 @@ fun DashboardScreen(
                     ) {
                         composable(primaryRoute(0)) {
                             SharedDashboardDestination(dashboardViewModelStoreOwner) {
-                                RoleDashboardContent(
-                                    user = user,
-                                    tabIndex = 0,
-                                    onEditOrgClick = { showEditOrgModal = true }
-                                )
+                                RoleDashboardContent(user = user, tabIndex = 0)
                             }
                         }
                         composable(primaryRoute(1)) {
                             SharedDashboardDestination(dashboardViewModelStoreOwner) {
-                                RoleDashboardContent(
-                                    user = user,
-                                    tabIndex = 1,
-                                    onEditOrgClick = { showEditOrgModal = true }
-                                )
+                                RoleDashboardContent(user = user, tabIndex = 1)
                             }
                         }
                         composable(primaryRoute(2)) {
                             SharedDashboardDestination(dashboardViewModelStoreOwner) {
-                                RoleDashboardContent(
-                                    user = user,
-                                    tabIndex = 2,
-                                    onEditOrgClick = { showEditOrgModal = true }
-                                )
+                                RoleDashboardContent(user = user, tabIndex = 2)
                             }
                         }
                         composable(primaryRoute(3)) {
                             SharedDashboardDestination(dashboardViewModelStoreOwner) {
-                                RoleDashboardContent(
-                                    user = user,
-                                    tabIndex = 3,
-                                    onEditOrgClick = { showEditOrgModal = true }
-                                )
+                                RoleDashboardContent(user = user, tabIndex = 3)
                             }
                         }
 
@@ -755,6 +831,50 @@ fun DashboardScreen(
             onMarkAllRead = notificationsViewModel::markAllRead,
             onClearAll = notificationsViewModel::clearAll
         )
+
+        if (showSignOutConfirmationDialog) {
+            AlertDialog(
+                onDismissRequest = { showSignOutConfirmationDialog = false },
+                icon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                },
+                title = {
+                    Text(
+                        text = "Sign Out",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Text("Are you sure you want to sign out of your account?")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showSignOutConfirmationDialog = false
+                            onLogout()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
+                    ) {
+                        Text("Sign Out")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showSignOutConfirmationDialog = false }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+    }
     }
 }
 
@@ -771,13 +891,11 @@ private fun SharedDashboardDestination(
 @Composable
 private fun RoleDashboardContent(
     user: User,
-    tabIndex: Int,
-    onEditOrgClick: () -> Unit = {}
+    tabIndex: Int
 ) {
     when (user.role) {
-        Role.OWNER -> OwnerDashboardScreen(user = user, selectedTab = tabIndex, onEditOrgClick = onEditOrgClick)
-        Role.MANAGER -> ManagerDashboardScreen(user = user, selectedTab = tabIndex)
-        Role.STAFF -> EmployeeDashboardScreen(user = user, selectedTab = tabIndex)
+        Role.OWNER -> OwnerDashboardScreen(user = user, selectedTab = tabIndex)
+        Role.EMPLOYEE -> EmployeeDashboardScreen(user = user, selectedTab = tabIndex)
     }
 }
 
@@ -791,10 +909,12 @@ private fun SecondaryDestinationContent(
 ) {
     when (destination) {
         SecondaryDestination.MY_SHIFTS -> MyShiftsScreen(user = user, onBack = onBack)
+        SecondaryDestination.MY_SALARY_PAYMENTS -> MySalaryPaymentsScreen(onBack = onBack)
+        SecondaryDestination.MY_ATTENDANCE -> MyAttendanceScreen(onBack = onBack)
         SecondaryDestination.EMPLOYEES_MANAGEMENT -> EmployeesManagementScreen(
             user = user,
             onBack = onBack,
-            canManage = user.role == Role.OWNER || user.role == Role.MANAGER
+            canManage = user.role == Role.OWNER
         )
         SecondaryDestination.PREMISES_MANAGEMENT -> PremisesManagementScreen(
             onBack = onBack,
@@ -802,18 +922,30 @@ private fun SecondaryDestinationContent(
         )
         SecondaryDestination.SHIFT_MANAGEMENT -> ShiftManagementScreen(
             onBack = onBack,
-            canManage = user.role == Role.OWNER || user.role == Role.MANAGER
+            canManage = user.role == Role.OWNER
         )
         SecondaryDestination.SALARY_PAYMENT -> SalaryPaymentScreen(onBack = onBack)
-        SecondaryDestination.HOLIDAY_MANAGEMENT -> HolidayManagementScreen(
-            onBack = onBack,
-            canManage = user.role == Role.OWNER || user.role == Role.MANAGER
-        )
-        SecondaryDestination.LEAVE -> LeaveScreen(
-            role = user.role,
-            onBack = onBack
-        )
-        SecondaryDestination.OVERTIME -> OvertimeScreen(onBack = onBack)
+        SecondaryDestination.HOLIDAY_MANAGEMENT -> {
+            if (user.role == Role.OWNER) {
+                OwnerHolidayScreen(onBack = onBack)
+            } else {
+                EmployeeHolidayScreen(onBack = onBack)
+            }
+        }
+        SecondaryDestination.LEAVE -> {
+            if (user.role == Role.OWNER) {
+                OwnerLeaveScreen(user = user, onBack = onBack)
+            } else {
+                EmployeeLeaveScreen(user = user, onBack = onBack)
+            }
+        }
+        SecondaryDestination.OVERTIME -> {
+            if (user.role == Role.OWNER) {
+                OwnerOvertimeScreen(onBack = onBack)
+            } else {
+                EmployeeOvertimeScreen(user = user, onBack = onBack)
+            }
+        }
         SecondaryDestination.ORGANIZATION_SETTINGS -> OrganizationSettingsScreen(
             user = user,
             onBack = onBack,
@@ -826,19 +958,19 @@ private fun SecondaryDestinationContent(
 @Composable
 private fun DrawerSectionHeader(title: String) {
     Text(
-        text = title.uppercase(),
-        style = MaterialTheme.typography.labelSmall,
+        text = title,
+        style = MaterialTheme.typography.labelMedium,
         fontWeight = FontWeight.ExtraBold,
-        letterSpacing = 1.2.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+        letterSpacing = 0.8.sp,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
     )
 }
 
 @Composable
 private fun DrawerDivider() {
     Spacer(modifier = Modifier.height(8.dp))
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
     Spacer(modifier = Modifier.height(4.dp))
 }
 
@@ -853,24 +985,24 @@ private fun DrawerActionItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) accentColor.copy(alpha = 0.12f) else Color.Transparent)
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (selected) accentColor.copy(alpha = 0.14f) else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 11.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(32.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(accentColor.copy(alpha = if (selected) 0.2f else 0.1f)),
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(accentColor.copy(alpha = if (selected) 0.22f else 0.1f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = accentColor,
-                modifier = Modifier.size(17.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
         Spacer(modifier = Modifier.width(12.dp))
@@ -885,14 +1017,12 @@ private fun DrawerActionItem(
 
 private fun getRoleColor(role: Role): Color = when (role) {
     Role.OWNER -> RoleOwnerPrimary
-    Role.MANAGER -> RoleManagerPrimary
-    Role.STAFF -> RoleStaffPrimary
+    Role.EMPLOYEE -> RoleStaffPrimary
 }
 
 private fun getRoleIcon(role: Role): ImageVector = when (role) {
     Role.OWNER -> Icons.Default.AdminPanelSettings
-    Role.MANAGER -> Icons.Default.SupervisorAccount
-    Role.STAFF -> Icons.Default.Badge
+    Role.EMPLOYEE -> Icons.Default.Badge
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -902,37 +1032,63 @@ private fun DashboardTopAppBar(
     roleColor: Color,
     onNavigationClick: () -> Unit,
     onNotificationClick: () -> Unit,
-    onOrgClick: () -> Unit = {},
     unreadCount: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOrgClick: () -> Unit = {},
+    isOnline: Boolean = true,
+    isServerConnected: Boolean = true,
+    onServerIconClick: () -> Unit = {}
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
+        tonalElevation = 2.dp,
         modifier = modifier.fillMaxWidth()
     ) {
         Column {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(9.dp),
-                        modifier = Modifier.clickable(onClick = onOrgClick)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OrganizationMark(
-                            name = user.organizationName.orEmpty(),
-                            logoUrl = user.organizationLogoUrl,
-                            accent = roleColor
-                        )
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = CircleShape,
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .clickable(onClick = onOrgClick)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                OrganizationMark(
+                                    name = user.organizationName.orEmpty(),
+                                    logoUrl = user.organizationLogoUrl,
+                                    accent = roleColor
+                                )
+                                Text(
+                                    text = user.organizationName.orEmpty().ifBlank { "Organization" },
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = 14.sp
+                                    ),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
                         Text(
-                            text = user.organizationName.orEmpty().ifBlank { "Organization" },
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontSize = 16.sp,
-                                letterSpacing = (-0.3).sp
+                            text = "/ ${user.role.name}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 9.5.sp,
+                                letterSpacing = 0.5.sp
                             ),
-                            fontWeight = FontWeight.ExtraBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            fontWeight = FontWeight.Bold,
+                            color = roleColor,
+                            maxLines = 1
                         )
                     }
                 },
@@ -940,55 +1096,78 @@ private fun DashboardTopAppBar(
                     IconButton(
                         onClick = onNavigationClick,
                         modifier = Modifier
-                            .padding(start = 10.dp)
-                            .size(38.dp)
+                            .padding(start = 8.dp)
+                            .size(40.dp)
                             .clip(CircleShape)
-                            .background(roleColor.copy(alpha = 0.12f))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                     ) {
                         Icon(
                             imageVector = Icons.Default.Menu,
                             contentDescription = "Open Navigation Menu",
-                            tint = roleColor,
-                            modifier = Modifier.size(19.dp)
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 },
                 actions = {
-                    Box(modifier = Modifier.padding(end = 10.dp)) {
-                        IconButton(
-                            onClick = onNotificationClick,
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Notifications,
-                                contentDescription = "Notifications",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(top = 3.dp, end = 3.dp)
-                                .size(if (unreadCount > 0) 8.dp else 6.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (unreadCount > 0) MaterialTheme.colorScheme.error
-                                    else roleColor
-                                )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        TopBarServerIcon(
+                            isOnline = isOnline,
+                            isServerConnected = isServerConnected,
+                            onClick = onServerIconClick
                         )
+
+                        Box(
+                            modifier = Modifier.size(40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            IconButton(
+                                onClick = onNotificationClick,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Notifications,
+                                    contentDescription = "Notifications",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            if (unreadCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(top = 2.dp, end = 2.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.error)
+                                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                                        color = MaterialTheme.colorScheme.onError,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        lineHeight = 9.sp
+                                    )
+                                }
+                            }
+                        }
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent
                 ),
                 windowInsets = TopAppBarDefaults.windowInsets
             )
             HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                 thickness = 1.dp
             )
         }
@@ -1008,17 +1187,18 @@ private fun OrganizationMark(
     accent: Color,
     modifier: Modifier = Modifier
 ) {
+    val markShape = RoundedCornerShape(8.dp)
     if (!logoUrl.isNullOrBlank()) {
         AsyncImage(
             model = logoUrl,
             contentDescription = "$name logo",
             modifier = modifier
-                .size(30.dp)
-                .clip(RoundedCornerShape(9.dp))
+                .size(28.dp)
+                .clip(markShape)
                 .border(
                     width = 1.dp,
                     color = accent.copy(alpha = 0.32f),
-                    shape = RoundedCornerShape(9.dp)
+                    shape = markShape
                 ),
             contentScale = ContentScale.Crop
         )
@@ -1026,20 +1206,20 @@ private fun OrganizationMark(
         val initial = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "O"
         Box(
             modifier = modifier
-                .size(30.dp)
-                .clip(RoundedCornerShape(9.dp))
+                .size(28.dp)
+                .clip(markShape)
                 .background(accent.copy(alpha = 0.14f))
                 .border(
                     width = 1.dp,
                     color = accent.copy(alpha = 0.32f),
-                    shape = RoundedCornerShape(9.dp)
+                    shape = markShape
                 )
                 .semantics { contentDescription = "$name logo" },
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = initial,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = accent
             )

@@ -2,26 +2,65 @@ package com.als.presence.data.repository
 
 import com.als.presence.core.common.Resource
 import com.als.presence.core.network.safeApiCall
+import com.als.presence.data.local.EmployeeDao
+import com.als.presence.data.local.EmployeeEntity
 import com.als.presence.data.model.*
 import com.als.presence.data.remote.EmployeeApiService
+import com.als.presence.data.sync.SnapshotProjectionEngine
 import com.als.presence.domain.repository.EmployeeRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class EmployeeRepositoryImpl @Inject constructor(
-    private val employeeApiService: EmployeeApiService
+    private val employeeApiService: EmployeeApiService,
+    private val employeeDao: EmployeeDao,
+    private val snapshotProjectionEngine: SnapshotProjectionEngine
 ) : EmployeeRepository {
 
-    override suspend fun getEmployees(): Resource<List<StaffDto>> {
-        return safeApiCall("Error loading employees") {
-            employeeApiService.list()
-        }
+    fun observeEmployees(): Flow<List<StaffDto>> {
+        return employeeDao.observeAll().map { list -> list.map { it.toDto() } }
     }
 
-    override suspend fun createEmployee(request: CreateEmployeeRequest): Resource<EmployeeDto> = Resource.Success(EmployeeDto(id = "1", fullName = request.fullName ?: "Staff"))
+    override suspend fun getEmployees(): Resource<List<StaffDto>> {
+        val result = safeApiCall("Error loading employees") {
+            employeeApiService.list()
+        }
+        if (result is Resource.Success && result.data != null) {
+            val entities = result.data.map { EmployeeEntity.fromDto(it) }
+            employeeDao.upsertAll(entities)
+            snapshotProjectionEngine.rebuildOwnerEmployeesSnapshot("ALL")
+        }
+        return result
+    }
 
-    override suspend fun deactivateMember(employeeId: String): Resource<Unit> = Resource.Success(Unit)
+    override suspend fun createEmployee(request: CreateEmployeeRequest): Resource<EmployeeDto> {
+        val result = safeApiCall("Error onboarding employee") {
+            employeeApiService.create(request)
+        }
+        if (result is Resource.Success && result.data != null) {
+            employeeDao.upsert(EmployeeEntity.fromDto(result.data))
+            snapshotProjectionEngine.rebuildOwnerEmployeesSnapshot("ALL")
+        }
+        return result
+    }
 
-    override suspend fun getMembers(): Resource<List<OrganizationMemberDto>> = Resource.Success(emptyList())
+    override suspend fun deactivateMember(employeeId: String): Resource<Unit> {
+        val result = safeApiCall("Error deactivating employee") {
+            employeeApiService.deactivate(employeeId)
+        }
+        if (result is Resource.Success) {
+            employeeDao.markDeleted(employeeId)
+            snapshotProjectionEngine.rebuildOwnerEmployeesSnapshot("ALL")
+        }
+        return result
+    }
+
+    override suspend fun getMembers(): Resource<List<OrganizationMemberDto>> {
+        return safeApiCall("Error loading organization members") {
+            employeeApiService.getMembers()
+        }
+    }
 }

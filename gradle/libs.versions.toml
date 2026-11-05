@@ -29,6 +29,7 @@ espressoCore = "3.6.1"
 mockk = "1.13.16"
 turbine = "1.2.0"
 coil = "2.7.0"
+lottieCompose = "6.7.1"
 
 [libraries]
 # AndroidX Core & Lifecycle
@@ -50,6 +51,7 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconsExtended" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", version.ref = "lottieCompose" }
 
 # Dependency Injection - Hilt
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }

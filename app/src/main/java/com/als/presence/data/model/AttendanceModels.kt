@@ -15,9 +15,15 @@ data class AttendanceRecordDto(
     val clockIn: String? = null,
     val clockOut: String? = null,
     val overtimeId: String? = null,
+    val attendanceType: String? = "SHIFT",
+    val shiftName: String? = null,
+    val assignedStartTime: String? = null,
+    val assignedEndTime: String? = null,
     val outsidePingCount: Int = 0,
     val manualOverride: Boolean = false,
     val workedMinutes: Int = 0,
+    val scheduledMinutes: Int = 0,
+    val lateMinutes: Int = 0,
     val createdAt: String? = null
 )
 

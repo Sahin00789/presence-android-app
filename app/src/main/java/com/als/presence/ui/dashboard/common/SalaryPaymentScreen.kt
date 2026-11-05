@@ -3,6 +3,7 @@ package com.als.presence.ui.dashboard.common
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,20 +19,25 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -92,22 +98,7 @@ fun SalaryPaymentScreen(
             crumb = "PAYROLL & FINANCE",
             title = "Salary Payment Console",
             onBack = onBack,
-            actions = {
-                IconButton(
-                    onClick = viewModel::refresh,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                ) {
-                    Icon(
-                        Icons.Default.Refresh,
-                        contentDescription = "Refresh salary payments",
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            onRefresh = viewModel::refresh
         ) {
             SalaryPaymentScreenContent(
                 staffState = staffState,
@@ -115,7 +106,7 @@ fun SalaryPaymentScreen(
                 payrollPeriodsState = periodsState,
                 payrollItemsMap = payrollItemsMap,
                 isSubmitting = isSubmitting,
-                onRecordPayment = { _, _, _, _ -> }
+                onRecordPayment = viewModel::recordPayment
             )
         }
 
@@ -133,12 +124,10 @@ fun SalaryPaymentScreenContent(
     payrollPeriodsState: UiState<List<PayrollPeriodDto>>,
     payrollItemsMap: Map<String, List<PayrollItemDto>>,
     isSubmitting: Boolean,
-    onRecordPayment: (itemId: String, amountCents: Long, paymentMethod: String, reference: String) -> Unit
+    onRecordPayment: (itemId: String, amountPaise: Long, paymentMethod: String, reference: String) -> Unit
 ) {
     val staff = (staffState as? UiState.Success)?.data.orEmpty()
-    val members = (membersState as? UiState.Success)?.data.orEmpty()
     val periods = (payrollPeriodsState as? UiState.Success)?.data.orEmpty()
-    val managers = members.filter { it.role == "MANAGER" }
 
     var searchQuery by remember { mutableStateOf("") }
     var monthPayTarget by remember { mutableStateOf<SalaryMonthPayTarget?>(null) }
@@ -148,19 +137,41 @@ fun SalaryPaymentScreenContent(
         searchQuery.isBlank() ||
             member.fullName.contains(searchQuery, ignoreCase = true) ||
             member.staffCode.contains(searchQuery, ignoreCase = true) ||
-            (member.department?.contains(searchQuery, ignoreCase = true) == true)
+            (member.department?.contains(searchQuery, ignoreCase = true) == true) ||
+            member.email.contains(searchQuery, ignoreCase = true)
     }
 
-    val filteredManagers = managers.filter { manager ->
-        searchQuery.isBlank() ||
-            manager.fullName.contains(searchQuery, ignoreCase = true) ||
-            manager.email.contains(searchQuery, ignoreCase = true) ||
-            (manager.staffCode?.contains(searchQuery, ignoreCase = true) == true)
-    }
+    val totalEarnedPaise = filteredStaff.sumOf { it.earnedBalancePaise }
+    val totalPaidPaise = filteredStaff.sumOf { it.paidBalancePaise }
+    val totalDuePaise = (totalEarnedPaise - totalPaidPaise).coerceAtLeast(0L)
 
-    val totalEarnedCents = filteredStaff.sumOf { it.earnedBalanceCents }
-    val totalPaidCents = filteredStaff.sumOf { it.paidBalanceCents }
-    val totalDueCents = (totalEarnedCents - totalPaidCents).coerceAtLeast(0L)
+    val monthFormatter = remember { DateTimeFormatter.ofPattern("MMM yyyy") }
+    val givenPaymentTransactions = remember(periods, payrollItemsMap) {
+        val list = mutableListOf<GivenPaymentTransaction>()
+        payrollItemsMap.forEach { (periodId, items) ->
+            items.forEach { item ->
+                val payment = item.payment
+                if (payment != null && payment.amountPaise > 0) {
+                    val periodYm = try { YearMonth.parse(periodId.take(7)) } catch (_: Exception) { YearMonth.now() }
+                    val label = periodYm.format(monthFormatter)
+                    list.add(
+                        GivenPaymentTransaction(
+                            id = payment.id.ifBlank { item.id },
+                            staffName = item.staffName ?: "Staff Member",
+                            staffCode = item.staffCode,
+                            monthLabel = label,
+                            amountPaise = payment.amountPaise,
+                            paymentMethod = payment.paymentMethod.ifBlank { "BANK_TRANSFER" },
+                            referenceNumber = payment.referenceNumber,
+                            paymentDate = payment.paymentDate
+                        )
+                    )
+                }
+            }
+        }
+        list.sortedByDescending { it.paymentDate }
+    }
+    val totalGivenPaise = givenPaymentTransactions.sumOf { it.amountPaise }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -188,7 +199,7 @@ fun SalaryPaymentScreenContent(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    StatusPill("${filteredStaff.size + filteredManagers.size} People")
+                    StatusPill("${filteredStaff.size} Employees")
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 Row(
@@ -202,7 +213,7 @@ fun SalaryPaymentScreenContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = Money.format(totalEarnedCents),
+                            text = Money.format(totalEarnedPaise),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -215,7 +226,7 @@ fun SalaryPaymentScreenContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = Money.format(totalPaidCents),
+                            text = Money.format(totalPaidPaise),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = SecondaryEmerald
@@ -228,38 +239,101 @@ fun SalaryPaymentScreenContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = Money.format(totalDueCents),
+                            text = Money.format(totalDuePaise),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = if (totalDueCents > 0) TertiaryAmber else SecondaryEmerald
+                            color = if (totalDuePaise > 0) TertiaryAmber else SecondaryEmerald
                         )
                     }
                 }
             }
         }
 
-        // Search Bar
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search employee or manager name, code, or email") },
-            leadingIcon = {
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
+        // Payments Given This Month / Disbursement Transactions Section
+        SectionHeader(
+            title = "Payments Given This Month",
+            trailing = {
+                Text(
+                    text = "${givenPaymentTransactions.size} payments • ${Money.format(totalGivenPaise)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = SecondaryEmerald
                 )
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface
-            )
+            }
         )
+
+        if (givenPaymentTransactions.isEmpty()) {
+            SectionEmpty("No salary payment transactions recorded yet.")
+        } else {
+            givenPaymentTransactions.forEach { transaction ->
+                PaymentTransactionRow(transaction = transaction)
+            }
+        }
+
+        // Compact Search Bar
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(42.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant,
+            ),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (searchQuery.isEmpty()) {
+                        Text(
+                            text = "Search name, code or email...",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            maxLines = 1,
+                        )
+                    }
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(
+                        onClick = { searchQuery = "" },
+                        modifier = Modifier.size(24.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear search",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
 
         SectionHeader(
             title = "Employee Salary Roster",
@@ -290,20 +364,19 @@ fun SalaryPaymentScreenContent(
                             onPayMonth = { cardData ->
                                 val itemId = cardData.payrollItemId
                                     ?: periods.firstNotNullOfOrNull { period ->
-                                        payrollItemsMap[period.id]?.firstOrNull {
-                                            it.employeeId == member.id || it.staffEmail.equals(member.email, ignoreCase = true)
+                                        payrollItemsMap[period.id]?.firstOrNull { item ->
+                                            item.employeeId == member.id || item.staffProfileId == member.id || item.resolvedEmployeeId == member.id || item.staffEmail.equals(member.email, ignoreCase = true)
                                         }
-                                    }?.id
-                                    ?: periods.firstOrNull()?.id
+                                    }?.let { item -> item.id.ifBlank { item.monthlyPayrollId } }
 
-                                if (itemId != null) {
+                                if (!itemId.isNullOrBlank() && itemId.length > 20 && itemId.contains("-")) {
                                     monthPayTarget = SalaryMonthPayTarget(
                                         payrollItemId = itemId,
                                         staffName = member.fullName,
                                         staffCode = member.staffCode,
                                         monthLabel = cardData.monthYearLabel,
-                                        earnedCents = cardData.earnedCents,
-                                        paidCents = cardData.paidCents,
+                                        earnedPaise = cardData.earnedPaise,
+                                        paidPaise = cardData.paidPaise,
                                         breakdown = cardData.breakdown,
                                         attendanceSummary = cardData.attendanceSummary,
                                         paymentHistory = cardData.paymentHistory
@@ -311,84 +384,26 @@ fun SalaryPaymentScreenContent(
                                 }
                             },
                             onOpenLedger = { cardData ->
+                                val itemId = cardData.payrollItemId
+                                    ?: periods.firstNotNullOfOrNull { period ->
+                                        payrollItemsMap[period.id]?.firstOrNull { item ->
+                                            item.employeeId == member.id || item.staffProfileId == member.id || item.resolvedEmployeeId == member.id || item.staffEmail.equals(member.email, ignoreCase = true)
+                                        }
+                                    }?.let { item -> item.id.ifBlank { item.monthlyPayrollId } }
+
                                 ledgerTarget = SalaryLedgerTarget(
+                                    payrollItemId = if (!itemId.isNullOrBlank() && itemId.length > 20 && itemId.contains("-")) itemId else null,
                                     staffName = member.fullName,
                                     staffCode = member.staffCode,
                                     monthLabel = cardData.monthYearLabel,
-                                    earnedCents = cardData.earnedCents,
+                                    earnedPaise = cardData.earnedPaise,
+                                    paidPaise = cardData.paidPaise,
                                     attendanceSummary = cardData.attendanceSummary,
-                                    breakdown = cardData.breakdown
+                                    breakdown = cardData.breakdown,
+                                    paymentHistory = cardData.paymentHistory
                                 )
                             }
                         )
-                    }
-                }
-            }
-        }
-
-        // Managers Section
-        if (filteredManagers.isNotEmpty() || searchQuery.isBlank()) {
-            Spacer(modifier = Modifier.height(4.dp))
-            SectionHeader(
-                title = "Manager Salary Roster",
-                trailing = {
-                    Text(
-                        text = "${filteredManagers.size} managers",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            )
-
-            when (membersState) {
-                is UiState.Loading, is UiState.Idle -> SectionLoading("Loading manager roster…")
-                is UiState.Error -> SectionError(membersState.message)
-                is UiState.Success -> {
-                    if (filteredManagers.isEmpty()) {
-                        SectionEmpty("No managers found matching “$searchQuery”.")
-                    } else {
-                        filteredManagers.forEach { manager ->
-                            SalaryManagerCard(
-                                member = manager,
-                                payrollPeriods = periods,
-                                payrollItemsMap = payrollItemsMap,
-                                onPayMonth = { cardData ->
-                                    val itemId = cardData.payrollItemId
-                                        ?: periods.firstNotNullOfOrNull { period ->
-                                            payrollItemsMap[period.id]?.firstOrNull {
-                                                it.employeeId == manager.employeeId ||
-                                                it.staffEmail.equals(manager.email, ignoreCase = true) ||
-                                                (!manager.staffCode.isNullOrBlank() && it.staffCode.equals(manager.staffCode, ignoreCase = true))
-                                            }
-                                        }?.id
-                                        ?: periods.firstOrNull()?.id
-
-                                    if (itemId != null) {
-                                        monthPayTarget = SalaryMonthPayTarget(
-                                            payrollItemId = itemId,
-                                            staffName = manager.fullName,
-                                            staffCode = manager.staffCode,
-                                            monthLabel = cardData.monthYearLabel,
-                                            earnedCents = cardData.earnedCents,
-                                            paidCents = cardData.paidCents,
-                                            breakdown = cardData.breakdown,
-                                            attendanceSummary = cardData.attendanceSummary,
-                                            paymentHistory = cardData.paymentHistory
-                                        )
-                                    }
-                                },
-                                onOpenLedger = { cardData ->
-                                    ledgerTarget = SalaryLedgerTarget(
-                                        staffName = manager.fullName,
-                                        staffCode = manager.staffCode,
-                                        monthLabel = cardData.monthYearLabel,
-                                        earnedCents = cardData.earnedCents,
-                                        attendanceSummary = cardData.attendanceSummary,
-                                        breakdown = cardData.breakdown
-                                    )
-                                }
-                            )
-                        }
                     }
                 }
             }
@@ -402,15 +417,15 @@ fun SalaryPaymentScreenContent(
             staffName = target.staffName,
             staffCode = target.staffCode,
             monthLabel = target.monthLabel,
-            earnedCents = target.earnedCents,
-            paidCents = target.paidCents,
+            earnedPaise = target.earnedPaise,
+            paidPaise = target.paidPaise,
             breakdown = target.breakdown,
             attendanceSummary = target.attendanceSummary,
             paymentHistory = target.paymentHistory,
             isSubmitting = isSubmitting,
             onDismiss = { if (!isSubmitting) monthPayTarget = null },
-            onConfirmPay = { amountCents, method, reference ->
-                onRecordPayment(target.payrollItemId, amountCents, method, reference)
+            onConfirmPay = { amountPaise, method, reference ->
+                onRecordPayment(target.payrollItemId, amountPaise, method, reference)
                 monthPayTarget = null
             }
         )
@@ -421,10 +436,19 @@ fun SalaryPaymentScreenContent(
             staffName = target.staffName,
             staffCode = target.staffCode,
             monthLabel = target.monthLabel,
-            earnedCents = target.earnedCents,
+            earnedPaise = target.earnedPaise,
+            paidPaise = target.paidPaise,
             attendanceSummary = target.attendanceSummary,
             breakdown = target.breakdown,
-            onDismiss = { ledgerTarget = null }
+            paymentHistory = target.paymentHistory,
+            isSubmitting = isSubmitting,
+            onDismiss = { ledgerTarget = null },
+            onRecordPayment = if (!target.payrollItemId.isNullOrBlank()) {
+                { amount, method, ref ->
+                    onRecordPayment(target.payrollItemId, amount, method, ref)
+                    ledgerTarget = null
+                }
+            } else null
         )
     }
 }
@@ -434,20 +458,23 @@ private data class SalaryMonthPayTarget(
     val staffName: String,
     val staffCode: String?,
     val monthLabel: String,
-    val earnedCents: Long,
-    val paidCents: Long,
+    val earnedPaise: Long,
+    val paidPaise: Long,
     val paymentHistory: List<PaymentRecordDto> = emptyList(),
     val breakdown: PayrollBreakdownDto = PayrollBreakdownDto(),
     val attendanceSummary: AttendanceSummaryDto = AttendanceSummaryDto()
 )
 
 private data class SalaryLedgerTarget(
+    val payrollItemId: String? = null,
     val staffName: String,
     val staffCode: String?,
     val monthLabel: String,
-    val earnedCents: Long,
+    val earnedPaise: Long,
+    val paidPaise: Long = 0L,
     val attendanceSummary: AttendanceSummaryDto = AttendanceSummaryDto(),
-    val breakdown: PayrollBreakdownDto = PayrollBreakdownDto()
+    val breakdown: PayrollBreakdownDto = PayrollBreakdownDto(),
+    val paymentHistory: List<PaymentRecordDto> = emptyList()
 )
 
 @Composable
@@ -481,7 +508,7 @@ private fun SalaryEmployeeCard(
                         text = buildString {
                             append(staff.staffCode)
                             staff.department?.let { append(" • ").append(it) }
-                            staff.premisesName?.let { append(" • 📍 ").append(Dates.cleanPremisesName(it)) }
+                            staff.premisesName?.let { append(" • ").append(Dates.cleanPremisesName(it)) }
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -490,8 +517,8 @@ private fun SalaryEmployeeCard(
                 StatusPill(if (staff.isActive) "ACTIVE" else "CANCELLED")
             }
 
-            val totalEarned = staff.earnedBalanceCents
-            val totalPaid = staff.paidBalanceCents
+            val totalEarned = staff.earnedBalancePaise
+            val totalPaid = staff.paidBalancePaise
             val dueUnpaid = (totalEarned - totalPaid).coerceAtLeast(0L)
 
             // Salary Summary Row
@@ -527,7 +554,7 @@ private fun SalaryEmployeeCard(
                     employeeId = staff.id,
                     email = staff.email,
                     staffCode = staff.staffCode,
-                    earnedBalanceCents = staff.earnedBalanceCents,
+                    earnedBalancePaise = staff.earnedBalancePaise,
                     payrollPeriods = payrollPeriods,
                     payrollItemsMap = payrollItemsMap
                 )
@@ -541,13 +568,12 @@ private fun SalaryEmployeeCard(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        monthlyCards.forEach { cardData ->
+                        items(monthlyCards.size, key = { monthlyCards[it].monthYearLabel }) { index ->
+                            val cardData = monthlyCards[index]
                             SalaryMonthlyCardItem(
                                 cardData = cardData,
                                 onPay = { onPayMonth(cardData) },
@@ -564,11 +590,16 @@ private fun SalaryEmployeeCard(
 @Composable
 private fun SalaryManagerCard(
     member: OrganizationMemberDto,
+    matchingStaff: StaffDto?,
     payrollPeriods: List<PayrollPeriodDto>,
     payrollItemsMap: Map<String, List<PayrollItemDto>>,
     onPayMonth: (SalaryMonthlyCardData) -> Unit,
     onOpenLedger: (SalaryMonthlyCardData) -> Unit
 ) {
+    val totalEarned = matchingStaff?.earnedBalancePaise ?: member.earnedBalancePaise
+    val totalPaid = matchingStaff?.paidBalancePaise ?: member.paidBalancePaise
+    val dueUnpaid = (totalEarned - totalPaid).coerceAtLeast(0L)
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -590,9 +621,15 @@ private fun SalaryManagerCard(
                     )
                     Text(
                         text = buildString {
-                            member.staffCode?.let { append(it).append(" • ") } ?: append("Manager • ")
+                            val code = matchingStaff?.staffCode?.ifBlank { null } ?: member.staffCode
+                            if (code != null) {
+                                append(code).append(" • ")
+                            } else {
+                                append("Manager • ")
+                            }
                             append(member.email)
-                            member.premisesName?.let { append(" • 📍 ").append(Dates.cleanPremisesName(it)) }
+                            val prem = matchingStaff?.premisesName ?: member.premisesName
+                            prem?.let { append(" • ").append(Dates.cleanPremisesName(it)) }
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -601,14 +638,40 @@ private fun SalaryManagerCard(
                 StatusPill(if (member.isActive) "ACTIVE" else "CANCELLED")
             }
 
+            // Salary Summary Row
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Earned", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(Money.format(totalEarned), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Paid", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(Money.format(totalPaid), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("Due", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(Money.format(dueUnpaid), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SecondaryEmerald)
+                    }
+                }
+            }
+
             // Monthly Salary Cards from joining date
-            val monthlyCards = remember(member, payrollPeriods, payrollItemsMap) {
+            val monthlyCards = remember(member, matchingStaff, payrollPeriods, payrollItemsMap) {
                 computeSalaryMonthlyCards(
-                    joiningDateIso = member.joinedAt,
-                    employeeId = member.employeeId,
+                    joiningDateIso = matchingStaff?.startDate ?: member.joinedAt,
+                    employeeId = matchingStaff?.id ?: member.employeeId,
                     email = member.email,
-                    staffCode = member.staffCode,
-                    earnedBalanceCents = 0L,
+                    staffCode = matchingStaff?.staffCode ?: member.staffCode,
+                    earnedBalancePaise = totalEarned,
                     payrollPeriods = payrollPeriods,
                     payrollItemsMap = payrollItemsMap
                 )
@@ -622,13 +685,12 @@ private fun SalaryManagerCard(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        monthlyCards.forEach { cardData ->
+                        items(monthlyCards.size, key = { monthlyCards[it].monthYearLabel }) { index ->
+                            val cardData = monthlyCards[index]
                             SalaryMonthlyCardItem(
                                 cardData = cardData,
                                 onPay = { onPayMonth(cardData) },
@@ -644,8 +706,8 @@ private fun SalaryManagerCard(
 
 private data class SalaryMonthlyCardData(
     val monthYearLabel: String,
-    val earnedCents: Long,
-    val paidCents: Long,
+    val earnedPaise: Long,
+    val paidPaise: Long,
     val statusLabel: String,
     val payrollItemId: String? = null,
     val paymentHistory: List<PaymentRecordDto> = emptyList(),
@@ -664,12 +726,13 @@ private fun computeSalaryMonthlyCards(
     employeeId: String?,
     email: String?,
     staffCode: String?,
-    earnedBalanceCents: Long,
+    earnedBalancePaise: Long,
     payrollPeriods: List<PayrollPeriodDto>,
     payrollItemsMap: Map<String, List<PayrollItemDto>>
 ): List<SalaryMonthlyCardData> {
     val currentYm = YearMonth.now()
-    val startYm = try {
+    val minAllowedYm = currentYm.minusMonths(24)
+    val rawStartYm = try {
         if (!joiningDateIso.isNullOrBlank()) {
             YearMonth.from(LocalDate.parse(joiningDateIso.take(10)))
         } else {
@@ -679,7 +742,11 @@ private fun computeSalaryMonthlyCards(
         currentYm
     }
 
-    val effectiveStartYm = if (startYm.isAfter(currentYm)) currentYm else startYm
+    val effectiveStartYm = when {
+        rawStartYm.isAfter(currentYm) -> currentYm
+        rawStartYm.isBefore(minAllowedYm) -> minAllowedYm
+        else -> rawStartYm
+    }
 
     val monthList = mutableListOf<YearMonth>()
     var temp = effectiveStartYm
@@ -706,9 +773,9 @@ private fun computeSalaryMonthlyCards(
                 periodStatus = period.status
                 val items = payrollItemsMap[period.id].orEmpty()
                 foundItem = items.firstOrNull { item ->
-                    (employeeId != null && item.employeeId == employeeId) ||
-                    (!email.isNullOrBlank() && item.staffEmail.equals(email, ignoreCase = true)) ||
-                    (!staffCode.isNullOrBlank() && item.staffCode.equals(staffCode, ignoreCase = true))
+                    (employeeId != null && (item.employeeId == employeeId || item.staffProfileId == employeeId || item.resolvedEmployeeId == employeeId)) ||
+                    (!email.isNullOrBlank() && item.staffEmail != null && item.staffEmail.equals(email, ignoreCase = true)) ||
+                    (!staffCode.isNullOrBlank() && (item.staffCode?.equals(staffCode, ignoreCase = true) == true || item.resolvedStaffCode.equals(staffCode, ignoreCase = true)))
                 }
                 if (foundItem != null) break
             }
@@ -718,13 +785,14 @@ private fun computeSalaryMonthlyCards(
 
         if (foundItem != null) {
             val summary = foundItem.attendanceSummary
-            val paidAmount = if (foundItem.payment != null) foundItem.payment.amountCents else if (periodStatus == "LOCKED") foundItem.netSalaryCents else 0L
+            val parsedPaid = Money.parseToInr(foundItem.paidAmount) ?: 0L
+            val paidAmount = if (foundItem.payment != null) foundItem.payment.amountPaise else if (parsedPaid > 0) parsedPaid else if (periodStatus == "LOCKED") foundItem.resolvedNetSalaryPaise else 0L
             val isPaid = paidAmount > 0 || foundItem.payment != null || periodStatus == "LOCKED"
             val history = if (foundItem.payment != null) listOf(foundItem.payment) else emptyList()
             SalaryMonthlyCardData(
                 monthYearLabel = monthLabel,
-                earnedCents = foundItem.grossSalaryCents,
-                paidCents = paidAmount,
+                earnedPaise = foundItem.resolvedGrossSalaryPaise,
+                paidPaise = paidAmount,
                 statusLabel = if (isPaid) "PAID" else "UNPAID",
                 payrollItemId = foundItem.id,
                 paymentHistory = history,
@@ -741,8 +809,8 @@ private fun computeSalaryMonthlyCards(
             if (isCurrentMonth) {
                 SalaryMonthlyCardData(
                     monthYearLabel = monthLabel,
-                    earnedCents = earnedBalanceCents,
-                    paidCents = 0L,
+                    earnedPaise = earnedBalancePaise,
+                    paidPaise = 0L,
                     statusLabel = "UNPAID",
                     presentShiftsCount = 0,
                     halfDayShiftsCount = 0,
@@ -754,8 +822,8 @@ private fun computeSalaryMonthlyCards(
             } else {
                 SalaryMonthlyCardData(
                     monthYearLabel = monthLabel,
-                    earnedCents = 0L,
-                    paidCents = 0L,
+                    earnedPaise = 0L,
+                    paidPaise = 0L,
                     statusLabel = "UNPAID",
                     presentShiftsCount = 0,
                     halfDayShiftsCount = 0,
@@ -778,18 +846,19 @@ private fun SalaryMonthlyCardItem(
 ) {
     val isPaid = cardData.statusLabel.uppercase() == "PAID"
     val statusColor = if (isPaid) SecondaryEmerald else TertiaryAmber
-    val pendingCents = (cardData.earnedCents - cardData.paidCents).coerceAtLeast(0L)
+    val pendingPaise = (cardData.earnedPaise - cardData.paidPaise).coerceAtLeast(0L)
 
     Surface(
-        modifier = modifier.width(170.dp),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        modifier = modifier.width(165.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Month & Status Chip
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -797,8 +866,9 @@ private fun SalaryMonthlyCardItem(
             ) {
                 Text(
                     text = cardData.monthYearLabel,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
+                    fontSize = 12.5.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Surface(
@@ -806,17 +876,20 @@ private fun SalaryMonthlyCardItem(
                     shape = RoundedCornerShape(6.dp)
                 ) {
                     Text(
-                        text = if (isPaid) "PAID" else "UNPAID",
+                        text = if (isPaid) "PAID" else "DUE",
                         style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
                         color = statusColor,
                         fontSize = 9.sp,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+            // Financial Breakdown: Earned, Paid, Due
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -825,15 +898,15 @@ private fun SalaryMonthlyCardItem(
                     Text(
                         text = "Earned",
                         style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.5.sp,
+                        fontSize = 10.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = Money.format(cardData.earnedCents),
+                        text = Money.format(cardData.earnedPaise),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 Row(
@@ -844,15 +917,15 @@ private fun SalaryMonthlyCardItem(
                     Text(
                         text = "Paid",
                         style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.5.sp,
+                        fontSize = 10.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = Money.format(cardData.paidCents),
+                        text = Money.format(cardData.paidPaise),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
-                        color = if (cardData.paidCents > 0) SecondaryEmerald else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (cardData.paidPaise > 0) SecondaryEmerald else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Row(
@@ -861,118 +934,190 @@ private fun SalaryMonthlyCardItem(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Due",
+                        text = "Net Due",
                         style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.5.sp,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = Money.format(pendingCents),
+                        text = Money.format(pendingPaise),
                         style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = if (pendingCents > 0) TertiaryAmber else MaterialTheme.colorScheme.onSurfaceVariant
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 11.5.sp,
+                        color = if (pendingPaise > 0) TertiaryAmber else SecondaryEmerald
                     )
                 }
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                FilledTonalButton(
-                    onClick = onPay,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+            // Action Buttons
+            if (!isPaid && pendingPaise > 0) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(12.dp))
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Text(
-                        text = if (isPaid) "Pay" else "Pay",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 10.5.sp
-                    )
-                }
+                    Button(
+                        onClick = onPay,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1.1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = "Pay",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.5.sp
+                        )
+                    }
 
-                FilledTonalButton(
+                    TextButton(
+                        onClick = onOpenLedger,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(0.9f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "Ledger",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.5.sp
+                        )
+                    }
+                }
+            } else {
+                OutlinedButton(
                     onClick = onOpenLedger,
                     shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
                 ) {
-                    Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(12.dp))
-                    Spacer(modifier = Modifier.width(2.dp))
+                    Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(13.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Ledger",
+                        text = "View Ledger",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.5.sp
                     )
-                }
-            }
-
-            Text(
-                text = "Shift Breakdown",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 9.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    SalaryAttendanceBadge(label = "Present", count = cardData.presentShiftsCount, color = SecondaryEmerald)
-                    SalaryAttendanceBadge(label = "Half-Day", count = cardData.halfDayShiftsCount, color = TertiaryAmber)
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    SalaryAttendanceBadge(label = "Leave", count = cardData.leaveShiftsCount, color = Color(0xFF3B82F6))
-                    SalaryAttendanceBadge(label = "Absent", count = cardData.absentShiftsCount, color = Color(0xFFEF4444))
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    SalaryAttendanceBadge(label = "Holidays", count = cardData.holidayCount, color = Color(0xFF8B5CF6))
-                    SalaryAttendanceBadge(label = "Off-Days", count = cardData.offDayCount, color = Color(0xFF64748B))
                 }
             }
         }
     }
 }
 
+private data class GivenPaymentTransaction(
+    val id: String,
+    val staffName: String,
+    val staffCode: String?,
+    val monthLabel: String,
+    val amountPaise: Long,
+    val paymentMethod: String,
+    val referenceNumber: String?,
+    val paymentDate: String
+)
+
 @Composable
-private fun SalaryAttendanceBadge(
-    label: String,
-    count: Int,
-    color: Color,
+private fun PaymentTransactionRow(
+    transaction: GivenPaymentTransaction,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    val methodLabel = when (transaction.paymentMethod.uppercase()) {
+        "BANK_TRANSFER" -> "Bank Transfer"
+        "UPI" -> "UPI / GPay"
+        "CASH" -> "Cash"
+        "CHEQUE" -> "Cheque"
+        else -> transaction.paymentMethod.replace('_', ' ')
+    }
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
-        Box(
-            modifier = Modifier
-                .size(6.dp)
-                .clip(CircleShape)
-                .background(color)
-        )
-        Text(
-            text = "$label: $count",
-            style = MaterialTheme.typography.labelSmall,
-            fontSize = 9.5.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(SecondaryEmerald.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Payments,
+                    contentDescription = null,
+                    tint = SecondaryEmerald,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = transaction.staffName,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = buildString {
+                        if (!transaction.staffCode.isNullOrBlank()) append(transaction.staffCode).append(" • ")
+                        append(transaction.monthLabel).append(" Salary")
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 1.dp)
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = methodLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                    if (!transaction.referenceNumber.isNullOrBlank()) {
+                        Text(
+                            text = "Ref: ${transaction.referenceNumber}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "+" + Money.format(transaction.amountPaise),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = SecondaryEmerald
+                )
+                if (transaction.paymentDate.isNotBlank()) {
+                    Text(
+                        text = Dates.formatDateShort(transaction.paymentDate),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 9.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 }

@@ -5,6 +5,9 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -59,8 +62,29 @@ class SessionManager @Inject constructor(
             prefs.edit().putString(KEY_USER_ID, value).apply()
         }
 
+    var savedLoginRole: String?
+        get() = prefs.getString(KEY_SAVED_LOGIN_ROLE, "EMPLOYEE")
+        set(value) {
+            prefs.edit().putString(KEY_SAVED_LOGIN_ROLE, value).apply()
+        }
+
+    /**
+     * Emits whenever the stored session is wiped, regardless of whether it was
+     * an explicit logout or a rejected/expired refresh token. Observers use this
+     * to drive the UI back to the login screen.
+     */
+    private val _sessionRevoked = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val sessionRevoked: SharedFlow<Unit> = _sessionRevoked.asSharedFlow()
+
     fun clear() {
+        val lastSavedRole = savedLoginRole
         prefs.edit().clear().apply()
+        if (lastSavedRole != null) {
+            savedLoginRole = lastSavedRole
+        }
+        // tryEmit never suspends, so this is safe from the OkHttp authenticator
+        // thread. The buffer keeps the signal even if the collector is busy.
+        _sessionRevoked.tryEmit(Unit)
     }
 
     companion object {
@@ -69,5 +93,6 @@ class SessionManager @Inject constructor(
         private const val KEY_ORG_ID = "organization_id"
         private const val KEY_ROLE = "user_role"
         private const val KEY_USER_ID = "user_id"
+        private const val KEY_SAVED_LOGIN_ROLE = "saved_login_role"
     }
 }

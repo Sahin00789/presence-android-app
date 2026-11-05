@@ -22,6 +22,14 @@ android {
         
         buildConfigField("String", "OLA_MAPS_API_KEY", "\"wZWX2vb65oEDfkT3D0TTJ2abGTQ97PqRn34xh7kH\"")
 
+        androidResources {
+            localeFilters += setOf("en")
+        }
+
+        ndk {
+            abiFilters.addAll(setOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64"))
+        }
+
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -31,6 +39,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -38,6 +47,32 @@ android {
         }
         debug {
             isMinifyEnabled = false
+        }
+    }
+
+    applicationVariants.all {
+        outputs.all {
+            (this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl)?.outputFileName = "presence.apk"
+        }
+    }
+
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/license.txt",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+                "META-INF/notice.txt",
+                "META-INF/ASL2.0",
+                "META-INF/*.kotlin_module",
+                "META-INF/version-control-info.textproto"
+            )
+        }
+        jniLibs {
+            useLegacyPackaging = false
         }
     }
     

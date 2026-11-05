@@ -20,5 +20,6 @@ data class OlaMapsGeocodeResult(
 @Serializable
 data class OlaMapsReverseGeocodeResponse(
     @SerialName("status") val status: String = "",
-    @SerialName("results") val results: List<OlaMapsGeocodeResult> = emptyList()
+    @SerialName("results") val results: List<OlaMapsGeocodeResult> = emptyList(),
+    @SerialName("result") val result: OlaMapsGeocodeResult? = null
 )

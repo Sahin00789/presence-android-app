@@ -4,63 +4,57 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 /**
- * Design tokens for the Presence app.
- *
- * The secondary screens of this app are full-bleed overlays reached from the
- * hamburger, so they are painted on the Presence workspace surface rather than on
- * the Material canvas: hairline borders, near-flat cards, uppercase micro-labels
- * and a single blue brand accent. Keeping the values here instead of inline means
- * a screen can be re-skinned without hunting through every composable.
+ * Modern Android Material 3 Design tokens for the Presence app.
+ * Organic corner radii, rich surface containers, subtle elevation,
+ * and high-contrast typography.
  */
 object PresenceDesign {
 
     // ---------------------------------------------------------------- palette
-    val Ink = Color(0xFF1C2B42)
-    val Navy = Color(0xFF132541)
-    val NavyLight = Color(0xFF1C365B)
-    val Muted = Color(0xFF7D8AA0)
-    val MutedLight = Color(0xFFA3ADBD)
-    val Line = Color(0xFFE7EBF2)
+    val Ink = Color(0xFF0F172A)
+    val Navy = Color(0xFF1E293B)
+    val NavyLight = Color(0xFF334155)
+    val Muted = Color(0xFF64748B)
+    val MutedLight = Color(0xFF94A3B8)
+    val Line = Color(0xFFE2E8F0)
     val Surface = Color(0xFFFFFFFF)
-    val Workspace = Color(0xFFF6F8FC)
+    val Workspace = Color(0xFFF8FAFC)
 
-    val Brand = Color(0xFF3C6DF0)
-    val BrandDark = Color(0xFF2D59D2)
-    val BrandSoft = Color(0xFFEDF3FF)
+    val Brand = Color(0xFF4F46E5)
+    val BrandDark = Color(0xFF3730A3)
+    val BrandSoft = Color(0xFFEEF2FF)
 
-    val Positive = Color(0xFF22A06B)
-    val PositiveSoft = Color(0xFFEAF8F1)
+    val Positive = Color(0xFF10B981)
+    val PositiveSoft = Color(0xFFECFDF5)
 
-    val Caution = Color(0xFFED9B40)
-    val CautionSoft = Color(0xFFFFF5E8)
-    val CautionText = Color(0xFFC07C1F)
+    val Caution = Color(0xFFF59E0B)
+    val CautionSoft = Color(0xFFFEF3C7)
+    val CautionText = Color(0xFFB45309)
 
-    val Grape = Color(0xFF8667E8)
-    val GrapeSoft = Color(0xFFF1EFFF)
-    val GrapeText = Color(0xFF6F4FD6)
+    val Grape = Color(0xFF8B5CF6)
+    val GrapeSoft = Color(0xFFF5F3FF)
+    val GrapeText = Color(0xFF6D28D9)
 
-    val Danger = Color(0xFFDD5B67)
-    val DangerSoft = Color(0xFFFFF0F1)
-    val DangerText = Color(0xFFC44855)
+    val Danger = Color(0xFFEF4444)
+    val DangerSoft = Color(0xFFFEF2F2)
+    val DangerText = Color(0xFFB91C1C)
 
     // --------------------------------------------------------------- surfaces
-    /** The tint every nested panel sits on inside a card. */
-    val Panel = Color(0xFFFBFCFE)
-    val NeutralSoft = Color(0xFFF1F4F9)
-    val NeutralText = Color(0xFF66758C)
-    val BodyText = Color(0xFF536177)
-    val LabelText = Color(0xFF8B97AA)
-    val InputBorder = Color(0xFFDFE5EE)
-    val DividerSoft = Color(0xFFEDF0F5)
-    val Hover = Color(0xFFF4F7FC)
+    val Panel = Color(0xFFF1F5F9)
+    val NeutralSoft = Color(0xFFF8FAFC)
+    val NeutralText = Color(0xFF475569)
+    val BodyText = Color(0xFF334155)
+    val LabelText = Color(0xFF64748B)
+    val InputBorder = Color(0xFFCBD5E1)
+    val DividerSoft = Color(0xFFF1F5F9)
+    val Hover = Color(0xFFEEF2FF)
 
     // ----------------------------------------------------------------- radii
-    val RadiusCard = 13.dp
-    val RadiusPanel = 11.dp
-    val RadiusControl = 10.dp
-    val RadiusPill = 9.dp
+    val RadiusCard = 20.dp
+    val RadiusPanel = 16.dp
+    val RadiusControl = 12.dp
+    val RadiusPill = 24.dp
 
     // ---------------------------------------------------------------- shadows
-    /** `0 1px 2px rgba(24,40,72,.03), 0 5px 18px rgba(24,40,72,.035)` */
-    val CardElevation = 2.dp
+    val CardElevation = 3.dp
 }

@@ -10,13 +10,6 @@ data class DeleteResponse(
 )
 
 @Serializable
-data class PostalResponseDto(
-    @SerialName("Message") val message: String? = null,
-    @SerialName("Status") val status: String? = null,
-    @SerialName("PostOffice") val postOffice: List<PostOffice>? = null
-)
-
-@Serializable
 data class PostOffice(
     @SerialName("Name") val name: String = "",
     @SerialName("Description") val description: String? = null,
@@ -35,12 +28,44 @@ data class PostOffice(
     val subDistrict: String? get() = taluk
 }
 
-sealed class DomainWebSocketEvent {
-    data class Event(val type: String = "", val payload: String? = null) : DomainWebSocketEvent()
-    object PremisesUpdate : DomainWebSocketEvent()
-    object AttendanceUpdate : DomainWebSocketEvent()
-    object StaffUpdate : DomainWebSocketEvent()
-    object ShiftUpdate : DomainWebSocketEvent()
-    object WalletUpdate : DomainWebSocketEvent()
-    object Generic : DomainWebSocketEvent()
+sealed class DomainWebSocketEvent(
+    open val isOwnEvent: Boolean = false,
+    open val toastMessage: String? = null
+) {
+    data class Event(
+        val type: String = "",
+        val payload: String? = null,
+        override val isOwnEvent: Boolean = false,
+        override val toastMessage: String? = null
+    ) : DomainWebSocketEvent(isOwnEvent, toastMessage)
+
+    data class PremisesUpdate(
+        override val isOwnEvent: Boolean = false,
+        override val toastMessage: String? = "Premises updated"
+    ) : DomainWebSocketEvent(isOwnEvent, toastMessage)
+
+    data class AttendanceUpdate(
+        override val isOwnEvent: Boolean = false,
+        override val toastMessage: String? = "Attendance updated"
+    ) : DomainWebSocketEvent(isOwnEvent, toastMessage)
+
+    data class StaffUpdate(
+        override val isOwnEvent: Boolean = false,
+        override val toastMessage: String? = "Staff details updated"
+    ) : DomainWebSocketEvent(isOwnEvent, toastMessage)
+
+    data class ShiftUpdate(
+        override val isOwnEvent: Boolean = false,
+        override val toastMessage: String? = "Shift roster updated"
+    ) : DomainWebSocketEvent(isOwnEvent, toastMessage)
+
+    data class WalletUpdate(
+        override val isOwnEvent: Boolean = false,
+        override val toastMessage: String? = "Salary & ledger updated"
+    ) : DomainWebSocketEvent(isOwnEvent, toastMessage)
+
+    data class Generic(
+        override val isOwnEvent: Boolean = false,
+        override val toastMessage: String? = "Real-time update received"
+    ) : DomainWebSocketEvent(isOwnEvent, toastMessage)
 }

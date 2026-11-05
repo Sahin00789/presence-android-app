@@ -16,7 +16,7 @@ interface OperationsRepository :
     OrganizationRepository {
 
     suspend fun lookupPincode(pincode: String): Resource<List<PostOffice>>
-    suspend fun getHolidays(): Resource<List<HolidayDto>>
+    suspend fun getHolidays(premisesId: String? = null): Resource<List<HolidayDto>>
     suspend fun createHoliday(request: CreateHolidayRequest): Resource<HolidayDto>
     suspend fun deleteHoliday(id: String): Resource<Unit>
 }

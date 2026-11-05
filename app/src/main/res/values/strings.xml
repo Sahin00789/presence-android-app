@@ -1,4 +1,9 @@
 <resources>
     <string name="app_name">presence</string>
-    <string name="google_web_client_id">357791774200-bmarr1e1inp9ip9skm4c1amfute5qem0.apps.googleusercontent.com</string>
+    <!-- Web (server) OAuth client. It must be the web client because it is used both as
+         serverClientId (the ID token's `aud` must match GOOGLE_WEB_CLIENT_ID on the server)
+         and as the client that issues server auth codes, which only a web client can
+         exchange using its client secret. The Android-type client is not referenced here:
+         Google matches it by package name + signing SHA-1. -->
+    <string name="google_web_client_id">357791774200-u042mocpum6a5pru11bddktt9r96mf5i.apps.googleusercontent.com</string>
 </resources>

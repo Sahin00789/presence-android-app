@@ -43,9 +43,9 @@ fun SalaryDialog(
                 )
                 OutlinedTextField(
                     value = amount,
-                    onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                    onValueChange = { amount = it.filter { ch -> ch.isDigit() } },
                     label = { Text("Default Shift Payment (₹)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -59,7 +59,7 @@ fun SalaryDialog(
         confirmButton = {
             TextButton(
                 onClick = { onConfirm(amount) },
-                enabled = Money.parseToCents(amount)?.let { it > 0 } == true
+                enabled = Money.parseToInr(amount)?.let { it > 0 } == true
             ) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }

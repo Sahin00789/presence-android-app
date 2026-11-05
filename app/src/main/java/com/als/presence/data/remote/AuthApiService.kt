@@ -1,10 +1,14 @@
 package com.als.presence.data.remote
 
 import com.als.presence.data.model.*
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.*
 
 interface AuthApiService {
+    @GET(".")
+    suspend fun checkHealth(): Response<ResponseBody>
+
     @POST("api/v1/auth/otp/request")
     suspend fun requestOtp(@Body request: OtpRequest): Response<OtpResponse>
 
@@ -22,4 +26,7 @@ interface AuthApiService {
 
     @GET("api/v1/auth/me")
     suspend fun getCurrentUser(): Response<AuthUserDto>
+
+    @POST("api/v1/auth/logout")
+    suspend fun logout(): Response<ResponseBody>
 }

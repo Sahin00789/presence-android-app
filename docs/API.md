@@ -62,7 +62,7 @@ Revokes all active device sessions for the user across all devices.
 Creates a new organization (Owner only).
 
 ### `POST /api/v1/invitations`
-Sends an invitation to a Manager or Staff member.
+Sends an invitation to an Employee.
 
 ### `POST /api/v1/invitations/accept`
 Accepts a single-use token and links the user to the organization.
@@ -72,16 +72,16 @@ Accepts a single-use token and links the user to the organization.
 ## 3. Employee & Shift Management Endpoints (`/api/v1/employees`, `/api/v1/shifts`)
 
 ### `POST /api/v1/employees`
-Creates a staff employment profile (`employees`) and sets salary structure (Manager only).
+Creates an employee profile (`employees`) and sets salary structure (Owner only).
 
 ### `GET /api/v1/employees`
-Lists organization staff with filtering and pagination.
+Lists organization employees with filtering and pagination.
 
 ### `POST /api/v1/shifts`
 Creates a shift definition (`shifts`).
 
 ### `POST /api/v1/shifts/assignments`
-Assigns a shift to staff members for a specified date range (`employee_shift_assignments`).
+Assigns a shift to employees for a specified date range (`employee_shift_assignments`).
 
 ---
 
@@ -106,7 +106,7 @@ Lists attendance records (`employee_attendance`).
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/api/v1/face/status` | Current user's enrollment status |
-| `POST` | `/api/v1/face/enroll/supervised` | Owner/Manager enrolls an employee in person (`multi_pose_face_templates`) |
+| `POST` | `/api/v1/face/enroll/supervised` | Owner enrolls an employee in person (`multi_pose_face_templates`) |
 | `POST` | `/api/v1/face/verify` | Verifies a live embedding against the enrolled template |
 
 ---

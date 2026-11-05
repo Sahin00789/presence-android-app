@@ -82,7 +82,8 @@ fun PayrollScreen(
         PresenceSecondaryScaffold(
             crumb = "PAYROLL",
             title = "Monthly salary run",
-            onBack = onBack
+            onBack = onBack,
+            onRefresh = viewModel::refresh
         ) {
             PayrollScreenContent(
                 periodsState = periodsState,
@@ -93,7 +94,7 @@ fun PayrollScreen(
                 onRefresh = viewModel::refresh,
                 onSelectPeriod = viewModel::selectPeriod,
                 onCalculate = { },
-                onRecordPayment = { _, _, _, _ -> },
+                onRecordPayment = viewModel::recordPayment,
                 onCreatePeriod = { _, _ -> },
                 onApprove = { }
             )
@@ -116,7 +117,7 @@ fun PayrollScreenContent(
     onRefresh: () -> Unit,
     onSelectPeriod: (String) -> Unit,
     onCalculate: (String) -> Unit,
-    onRecordPayment: (itemId: String, amountCents: Long, paymentMethod: String, reference: String) -> Unit,
+    onRecordPayment: (itemId: String, amountPaise: Long, paymentMethod: String, reference: String) -> Unit,
     onCreatePeriod: (startDate: String, endDate: String) -> Unit,
     onApprove: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -136,7 +137,15 @@ fun PayrollScreenContent(
     val monthListState = rememberLazyListState(initialFirstVisibleItemIndex = 5000 - 2)
 
     val periodByMonth = remember(periods) {
-        periods.associateBy { YearMonth.parse(it.startDate.take(7)) }
+        periods.mapNotNull { period ->
+            try {
+                if (period.startDate.length >= 7) {
+                    YearMonth.parse(period.startDate.take(7)) to period
+                } else null
+            } catch (_: Exception) {
+                null
+            }
+        }.toMap()
     }
 
     Column(
@@ -339,12 +348,12 @@ fun PayrollScreenContent(
                     ) {
                         MetricTile(
                             label = "Gross",
-                            value = Money.format(activeMonthPeriod.grossSalaryCents),
+                            value = Money.format(activeMonthPeriod.grossSalaryPaise),
                             modifier = Modifier.weight(1f)
                         )
                         MetricTile(
                             label = "Net payable",
-                            value = Money.format(activeMonthPeriod.netSalaryCents),
+                            value = Money.format(activeMonthPeriod.netSalaryPaise),
                             modifier = Modifier.weight(1f),
                             accent = MaterialTheme.colorScheme.secondary
                         )
@@ -377,7 +386,7 @@ fun PayrollScreenContent(
                             )
                         }
                         Text(
-                            text = "${activeMonthPeriod.itemCount} staff • locked ${Dates.formatTimestamp(activeMonthPeriod.lockedAt)}",
+                            text = "${activeMonthPeriod.itemCount} employees • locked ${Dates.formatTimestamp(activeMonthPeriod.lockedAt)}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -443,7 +452,7 @@ fun PayrollScreenContent(
                     selectedPremisesId == null || member.premisesId == null || member.premisesId == selectedPremisesId
                 }
                 if (filteredStaff.isEmpty()) {
-                    SectionEmpty("No staff wallets for selected premises.")
+                    SectionEmpty("No employee wallets for selected premises.")
                 } else {
                     filteredStaff.forEach { member ->
                         Surface(
@@ -468,16 +477,16 @@ fun PayrollScreenContent(
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = "Earned ${Money.format(member.earnedBalanceCents)} • Paid ${Money.format(member.paidBalanceCents)}",
+                                        text = "Earned ${Money.format(member.earnedBalancePaise)} • Paid ${Money.format(member.paidBalancePaise)}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                                 Text(
                                     text = Money.format(
-                                        member.earnedBalanceCents +
-                                            member.approvedUnpaidBalanceCents +
-                                            member.paidBalanceCents
+                                        member.earnedBalancePaise +
+                                            member.approvedUnpaidBalancePaise +
+                                            member.paidBalancePaise
                                     ),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
@@ -494,12 +503,16 @@ fun PayrollScreenContent(
     }
 
     paying?.let { item ->
-        val paidAmt = item.payment?.amountCents ?: 0L
+        val paidAmt = item.payment?.amountPaise ?: 0L
+        val grossAmt = item.resolvedGrossSalaryPaise
         PayStaffModal(
-            staffName = item.staffName ?: "Staff",
-            staffCode = item.staffCode ?: "",
-            earnedCents = item.grossSalaryCents,
-            paidCents = paidAmt,
+            staffName = item.resolvedStaffName,
+            staffCode = item.resolvedStaffCode,
+            earnedPaise = grossAmt,
+            paidPaise = paidAmt,
+            breakdown = item.breakdown,
+            attendanceSummary = item.attendanceSummary,
+            paymentHistory = if (item.payment != null) listOf(item.payment) else emptyList(),
             onDismiss = { paying = null },
             onConfirmPay = { amount, method, reference ->
                 onRecordPayment(item.id, amount, method, reference)
@@ -511,6 +524,9 @@ fun PayrollScreenContent(
 
 @Composable
 private fun PayrollItemCard(item: PayrollItemDto, onPay: () -> Unit) {
+    val grossAmt = item.resolvedGrossSalaryPaise
+    val netAmt = item.resolvedNetSalaryPaise
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -522,16 +538,16 @@ private fun PayrollItemCard(item: PayrollItemDto, onPay: () -> Unit) {
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                InitialAvatar(name = item.staffName ?: "Staff")
+                InitialAvatar(name = item.resolvedStaffName)
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        item.staffName ?: "Staff",
+                        item.resolvedStaffName,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "${item.staffCode ?: ""} • present ${item.attendanceSummary.presentDays}/${item.attendanceSummary.totalDays} shifts",
+                        text = "${item.resolvedStaffCode} • present ${item.attendanceSummary.presentDays}/${item.attendanceSummary.totalDays} shifts",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -539,21 +555,16 @@ private fun PayrollItemCard(item: PayrollItemDto, onPay: () -> Unit) {
                 StatusPill(item.payment?.let { "PAID" } ?: "PENDING")
             }
 
-            KeyValueRow(label = "Gross", value = Money.format(item.grossSalaryCents))
-            KeyValueRow(label = "Additions", value = Money.format(item.additionsCents))
-            KeyValueRow(
-                label = "Deductions",
-                value = Money.format(item.deductionsCents),
-                valueColor = MaterialTheme.colorScheme.error
-            )
+            KeyValueRow(label = "Gross", value = Money.format(grossAmt))
+            KeyValueRow(label = "Additions", value = Money.format(item.additionsPaise))
             KeyValueRow(
                 label = "Net",
-                value = Money.format(item.netSalaryCents),
+                value = Money.format(netAmt),
                 valueColor = MaterialTheme.colorScheme.secondary
             )
 
             if (item.payment == null) {
-                val dueAmt = (item.netSalaryCents - (item.payment?.amountCents ?: 0L)).coerceAtLeast(0L)
+                val dueAmt = (netAmt - (item.payment?.amountPaise ?: 0L)).coerceAtLeast(0L)
                 FilledTonalButton(
                     onClick = onPay,
                     shape = RoundedCornerShape(10.dp),
@@ -565,7 +576,7 @@ private fun PayrollItemCard(item: PayrollItemDto, onPay: () -> Unit) {
                 }
             } else {
                 Text(
-                    text = "Paid ${Money.format(item.payment.amountCents)} • ${item.payment.referenceNumber}",
+                    text = "Paid ${Money.format(item.payment.amountPaise)} • ${item.payment.referenceNumber}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary
                 )

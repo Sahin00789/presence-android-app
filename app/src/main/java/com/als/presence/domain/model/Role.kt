@@ -1,2 +1,6 @@
 package com.als.presence.domain.model
-enum class Role{OWNER,MANAGER,STAFF}
+
+enum class Role {
+    OWNER,
+    EMPLOYEE
+}

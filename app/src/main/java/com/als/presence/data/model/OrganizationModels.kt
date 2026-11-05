@@ -14,22 +14,26 @@ data class OrganizationDto(
 
 @Serializable
 data class OrganizationMemberDto(
-    val id: String,
-    val organizationId: String,
-    val userId: String,
-    val fullName: String,
-    val email: String,
-    val role: String,
+    val id: String = "",
+    val organizationId: String = "",
+    val userId: String = "",
+    val fullName: String = "",
+    val email: String = "",
+    val role: String = "",
     val premisesId: String? = null,
     val premisesName: String? = null,
-    val earnedBalanceCents: Long = 0L,
-    val approvedUnpaidBalanceCents: Long = 0L,
-    val paidBalanceCents: Long = 0L,
+    val staffProfileId: String? = null,
+    val staffCode: String? = null,
+    val earnedBalancePaise: Long = 0L,
+    val approvedUnpaidBalancePaise: Long = 0L,
+    val paidBalancePaise: Long = 0L,
     val isActive: Boolean = true
 ) {
     val name: String get() = fullName
-    val staffCode: String get() = ""
-    val employeeId: String get() = id
+    val employeeId: String get() = staffProfileId ?: id.ifBlank { userId }
     val staffEmail: String get() = email
     val joinedAt: String? get() = null
+    val earnedBalanceInr: Long get() = earnedBalancePaise
+    val approvedUnpaidBalanceInr: Long get() = approvedUnpaidBalancePaise
+    val paidBalanceInr: Long get() = paidBalancePaise
 }

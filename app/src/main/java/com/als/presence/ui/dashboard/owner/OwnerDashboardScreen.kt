@@ -27,7 +27,6 @@ fun OwnerDashboardScreen(
     user: User,
     selectedTab: Int,
     modifier: Modifier = Modifier,
-    onEditOrgClick: (() -> Unit)? = null,
     workforceViewModel: OwnerWorkforceViewModel = hiltViewModel(),
     attendanceViewModel: OwnerAttendanceViewModel = hiltViewModel(),
     locationsViewModel: LocationsViewModel = hiltViewModel()
@@ -71,8 +70,7 @@ fun OwnerDashboardScreen(
                 payrollItemsMap = payrollItemsMap,
                 isRecordingPayment = workforceViewModel.isSubmitting.collectAsStateWithLifecycle().value,
                 onRetry = workforceViewModel::refresh,
-                onRecordPayment = workforceViewModel::recordPayment,
-                onEditOrgClick = onEditOrgClick
+                onRecordPayment = workforceViewModel::recordPayment
             )
             1 -> LocationsTab(
                 user = user,
@@ -90,6 +88,7 @@ fun OwnerDashboardScreen(
                 onCancelOvertime = locationsViewModel::cancelOvertime
             )
             else -> OwnerReportsTab(
+                user = user,
                 recordsState = recordsState,
                 premisesState = premisesState,
                 onRefresh = {

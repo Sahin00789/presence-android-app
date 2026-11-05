@@ -5,6 +5,7 @@ import com.als.presence.data.model.AuthResponse
 import com.als.presence.data.model.RefreshTokenRequest
 import kotlinx.serialization.json.Json
 import okhttp3.Authenticator
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -20,10 +21,22 @@ class TokenAuthenticator @Inject constructor(
     private val json: Json
 ) : Authenticator {
 
+    /**
+     * Dedicated client for the refresh call. It intentionally has no
+     * [AuthInterceptor]/[Authenticator] attached, so a failing refresh can never
+     * recursively trigger another refresh.
+     */
+    private val refreshClient: OkHttpClient by lazy { OkHttpClient.Builder().build() }
+
     @Synchronized
     override fun authenticate(route: Route?, response: Response): Request? {
         // Do not attempt to refresh if the request was already a refresh call
         if (response.request.url.encodedPath.endsWith("/api/v1/auth/refresh")) {
+            return null
+        }
+
+        // Never send our refresh token to a third-party host.
+        if (!isPresenceRequest(response.request)) {
             return null
         }
 
@@ -33,13 +46,32 @@ class TokenAuthenticator @Inject constructor(
             return null
         }
 
+        val failedAccessToken = response.request
+            .header("Authorization")
+            ?.removePrefix("Bearer ")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
+        val currentAccessToken = sessionManager.token
+
+        // Double-checked locking: while this call waited on the monitor another
+        // request may already have rotated the session. Reuse the new access
+        // token instead of rotating (and revoking) the refresh token again.
+        if (!failedAccessToken.isNullOrBlank() &&
+            !currentAccessToken.isNullOrBlank() &&
+            currentAccessToken != failedAccessToken
+        ) {
+            return response.request.newBuilder()
+                .header("Authorization", "Bearer $currentAccessToken")
+                .build()
+        }
+
         val currentRefreshToken = sessionManager.refreshToken
         if (currentRefreshToken.isNullOrBlank()) {
             sessionManager.clear()
             return null
         }
 
-        val client = OkHttpClient.Builder().build()
         val refreshRequestBody = json.encodeToString(
             RefreshTokenRequest.serializer(),
             RefreshTokenRequest(refreshToken = currentRefreshToken)
@@ -52,31 +84,52 @@ class TokenAuthenticator @Inject constructor(
             .build()
 
         return try {
-            val refreshResponse = client.newCall(refreshRequest).execute()
-            if (refreshResponse.isSuccessful) {
-                val bodyString = refreshResponse.body?.string()
-                if (!bodyString.isNullOrBlank()) {
-                    val authResponse = json.decodeFromString(AuthResponse.serializer(), bodyString)
-                    sessionManager.token = authResponse.accessToken
-                    sessionManager.refreshToken = authResponse.refreshToken
-                    sessionManager.organizationId = authResponse.user.organizationId
-                    sessionManager.userId = authResponse.user.id
-                    sessionManager.role = authResponse.user.role
-
-                    response.request.newBuilder()
-                        .header("Authorization", "Bearer ${authResponse.accessToken}")
-                        .build()
-                } else {
-                    sessionManager.clear()
-                    null
+            refreshClient.newCall(refreshRequest).execute().use { refreshResponse ->
+                if (!refreshResponse.isSuccessful) {
+                    // Only a definitive auth rejection should wipe the local
+                    // session. A 5xx or a flaky network must not log the user out.
+                    if (refreshResponse.code == 400 ||
+                        refreshResponse.code == 401 ||
+                        refreshResponse.code == 403
+                    ) {
+                        sessionManager.clear()
+                    }
+                    return null
                 }
-            } else {
-                sessionManager.clear()
-                null
+
+                val bodyString = refreshResponse.body?.string()
+                if (bodyString.isNullOrBlank()) {
+                    sessionManager.clear()
+                    return null
+                }
+
+                val authResponse = json.decodeFromString(AuthResponse.serializer(), bodyString)
+                persistSession(authResponse)
+
+                response.request.newBuilder()
+                    .header("Authorization", "Bearer ${authResponse.accessToken}")
+                    .build()
             }
         } catch (_: Exception) {
+            // Network failure: keep the refresh token so the next request retries.
             null
         }
+    }
+
+    private fun persistSession(authResponse: AuthResponse) {
+        sessionManager.token = authResponse.accessToken
+        sessionManager.refreshToken = authResponse.refreshToken
+        sessionManager.organizationId = authResponse.user.organizationId
+        sessionManager.userId = authResponse.user.id
+        sessionManager.role = authResponse.user.role
+    }
+
+    private fun isPresenceRequest(request: Request): Boolean {
+        val baseHost = PRESENCE_BASE_URL.toHttpUrlOrNull()?.host ?: return true
+        val requestHost = request.url.host
+        return requestHost.equals(baseHost, ignoreCase = true) ||
+            requestHost == "10.0.2.2" ||
+            requestHost == "localhost"
     }
 
     private fun responseCount(response: Response): Int {

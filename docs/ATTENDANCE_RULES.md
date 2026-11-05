@@ -8,51 +8,60 @@ stateDiagram-v2
     SCHEDULED --> CLOCKED_IN : Geofence + Face Match
     SCHEDULED --> ABSENT : No Clock-In & Shift Ended
     SCHEDULED --> ON_LEAVE : Approved Leave Request
-    SCHEDULED --> HOLIDAY : Organization Holiday
-    SCHEDULED --> WEEKLY_OFF : Scheduled Off Day
 
-    CLOCKED_IN --> PRESENT : Timely Clock-In
-    CLOCKED_IN --> LATE : Clocked-In After Grace Period
-    CLOCKED_IN --> HALF_DAY : Worked < Half-Day Threshold
-    CLOCKED_IN --> EXCEPTION_OPEN : 3 Consecutive Outside GPS Pings (>3 count)
+    CLOCKED_IN --> PRESENT : Clocked-In & Worked Duration >= Half-Day Threshold
+    CLOCKED_IN --> HALF_DAY : Worked Duration < Half-Day Threshold (Minutes)
+    CLOCKED_IN --> EXCEPTION_OPEN : 3 Outside Pings / Late (>30m) / Early Departure
 
-    EXCEPTION_OPEN --> CORRECTED_PRESENT : Manager/Owner Resolves (Present)
-    EXCEPTION_OPEN --> CORRECTED_ABSENT : Manager/Owner Resolves (Absent)
-    EXCEPTION_OPEN --> CORRECTED_HALF_DAY : Manager/Owner Resolves (Half-Day)
-    EXCEPTION_OPEN --> DEFAULT_PRESENT : Shift/Overtime Completed & No Button Pressed
-
-    PRESENT --> CLOCKED_OUT : Shift Completed
-    LATE --> CLOCKED_OUT : Shift Completed
-    HALF_DAY --> CLOCKED_OUT : Shift Completed
-
-    HOLIDAY --> PRESENT : Clocked-In on Holiday (normal present day)
-    WEEKLY_OFF --> PRESENT : Clocked-In on Off-Day (normal present day)
+    EXCEPTION_OPEN --> CORRECTED_ABSENT : Owner Resolves as Absent
+    EXCEPTION_OPEN --> CORRECTED_HALF_DAY : Owner Resolves as Half-Day
+    EXCEPTION_OPEN --> DEFAULT_PRESENT : Shift/Overtime Completed & Owner Takes No Action
 ```
 
 ---
 
 ## 2. Clock-In Validation Policy
 > [!NOTE]
-> Attendance tracking and clock-in apply exclusively to employees (**Staff** and **Managers**). The **Owner** is the head of the organization, is NOT an employee, has NO attendance tracking, and does NOT clock in.
+> Attendance tracking and clock-in apply exclusively to **Employees**. The **Owner** is the head of the organization, is NOT an employee, has NO attendance tracking, and does NOT clock in.
 
 1. **Distance Check**: Distance between device GPS coordinates and premise coordinates must be $\le 50\text{ metres}$.
 2. **Accuracy Threshold**: GPS reading `accuracyMeters` must be $\le 30\text{ metres}$. Stale location readings ($>2\text{ minutes}$ old) or flagged mock locations are rejected.
 3. **Face Verification Check**: Cosine similarity score between clock-in embedding and enrolled template must exceed the configured threshold ($\ge 0.75$).
-4. **Shift Match**: Clock-in is validated against assigned shift schedules.
+4. **Shift Match**: Clock-in is validated against assigned shift schedules. On holidays and weekly off-days, regular shifts are not scheduled; work is performed via scheduled/approved Overtime.
 
 ---
 
-## 3. Late Arrival & Half-Day Rules
-1. **Grace Period**: Default 15 minutes after shift `start_time`. Clock-in within grace period is marked `PRESENT`.
-2. **Late Threshold**: Clock-in past grace period is marked `LATE`.
-3. **Half-Day Threshold**: Total worked duration $< 50\%$ of scheduled shift minutes is marked `HALF_DAY`.
-4. **Early Departure**: Clock-out prior to scheduled shift end time minus grace period is flagged as Early Departure.
+## 3. Half-Day Rules
+1. **Half-Day Threshold (in Minutes)**: Configured in minutes (`halfDayThresholdMinutes`). Attendance is marked `HALF_DAY` if total worked duration (accounting for late clock-in or early departure) is less than the half-day threshold in minutes (e.g., $< 50\%$ of scheduled shift minutes).
 
 ---
 
-## 4. Manual Resolution & Exception Workflows (3 Consecutive Outside Pings)
-1. **Trigger Condition**: When periodic active-shift location monitoring records **3 consecutive outside pings** (`consecutiveFailures >= 3` / outside count $> 3$), an attendance monitoring exception is raised.
-2. **Action Buttons Persistence**: Resolution action buttons (Absent, Half-Day, Leave, Resume) appear on the Owner and Manager dashboard and remain visible and active **until the shift or overtime is completely finished/completed**.
-3. **Manual Options**: Owner or Manager can manually mark attendance as `ABSENT`, `HALF_DAY`, `LEAVE`, or resume tracking (`RESUME`).
-4. **Default Present Rule (No Action)**: If the owner or manager **does not press any button** before the shift or overtime session completes, the system automatically **defaults the attendance status to Present** (`PRESENT`).
-5. **Audit Logging**: Manual overrides and final resolutions are tracked in `audit_logs` and `attendance_corrections`.
+## 4. Manual Resolution & Exception Workflows (Triggers & Owner Actions)
+1. **Trigger Conditions**: An attendance monitoring exception (`EXCEPTION_OPEN`) is automatically raised under any of these conditions:
+   - **3 Consecutive Outside GPS Pings** (`consecutiveFailures >= 3` / outside count $> 3$).
+   - **Late Clock-In (> 30 minutes late)**: Clocking in more than 30 minutes past shift start time.
+   - **Early Departure**: Clocking out early or missing pings before shift end time automatically increments outside/missed pings, opening an exception.
+2. **Action Buttons Persistence**: Resolution action buttons (Absent, Half-Day, Leave, Resume) appear on the Owner dashboard and remain visible and active **until the shift or overtime is completely finished/completed**.
+3. **Manual Options**: Owner can manually resolve attendance as `ABSENT` or `HALF_DAY` (for late clock-in, early departure, or location exceptions), or resume tracking (`RESUME`). No manual "Present" button is needed because un-actioned sessions automatically default to Present.
+4. **Default Present Rule (No Action)**: If the owner **does not press any button** before the shift or overtime session completes, the system automatically **defaults the attendance status to Present** (`PRESENT`).
+5. **Session Completion & Ping Termination**: Once a shift or overtime session ends (or clock-out occurs), attendance is marked **completed**. Background location monitoring pings immediately terminate; no further pings or new exceptions can be triggered after session completion.
+
+
+
+
+---
+
+## 5. Shift & Overtime Pay Rules
+1. **Shift Pay Rules**:
+   - **Present**: Earns full scheduled shift pay rate (`presentPay`).
+   - **Half-Day**: Earns half-day pay rate (`halfDayPay`, default 50% of present pay).
+   - **Leave**: Earns approved leave pay rate (`leavePay`).
+   - **Absent**: Earns ₹0 (`absentPay`).
+2. **Overtime Pay Rules**:
+   - **Creation & Approval**: The **Owner** creates and approves overtime entries for the employee (`paymentInr`).
+   - **Execution & Completion**: The **Employee** clocks in for the assigned overtime session and clocks out upon completion.
+   - **Present (Completed)**: Earns 100% of approved overtime pay (`paymentInr`).
+   - **Absent / Unworked**: Earns ₹0.
+
+
+

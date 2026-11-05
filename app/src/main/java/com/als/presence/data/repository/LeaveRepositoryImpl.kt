@@ -21,15 +21,20 @@ class LeaveRepositoryImpl @Inject constructor(
     }
 
     override suspend fun requestLeave(request: LeaveRequestCreate): Resource<LeaveDto> {
-        return try {
-            val response = leaveApiService.list()
-            Resource.Success(response.body()?.firstOrNull() ?: LeaveDto(id = "1", organizationId = "", staffProfileId = "", startDate = request.workDate, endDate = request.workDate, reason = request.reason, status = "PENDING", createdAt = ""))
-        } catch (e: Exception) {
-            Resource.Error(e, e.localizedMessage ?: "Error requesting leave")
+        return safeApiCall("Error submitting leave request") {
+            leaveApiService.create(request)
         }
     }
 
     override suspend fun reviewLeave(id: String, decision: String, note: String?): Resource<LeaveDto> {
-        return Resource.Success(LeaveDto(id = id, organizationId = "", staffProfileId = "", startDate = "", endDate = "", reason = "", status = decision, createdAt = ""))
+        return safeApiCall("Error reviewing leave request") {
+            leaveApiService.review(
+                id = id,
+                body = com.als.presence.data.model.ReviewLeaveRequest(
+                    decision = decision,
+                    reviewRemarks = note
+                )
+            )
+        }
     }
 }

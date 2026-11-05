@@ -33,7 +33,7 @@ sequenceDiagram
         API->>API: Increment Consecutive Failure Counter for Active Session
         alt Consecutive Failures >= 3 (Outside Count > 3)
             API->>DB: Create location_monitoring_exception record
-            API->>API: Send Real-Time Notification to Manager & Owner
+            API->>API: Send Real-Time Notification to Owner
         end
     end
 ```
@@ -45,12 +45,12 @@ sequenceDiagram
 ### Policy Specification
 1. **Trigger**: When active shift monitoring records **3 consecutive outside pings** (`consecutiveFailures >= 3`, outside count $> 3$).
 2. **Alert Broadcast**:
-   - High-priority push / real-time notification sent to Manager and Owner dashboards.
-   - Notification sent to Staff device.
+   - High-priority push / real-time notification sent to Owner dashboard.
+   - Notification sent to Employee device.
 3. **Manual Attendance Marking & Action Buttons**:
-   - Action buttons appear on the Owner and Manager dashboard and remain visible and active **until the shift or overtime is completely finished/completed**.
-   - Owner or Manager can manually mark attendance as `ABSENT`, `HALF_DAY`, `LEAVE`, or resume tracking (`RESUME`).
+   - Action buttons appear on the Owner dashboard and remain visible and active **until the shift or overtime is completely finished/completed**.
+   - Owner can manually mark attendance as `ABSENT`, `HALF_DAY`, `LEAVE`, or resume tracking (`RESUME`).
 4. **Default Present Rule (No Action Taken)**:
-   - **CRITICAL**: If the owner or manager **does not press any button** before the shift or overtime completes, the system **defaults to Present** (`PRESENT`).
+   - **CRITICAL**: If the owner **does not press any button** before the shift or overtime completes, the system **defaults to Present** (`PRESENT`).
 5. **Counter Reset**:
    - A single valid `IN_PREMISES` check resets the consecutive failure counter to 0.

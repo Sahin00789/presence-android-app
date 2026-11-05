@@ -1,51 +1,68 @@
 package com.als.presence.ui.dashboard.owner.screens
 
-import androidx.compose.foundation.BorderStroke
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import com.als.presence.domain.model.Role
-import com.als.presence.domain.model.User
-import com.als.presence.ui.dashboard.manager.screens.WeekDaysList
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MoreTime
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.SupervisorAccount
+import androidx.compose.material.icons.filled.Work
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Surface
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,41 +71,40 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.als.presence.core.common.UiState
-import com.als.presence.core.designsystem.PresenceDesign
-import com.als.presence.core.designsystem.SecondaryEmerald
-import com.als.presence.data.model.FaceStatusDto
+import com.als.presence.core.face.FaceEmbeddingEngine
 import com.als.presence.data.model.PremisesDto
-import com.als.presence.data.model.ShiftAssignmentDto
-import com.als.presence.data.model.ShiftTemplateDto
 import com.als.presence.data.model.StaffDto
-import com.als.presence.ui.dashboard.common.Dates
+import com.als.presence.domain.model.User
 import com.als.presence.ui.dashboard.common.FaceCaptureDialog
-import com.als.presence.ui.dashboard.common.MessageSnackbar
 import com.als.presence.ui.dashboard.common.Money
-import com.als.presence.ui.dashboard.common.PresenceAvatar
 import com.als.presence.ui.dashboard.common.PresenceBadge
 import com.als.presence.ui.dashboard.common.PresenceButton
 import com.als.presence.ui.dashboard.common.PresenceCard
-import com.als.presence.ui.dashboard.common.PresenceDetailRow
 import com.als.presence.ui.dashboard.common.PresenceEmptyState
-import com.als.presence.ui.dashboard.common.PresenceFieldGroup
+import com.als.presence.ui.dashboard.common.PresenceErrorState
+import com.als.presence.ui.dashboard.common.PresenceFilterChip
 import com.als.presence.ui.dashboard.common.PresenceIconButton
+import com.als.presence.ui.dashboard.common.PresenceLoading
 import com.als.presence.ui.dashboard.common.PresenceMetaStrip
 import com.als.presence.ui.dashboard.common.PresencePageIntro
 import com.als.presence.ui.dashboard.common.PresenceSecondaryScaffold
 import com.als.presence.ui.dashboard.common.PresenceSectionTitle
 import com.als.presence.ui.dashboard.common.PresenceSize
-import com.als.presence.ui.dashboard.common.PresenceTextField
+import com.als.presence.ui.dashboard.common.PresenceStatTile
 import com.als.presence.ui.dashboard.common.PresenceTone
 import com.als.presence.ui.dashboard.common.PresenceVariant
-import com.als.presence.ui.dashboard.common.StatusPill
-import com.als.presence.ui.dashboard.manager.modals.AssignShiftWithRulesModal
+import com.als.presence.ui.dashboard.common.uriToBase64
+import com.als.presence.ui.dashboard.owner.modals.AssignShiftWithRulesModal
+import com.als.presence.ui.dashboard.owner.modals.BookOvertimeModal
 import com.als.presence.ui.dashboard.owner.viewmodels.OwnerWorkforceViewModel
 
 private data class UnifiedEmployeeItem(
@@ -96,65 +112,48 @@ private data class UnifiedEmployeeItem(
     val userId: String,
     val fullName: String,
     val email: String,
-    val role: String, // "MANAGER" or "STAFF"
-    val staffCode: String?,
+    val phone: String?,
+    val address: String?,
+    val avatarUrl: String?,
+    val role: String,
+    val staffCode: String,
     val department: String?,
     val premisesId: String?,
     val premisesName: String?,
-    val joinedAt: String?,
+    val joinedAt: String,
     val isActive: Boolean,
-    val employeeId: String?
+    val employeeId: String
 )
 
-/**
- * Unified "Employees Manager" directory screen.
- * Handles staff/manager profiles, assigned shifts with attendance payment rules, and facial biometrics.
- */
 @Composable
 fun EmployeesManagementScreen(
-    onBack: () -> Unit,
-    canManage: Boolean,
     user: User? = null,
+    onBack: () -> Unit,
+    canManage: Boolean = true,
     viewModel: OwnerWorkforceViewModel = hiltViewModel()
 ) {
-    val staffState by viewModel.staff.collectAsStateWithLifecycle()
-    val membersState by viewModel.members.collectAsStateWithLifecycle()
-    val faceStatuses by viewModel.faceStatuses.collectAsStateWithLifecycle()
-    val faceSubmittingFor by viewModel.faceSubmittingFor.collectAsStateWithLifecycle()
-    val premisesState by viewModel.premises.collectAsStateWithLifecycle()
-    val shiftAssignmentsState by viewModel.shiftAssignments.collectAsStateWithLifecycle()
-    val shiftTemplatesState by viewModel.shiftTemplates.collectAsStateWithLifecycle()
-    val message by viewModel.message.collectAsStateWithLifecycle()
-    val isSubmitting by viewModel.isSubmitting.collectAsStateWithLifecycle()
-
-    var activeMessage by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(message) {
-        if (message != null) activeMessage = message
-    }
+    val context = LocalContext.current
+    val staffState by viewModel.staffState.collectAsState()
+    val premisesState by viewModel.premisesState.collectAsState()
+    val shiftAssignmentsState by viewModel.shiftAssignmentsState.collectAsState()
+    val shiftTemplatesState by viewModel.shiftTemplatesState.collectAsState()
+    val actionMessage by viewModel.actionMessage.collectAsState()
 
     var showAddModal by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<UnifiedEmployeeItem?>(null) }
-    var deleteTarget by remember { mutableStateOf<UnifiedEmployeeItem?>(null) }
     var faceTarget by remember { mutableStateOf<UnifiedEmployeeItem?>(null) }
     var revokeTarget by remember { mutableStateOf<UnifiedEmployeeItem?>(null) }
     var shiftTarget by remember { mutableStateOf<UnifiedEmployeeItem?>(null) }
+    var overtimeTarget by remember { mutableStateOf<UnifiedEmployeeItem?>(null) }
 
     val staff = (staffState as? UiState.Success)?.data.orEmpty()
-    val members = (membersState as? UiState.Success)?.data.orEmpty()
     val premises = (premisesState as? UiState.Success)?.data.orEmpty()
     val shiftAssignments = (shiftAssignmentsState as? UiState.Success)?.data.orEmpty()
     val shiftTemplates = (shiftTemplatesState as? UiState.Success)?.data.orEmpty()
 
-    var selectedPremisesId by remember { mutableStateOf<String?>(null) }
-    var selectedRoleFilter by remember { mutableStateOf("ALL") } // "ALL", "STAFF", "MANAGER"
-
-    // Merge staff and manager members into a single deduplicated list
-    val allEmployees = remember(staff, members, premises) {
-        val managerUserIds = members.filter { it.role == "MANAGER" }.map { it.userId }.toSet()
-        val staffUserIds = staff.map { it.userId }.toSet()
+    val allEmployees = remember(staff, premises) {
         val premisesMap = premises.associateBy { it.id }
-
-        val staffList = staff.map { s ->
+        staff.map { s ->
             val resolvedPremisesName = s.premisesName?.takeIf { it.isNotBlank() }
                 ?: premisesMap[s.premisesId]?.name
             UnifiedEmployeeItem(
@@ -162,206 +161,112 @@ fun EmployeesManagementScreen(
                 userId = s.userId,
                 fullName = s.fullName,
                 email = s.email,
-                role = if (managerUserIds.contains(s.userId)) "MANAGER" else "STAFF",
+                phone = s.phone,
+                address = s.address,
+                avatarUrl = s.avatarUrl,
+                role = "EMPLOYEE",
                 staffCode = s.staffCode,
                 department = s.department,
                 premisesId = s.premisesId,
                 premisesName = resolvedPremisesName,
-                joinedAt = s.hireDate,
+                joinedAt = s.hireDate.orEmpty(),
                 isActive = s.isActive,
                 employeeId = s.id
             )
         }
-        val managerList = members.filter { m -> m.role == "MANAGER" && !staffUserIds.contains(m.userId) }.map { m ->
-            val resolvedPremisesName = m.premisesName?.takeIf { it.isNotBlank() }
-                ?: premisesMap[m.premisesId]?.name
-            val effectiveProfileId = m.employeeId ?: m.userId
-            UnifiedEmployeeItem(
-                id = effectiveProfileId,
-                userId = m.userId,
-                fullName = m.fullName,
-                email = m.email,
-                role = "MANAGER",
-                staffCode = m.staffCode ?: "MGR",
-                department = "Operations",
-                premisesId = m.premisesId,
-                premisesName = resolvedPremisesName,
-                joinedAt = m.joinedAt,
-                isActive = m.isActive,
-                employeeId = effectiveProfileId
+    }
+
+    LaunchedEffect(actionMessage) {
+        actionMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.clearActionMessage()
+        }
+    }
+
+    PresenceSecondaryScaffold(
+        crumb = "Workforce",
+        title = "Employees Manager",
+        onBack = onBack,
+        onRefresh = { viewModel.refresh() }
+    ) {
+        PresencePageIntro(
+            eyebrow = "Directory",
+            title = "Workforce Directory",
+            description = "Manage workforce employees: assign shift schedules with attendance payment rules and enroll facial biometrics."
+        )
+
+        PresenceMetaStrip(
+            items = listOf(
+                "Employees" to allEmployees.size.toString(),
+                "Active" to allEmployees.count { it.isActive }.toString()
             )
-        }
-        staffList + managerList
-    }
+        )
 
-    val managerPremisesId = remember(allEmployees, user) {
-        if (user?.role == Role.MANAGER) {
-            allEmployees.find { it.userId == user.id || it.email.equals(user.email, ignoreCase = true) }?.premisesId
-        } else null
-    }
+        PresenceSectionTitle(
+            title = "Organization Roster",
+            description = "Enrolled employees for the organization.",
+            action = if (canManage) {
+                {
+                    PresenceButton(
+                        label = "Add Employee",
+                        icon = Icons.Default.Add,
+                        onClick = { showAddModal = true }
+                    )
+                }
+            } else null
+        )
 
-    val filteredEmployees = allEmployees.filter { emp ->
-        // Manager's own card will not be listed in staff directory
-        if (user?.role == Role.MANAGER && (emp.userId == user.id || emp.email.equals(user.email, ignoreCase = true))) {
-            return@filter false
-        }
-        // Manager can see staff of his assigned premises only
-        val matchesPremises = if (user?.role == Role.MANAGER && managerPremisesId != null) {
-            emp.premisesId == managerPremisesId
-        } else {
-            selectedPremisesId == null || emp.premisesId == null || emp.premisesId == selectedPremisesId
-        }
-        val matchesRole = when (selectedRoleFilter) {
-            "STAFF" -> emp.role == "STAFF"
-            "MANAGER" -> emp.role == "MANAGER"
-            else -> true
-        }
-        matchesPremises && matchesRole
-    }
-
-    Box {
-        PresenceSecondaryScaffold(
-            crumb = "People",
-            title = "Employees Manager",
-            onBack = onBack,
-            actions = {
-                PresenceIconButton(
-                    icon = Icons.Default.Refresh,
-                    contentDescription = "Refresh employee directory",
-                    onClick = viewModel::refresh
+        when {
+            staffState is UiState.Loading && staff.isEmpty() -> {
+                PresenceLoading(label = "Loading workforce directory...")
+            }
+            staffState is UiState.Error && staff.isEmpty() -> {
+                PresenceErrorState(
+                    message = (staffState as UiState.Error).message,
+                    onRetry = { viewModel.refresh() }
                 )
             }
-        ) {
-            PresencePageIntro(
-                eyebrow = "Directory",
-                title = "Employees Manager",
-                description = "Manage staff and management team: assign shift schedules with attendance payment rules and enroll facial biometrics."
-            )
-
-            PresenceMetaStrip(
-                items = listOf(
-                    "Employees" to filteredEmployees.size.toString(),
-                    "Active" to filteredEmployees.count { it.isActive }.toString(),
-                    "Staff" to filteredEmployees.count { it.role == "STAFF" }.toString(),
-                    "Managers" to filteredEmployees.count { it.role == "MANAGER" }.toString()
-                )
-            )
-
-            // Premises & Role Filter Rows
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (premises.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = selectedPremisesId == null,
-                            onClick = { selectedPremisesId = null },
-                            label = { Text("All Premises", style = MaterialTheme.typography.labelSmall) },
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        premises.forEach { p ->
-                            FilterChip(
-                                selected = selectedPremisesId == p.id,
-                                onClick = { selectedPremisesId = p.id },
-                                label = { Text(Dates.cleanPremisesName(p.name), style = MaterialTheme.typography.labelSmall) },
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = selectedRoleFilter == "ALL",
-                        onClick = { selectedRoleFilter = "ALL" },
-                        label = { Text("All Employees", style = MaterialTheme.typography.labelSmall) },
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                    FilterChip(
-                        selected = selectedRoleFilter == "STAFF",
-                        onClick = { selectedRoleFilter = "STAFF" },
-                        label = { Text("Staff", style = MaterialTheme.typography.labelSmall) },
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                    FilterChip(
-                        selected = selectedRoleFilter == "MANAGER",
-                        onClick = { selectedRoleFilter = "MANAGER" },
-                        label = { Text("Managers", style = MaterialTheme.typography.labelSmall) },
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                }
-            }
-
-            PresenceSectionTitle(
-                title = "Organisation Roster",
-                description = "Enrolled staff and managers.",
-                action = {
-                    if (canManage) {
-                        PresenceButton(
-                            label = "Add employee",
-                            onClick = { showAddModal = true },
-                            variant = PresenceVariant.Soft,
-                            size = PresenceSize.Sm,
-                            icon = Icons.Default.PersonAdd,
-                            loading = isSubmitting
-                        )
-                    }
-                }
-            )
-
-            if (filteredEmployees.isEmpty()) {
+            allEmployees.isEmpty() -> {
                 PresenceEmptyState(
-                    icon = Icons.Default.SupervisorAccount,
+                    icon = Icons.Default.Badge,
                     title = "No employees found",
-                    description = "Add staff or manager members to start managing rosters, shift rules, and facial enrollment."
+                    description = "Add workforce employees to start managing rosters, shift assignments, and facial verification."
                 )
-            } else {
-                filteredEmployees.forEach { employee ->
-                    val targetProfileId = employee.employeeId ?: employee.id
-                    EmployeeCard(
-                        employee = employee,
-                        face = faceStatuses[targetProfileId],
-                        faceBusy = faceSubmittingFor == targetProfileId,
-                        canManage = canManage,
-                        shiftAssignments = shiftAssignments,
-                        shiftTemplates = shiftTemplates,
-                        onEdit = { editTarget = employee },
-                        onDelete = { deleteTarget = employee },
-                        onEnrollFace = { faceTarget = employee },
-                        onRevokeFace = { revokeTarget = employee },
-                        onAssignShift = { shiftTarget = employee }
-                    )
+            }
+            else -> {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    allEmployees.forEach { emp ->
+                        EmployeeItemCard(
+                            employee = emp,
+                            canManage = canManage,
+                            onEdit = { editTarget = emp },
+                            onFaceEnroll = { faceTarget = emp },
+                            onShiftAssign = { shiftTarget = emp },
+                            onOvertimeAssign = { overtimeTarget = emp },
+                            onRevoke = { revokeTarget = emp }
+                        )
+                    }
                 }
             }
         }
-
-        MessageSnackbar(message = activeMessage, onDismiss = { activeMessage = null })
     }
 
     if (showAddModal) {
-        val availablePremisesForAdd = if (user?.role == Role.MANAGER && managerPremisesId != null) {
-            premises.filter { it.id == managerPremisesId }
-        } else {
-            premises
-        }
         AddEmployeesModal(
-            premisesList = availablePremisesForAdd,
-            initialPremisesId = managerPremisesId ?: selectedPremisesId,
+            premisesList = premises,
+            initialPremisesId = premises.firstOrNull()?.id,
             onDismiss = { showAddModal = false },
-            onAdd = { role, name, email, department, premisesId ->
-                if (role == "MANAGER") {
-                    viewModel.inviteManager(name, email, department, null, premisesId)
-                } else {
-                    viewModel.addStaff(name, email, department, null, premisesId)
-                }
+            onAdd = { _, name, email, department, address, phone, avatarBase64, premisesId ->
+                viewModel.addStaff(
+                    fullName = name,
+                    email = email,
+                    department = department,
+                    designation = null,
+                    address = address,
+                    phone = phone,
+                    avatarBase64 = avatarBase64,
+                    premisesId = premisesId
+                )
                 showAddModal = false
             }
         )
@@ -372,457 +277,367 @@ fun EmployeesManagementScreen(
             employee = target,
             premisesList = premises,
             onDismiss = { editTarget = null },
-            onSave = { name, email, department, premisesId ->
-                if (target.role == "MANAGER") {
-                    viewModel.inviteManager(name, email, department, null, premisesId)
-                } else {
-                    viewModel.addStaff(name, email, department, null, premisesId)
-                }
+            onSave = { name, email, department, address, phone, avatarBase64, premisesId ->
+                viewModel.addStaff(
+                    fullName = name,
+                    email = email,
+                    department = department,
+                    designation = null,
+                    address = address,
+                    phone = phone,
+                    avatarBase64 = avatarBase64,
+                    premisesId = premisesId
+                )
                 editTarget = null
             }
         )
     }
 
-    deleteTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text("Deactivate Employee Account?", fontWeight = FontWeight.Bold) },
-            text = {
-                Text("Are you sure you want to deactivate ${target.fullName}? This will revoke their access and purge facial biometric templates.")
+    faceTarget?.let { target ->
+        val engine = remember { FaceEmbeddingEngine(context) }
+        FaceCaptureDialog(
+            engine = engine,
+            mode = "ENROLL",
+            onCapturedMulti = { embeddings ->
+                viewModel.enrollFaceTemplates(target.employeeId, embeddings)
+                faceTarget = null
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deactivateMember(target.userId, target.fullName)
-                        deleteTarget = null
-                    }
-                ) { Text("Deactivate", color = PresenceDesign.Danger) }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) { Text("Cancel") }
-            }
+            onDismiss = { faceTarget = null }
         )
     }
 
-    faceTarget?.let { target ->
-        val profileId = target.employeeId ?: target.id
-        if (profileId.isNotBlank()) {
-            FaceCaptureDialog(
-                engine = viewModel.faceEmbeddingEngine,
-                mode = "ENROLL",
-                onCapturedMulti = { embeddings ->
-                    viewModel.enrollFace(profileId, embeddings)
-                    faceTarget = null
-                },
-                onCapturedSingle = { _ -> },
-                onDismiss = { faceTarget = null }
+    shiftTarget?.let { target ->
+        val staffList = staff.map { s ->
+            StaffDto(
+                id = s.id,
+                fullName = s.fullName,
+                email = s.email,
+                role = "EMPLOYEE",
+                premisesId = s.premisesId
             )
         }
-    }
-
-    revokeTarget?.let { target ->
-        val profileId = target.employeeId ?: target.id
-        AlertDialog(
-            onDismissRequest = { revokeTarget = null },
-            title = { Text("Reset face enrolment?", fontWeight = FontWeight.Bold) },
-            text = {
-                Text("This revokes ${target.fullName}'s template. They cannot clock in until you re-enrol them in person.")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (profileId.isNotBlank()) {
-                            viewModel.revokeFace(profileId)
-                        }
-                        revokeTarget = null
-                    }
-                ) { Text("Reset", color = PresenceDesign.Danger) }
-            },
-            dismissButton = {
-                TextButton(onClick = { revokeTarget = null }) { Text("Cancel") }
-            }
-        )
-    }
-
-    val activeShiftTarget = shiftTarget
-    if (activeShiftTarget != null) {
-        val targetProfileId = activeShiftTarget.employeeId ?: activeShiftTarget.id
-        val staffAdapter = StaffDto(
-            id = targetProfileId,
-            userId = activeShiftTarget.userId,
-            email = activeShiftTarget.email,
-            fullName = activeShiftTarget.fullName,
-            staffCode = activeShiftTarget.staffCode ?: "EMP",
-            department = activeShiftTarget.department ?: "General",
-            designation = activeShiftTarget.role,
-            premisesId = activeShiftTarget.premisesId,
-            premisesName = activeShiftTarget.premisesName,
-            hireDate = activeShiftTarget.joinedAt ?: Dates.todayIso(),
-            isActive = activeShiftTarget.isActive
-        )
         AssignShiftWithRulesModal(
-            staff = listOf(staffAdapter),
+            staff = staffList,
             templates = shiftTemplates,
-            initialStaffId = staffAdapter.id,
-            initialPremisesId = activeShiftTarget.premisesId,
+            initialStaffId = target.employeeId,
+            initialPremisesId = target.premisesId ?: premises.firstOrNull()?.id,
             onDismiss = { shiftTarget = null },
-            onAssignWithRules = { employeeId, assignments, startDate, premisesId, _, _ ->
-                viewModel.assignShifts(employeeId, assignments, startDate, premisesId)
+            onAssignWithRules = { employeeId, assignments, startDate, _, _, _ ->
+                val firstAssignment = assignments.firstOrNull()
+                if (firstAssignment != null) {
+                    viewModel.assignShiftWithRules(
+                        staffProfileId = employeeId,
+                        shiftId = firstAssignment.shiftId,
+                        startDate = startDate,
+                        endDate = "",
+                        paymentRules = emptyMap(),
+                        daysOfWeek = firstAssignment.daysOfWeek
+                    )
+                }
                 shiftTarget = null
             }
         )
     }
+
+    overtimeTarget?.let { target ->
+        val staffList = staff.map { s ->
+            StaffDto(
+                id = s.id,
+                fullName = s.fullName,
+                email = s.email,
+                role = "EMPLOYEE",
+                premisesId = s.premisesId
+            )
+        }
+        BookOvertimeModal(
+            staff = staffList,
+            preselectedEmployeeId = target.employeeId,
+            shiftAssignments = shiftAssignments,
+            shifts = shiftTemplates,
+            onDismiss = { overtimeTarget = null },
+            onBook = { employeeId, workDate, startTime, endTime, paymentAmount, reason ->
+                val rateInr = Money.parseToInr(paymentAmount) ?: 0L
+                viewModel.createOvertime(
+                    employeeId = employeeId,
+                    workDate = workDate,
+                    startTime = startTime,
+                    endTime = endTime,
+                    paymentInr = rateInr,
+                    reason = reason
+                )
+                overtimeTarget = null
+            }
+        )
+    }
+
+    revokeTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { revokeTarget = null },
+            title = { Text("Deactivate Employee Account", fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to deactivate ${target.fullName}? This will revoke session access and remove biometric templates.") },
+            confirmButton = {
+                PresenceButton(
+                    label = "Deactivate",
+                    onClick = {
+                        viewModel.revokeStaff(target.employeeId)
+                        revokeTarget = null
+                    }
+                )
+            },
+            dismissButton = {
+                PresenceButton(
+                    label = "Cancel",
+                    onClick = { revokeTarget = null }
+                )
+            }
+        )
+    }
 }
 
 @Composable
-private fun EmployeeCard(
+private fun EmployeeItemCard(
     employee: UnifiedEmployeeItem,
-    face: FaceStatusDto?,
-    faceBusy: Boolean,
     canManage: Boolean,
-    shiftAssignments: List<ShiftAssignmentDto>,
-    shiftTemplates: List<ShiftTemplateDto>,
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onEnrollFace: () -> Unit,
-    onRevokeFace: () -> Unit,
-    onAssignShift: () -> Unit
+    onFaceEnroll: () -> Unit,
+    onShiftAssign: () -> Unit,
+    onOvertimeAssign: () -> Unit,
+    onRevoke: () -> Unit
 ) {
-    PresenceCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            // Header Row: Avatar, Name, Email, Role, Edit & Delete Actions
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PresenceAvatar(
-                    name = employee.fullName,
-                    tone = if (employee.role == "MANAGER") PresenceTone.Purple else PresenceTone.Info
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = employee.fullName,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = PresenceDesign.Ink
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = buildString {
-                            employee.staffCode?.let { append(it).append(" • ") }
-                            append(employee.email)
-                            employee.premisesName?.let { append(" • 📍 ").append(Dates.cleanPremisesName(it)) }
-                        },
-                        fontSize = 11.5.sp,
-                        color = PresenceDesign.LabelText
-                    )
-                }
-                PresenceBadge(
-                    label = employee.role,
-                    tone = if (employee.role == "MANAGER") PresenceTone.Purple else PresenceTone.Info
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                if (canManage) {
-                    PresenceIconButton(
-                        icon = Icons.Default.Edit,
-                        contentDescription = "Edit profile for ${employee.fullName}",
-                        onClick = onEdit
-                    )
-                    PresenceIconButton(
-                        icon = Icons.Default.Delete,
-                        contentDescription = "Deactivate account for ${employee.fullName}",
-                        onClick = onDelete
-                    )
-                }
-            }
+    var showMenu by remember { mutableStateOf(false) }
 
-            // Employee Details Group
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                PresenceDetailRow(
-                    label = "Department",
-                    value = employee.department?.takeIf { it.isNotBlank() } ?: "Operations"
-                )
-                PresenceDetailRow(
-                    label = "Email Address",
-                    value = employee.email
-                )
-                PresenceDetailRow(
-                    label = "Premises",
-                    value = employee.premisesName?.let { Dates.cleanPremisesName(it) } ?: "Not Assigned"
-                )
-                employee.joinedAt?.let {
-                    PresenceDetailRow(
-                        label = "Joined Date",
-                        value = Dates.formatDate(it)
-                    )
-                }
-                PresenceDetailRow(
-                    label = "Status",
-                    value = if (employee.isActive) "Active" else "Deactivated"
-                )
-            }
-
-            // Assigned Shifts & Attendance Payment Rules
-            AssignedShiftsSection(
-                employeeId = employee.employeeId,
-                fullName = employee.fullName,
-                email = employee.email,
-                staffCode = employee.staffCode,
-                shiftAssignments = shiftAssignments,
-                shiftTemplates = shiftTemplates
-            )
-
-            // Action Buttons: Assign Shift & Payments, Enrol Face
+    PresenceCard {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Header Row: Avatar + Info + Active Badge + 3-Dots Menu
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onAssignShift,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Assign Shift & Payments", style = MaterialTheme.typography.labelSmall)
-                }
-
-                FilledTonalButton(
-                    onClick = onEnrollFace,
-                    enabled = !faceBusy,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Default.Face, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(if (face?.enrolled == true) "Re-enrol" else "Enrol Face", style = MaterialTheme.typography.labelSmall)
-                }
-            }
-
-            if (face?.enrolled == true) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onRevokeFace, enabled = !faceBusy) {
-                        Text("Reset face", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AssignedShiftsSection(
-    employeeId: String?,
-    fullName: String?,
-    email: String?,
-    staffCode: String?,
-    shiftAssignments: List<ShiftAssignmentDto>,
-    shiftTemplates: List<ShiftTemplateDto>
-) {
-    val myAssignments = remember(employeeId, fullName, email, staffCode, shiftAssignments) {
-        shiftAssignments.filter { a ->
-            (employeeId != null && a.employeeId == employeeId) ||
-            (!fullName.isNullOrBlank() && a.staffName.equals(fullName, ignoreCase = true)) ||
-            (!email.isNullOrBlank() && a.staffName.equals(email, ignoreCase = true)) ||
-            (!staffCode.isNullOrBlank() && a.staffName.equals(staffCode, ignoreCase = true))
-        }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Weekly Schedule & Shift Rules (7-Day View)",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            val activeDaysCount = remember(myAssignments, shiftTemplates) {
-                WeekDaysList.count { dayInfo ->
-                    myAssignments.any { a ->
-                        val template = shiftTemplates.firstOrNull { t -> t.id == a.shiftTemplateId }
-                        val activeDays = a.daysOfWeek ?: template?.daysOfWeek
-                        activeDays.isNullOrEmpty() || activeDays.contains(dayInfo.dayOfWeek)
-                    }
-                }
-            }
-            Text(
-                text = "$activeDaysCount / 7 days active",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = if (activeDaysCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        if (myAssignments.isEmpty()) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "No shift assigned • Tap Assign Shift & Payments below",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        } else {
-            // 7 Day Cards Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                WeekDaysList.forEach { dayInfo ->
-                    val matchingAssignment = myAssignments.find { a ->
-                        val template = shiftTemplates.firstOrNull { t -> t.id == a.shiftTemplateId }
-                        val activeDays = a.daysOfWeek ?: template?.daysOfWeek
-                        activeDays != null && activeDays.contains(dayInfo.dayOfWeek)
-                    } ?: myAssignments.find { a ->
-                        val template = shiftTemplates.firstOrNull { t -> t.id == a.shiftTemplateId }
-                        val activeDays = a.daysOfWeek ?: template?.daysOfWeek
-                        activeDays.isNullOrEmpty()
-                    }
-
-                    val template = matchingAssignment?.let { a ->
-                        shiftTemplates.firstOrNull { t -> t.id == a.shiftTemplateId }
-                    }
-
-                    val isShiftActive = matchingAssignment != null
-                    val timeWindow = if (isShiftActive) Dates.formatWindow(template?.startTime, template?.endTime) else "Off Day"
-                    val presentPayCents = matchingAssignment?.paymentCents
-
-                    Surface(
-                        modifier = Modifier.width(155.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isShiftActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
-                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isShiftActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                        )
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            // Day Header
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(26.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (isShiftActive) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = dayInfo.shortName,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isShiftActive) MaterialTheme.colorScheme.onPrimary
-                                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 10.sp
-                                    )
-                                }
-                                Text(
-                                    text = dayInfo.fullName,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.5.sp
+                        if (!employee.avatarUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = employee.avatarUrl,
+                                contentDescription = employee.fullName,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Text(
+                                text = employee.fullName.take(1).uppercase(),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                    Column {
+                        Text(
+                            text = employee.fullName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF171A34)
+                        )
+                        Text(
+                            text = employee.email,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF747895)
+                        )
+                        if (!employee.phone.isNullOrBlank()) {
+                            Text(
+                                text = employee.phone,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF2563EB),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    PresenceBadge(
+                        label = if (employee.isActive) "Active" else "Deactivated",
+                        tone = if (employee.isActive) PresenceTone.Success else PresenceTone.Neutral
+                    )
+
+                    if (canManage && employee.isActive) {
+                        Box {
+                            IconButton(onClick = { showMenu = true }, modifier = Modifier.size(32.dp)) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "Options",
+                                    tint = Color(0xFF6B7280),
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
 
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-                            if (matchingAssignment != null) {
-                                Text(
-                                    text = matchingAssignment.shiftName?.ifBlank { null } ?: template?.name ?: "Shift",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PresenceDesign.Ink,
-                                    maxLines = 1
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Book Overtime") },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.MoreTime, contentDescription = null, tint = Color(0xFF8B5CF6))
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onOvertimeAssign()
+                                    }
                                 )
-                                Text(
-                                    text = timeWindow,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Medium
+                                DropdownMenuItem(
+                                    text = { Text("Edit Profile") },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFF2563EB))
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onEdit()
+                                    }
                                 )
-
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-
-                                // Attendance status-wise payment rates
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("Present", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
-                                        Text(presentPayCents?.let { Money.format(it) } ?: "₹0.00", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SecondaryEmerald, fontSize = 9.5.sp)
+                                DropdownMenuItem(
+                                    text = { Text("Deactivate Account", color = Color(0xFFDC2626)) },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFDC2626))
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onRevoke()
                                     }
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("Half-Day", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
-                                        Text(presentPayCents?.let { Money.format(it / 2) } ?: "₹0.00", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary, fontSize = 9.5.sp)
-                                    }
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("Leave", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
-                                        Text(presentPayCents?.let { Money.format(it) } ?: "₹0.00", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFF3B82F6), fontSize = 9.5.sp)
-                                    }
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("Absent", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
-                                        Text("₹0.00", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = PresenceDesign.Danger, fontSize = 9.5.sp)
-                                    }
-                                }
-                            } else {
-                                Text(
-                                    text = "Weekly Off",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 10.5.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Text(
-                                    text = "No shift",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    fontSize = 9.5.sp
                                 )
                             }
                         }
                     }
+                }
+            }
+
+            if (!employee.address.isNullOrBlank()) {
+                Text(
+                    text = employee.address,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF747895)
+                )
+            }
+
+            // Sleek Metadata Info Bar (Single Line Non-Wrapping Grid)
+            Surface(
+                color = Color(0xFFF9FAFB),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, Color(0xFFF3F4F6)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(0.9f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text(
+                            text = "Code",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            color = Color(0xFF747895)
+                        )
+                        Text(
+                            text = employee.staffCode,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF171A34),
+                            maxLines = 1
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .height(24.dp)
+                            .width(1.dp)
+                            .background(Color(0xFFE5E7EB))
+                    )
+
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text(
+                            text = "Department",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            color = Color(0xFF747895)
+                        )
+                        Text(
+                            text = employee.department?.ifBlank { "General" } ?: "General",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF171A34),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .height(24.dp)
+                            .width(1.dp)
+                            .background(Color(0xFFE5E7EB))
+                    )
+
+                    Column(modifier = Modifier.weight(1.1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text(
+                            text = "Premises",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            color = Color(0xFF747895)
+                        )
+                        Text(
+                            text = employee.premisesName?.ifBlank { "Main Office" } ?: "Main Office",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF171A34),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            if (canManage && employee.isActive) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    PresenceButton(
+                        label = "Assign Shift",
+                        icon = Icons.Default.Schedule,
+                        size = PresenceSize.Sm,
+                        onClick = onShiftAssign,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PresenceButton(
+                        label = "Biometrics",
+                        icon = Icons.Default.Face,
+                        size = PresenceSize.Sm,
+                        variant = PresenceVariant.Secondary,
+                        onClick = onFaceEnroll,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
@@ -835,104 +650,310 @@ private fun AddEmployeesModal(
     premisesList: List<PremisesDto>,
     initialPremisesId: String?,
     onDismiss: () -> Unit,
-    onAdd: (role: String, name: String, email: String, department: String, premisesId: String?) -> Unit
+    onAdd: (
+        role: String,
+        name: String,
+        email: String,
+        department: String,
+        address: String?,
+        phone: String?,
+        avatarBase64: String?,
+        premisesId: String?
+    ) -> Unit
 ) {
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var role by remember { mutableStateOf("STAFF") }
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var address by remember { mutableStateOf("") }
     var department by remember { mutableStateOf("") }
-    var selectedPremisesId by remember(initialPremisesId) { mutableStateOf(initialPremisesId) }
+    var selectedPremisesId by remember(initialPremisesId, premisesList) {
+        mutableStateOf(initialPremisesId ?: premisesList.firstOrNull()?.id)
+    }
 
-    val valid = name.trim().length >= 2 && email.trim().contains("@")
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var avatarBase64 by remember { mutableStateOf<String?>(null) }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            selectedImageUri = uri
+            avatarBase64 = uriToBase64(context, uri)
+        }
+    }
+
+    val isEmailValid = email.trim().contains("@") && email.trim().contains(".")
+    val valid = name.trim().length >= 2 && isEmailValid
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = Color.White
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 680.dp)
+                .heightIn(max = 660.dp)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 18.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = "Add New Employee",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            PresenceFieldGroup(title = "Employee Role") {
+            // Header Bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = role == "STAFF", onClick = { role = "STAFF" })
-                        Text("Staff Member", style = MaterialTheme.typography.bodyMedium)
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFE8EEFF)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = Color(0xFF2563EB),
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = role == "MANAGER", onClick = { role = "MANAGER" })
-                        Text("Manager", style = MaterialTheme.typography.bodyMedium)
+                    Column {
+                        Text(
+                            text = "Add New Employee",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF171A34)
+                        )
+                        Text(
+                            text = "Onboard staff profile & workplace details",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.sp,
+                            color = Color(0xFF747895)
+                        )
                     }
+                }
+                IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close modal",
+                        tint = Color(0xFF6B7280),
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
 
-            PresenceFieldGroup(title = "Profile Details") {
-                PresenceTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = "Full Name"
+            // Top Row: Inline Photo Card + Name & Email
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                // Rectangular Photo Card (Compact Left)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.BottomEnd,
+                        modifier = Modifier
+                            .size(width = 84.dp, height = 98.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFFF3F4F6))
+                            .border(1.5.dp, Color(0xFFE5E7EB), RoundedCornerShape(14.dp))
+                            .clickable { galleryLauncher.launch("image/*") }
+                    ) {
+                        if (selectedImageUri != null) {
+                            AsyncImage(
+                                model = selectedImageUri,
+                                contentDescription = "Employee Avatar",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(14.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = Color(0xFF9CA3AF),
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .padding(4.dp)
+                                .size(24.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF2563EB))
+                                .border(1.dp, Color.White, RoundedCornerShape(6.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CameraAlt,
+                                contentDescription = "Upload Photo",
+                                tint = Color.White,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = if (selectedImageUri != null) "Change Photo" else "Upload Photo",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2563EB)
+                    )
+                }
+
+                // Name & Email Fields (Right side Column)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Full Name *", fontSize = 11.sp) },
+                        leadingIcon = {
+                            Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(16.dp))
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Email Address *", fontSize = 11.sp) },
+                        leadingIcon = {
+                            Icon(imageVector = Icons.Default.Email, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(16.dp))
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            // Contact & Work Section: Phone & Department side-by-side
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it },
+                    label = { Text("Mobile Number", fontSize = 11.sp) },
+                    leadingIcon = {
+                        Icon(imageVector = Icons.Default.Phone, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(16.dp))
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
                 )
-                PresenceTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = "Email Address"
-                )
-                PresenceTextField(
+                OutlinedTextField(
                     value = department,
                     onValueChange = { department = it },
-                    label = "Department"
+                    label = { Text("Department", fontSize = 11.sp) },
+                    leadingIcon = {
+                        Icon(imageVector = Icons.Default.Work, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(16.dp))
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
                 )
             }
 
+            // Address Field
+            OutlinedTextField(
+                value = address,
+                onValueChange = { address = it },
+                label = { Text("Address", fontSize = 11.sp) },
+                leadingIcon = {
+                    Icon(imageVector = Icons.Default.Home, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(16.dp))
+                },
+                shape = RoundedCornerShape(10.dp),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            // Premises Selection
             if (premisesList.isNotEmpty()) {
-                PresenceFieldGroup(title = "Assigned Premises") {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Assign Premises Workspace",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF4B5563)
+                    )
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         premisesList.forEach { p ->
-                            FilterChip(
-                                selected = selectedPremisesId == p.id,
-                                onClick = { selectedPremisesId = p.id },
-                                label = { Text(Dates.cleanPremisesName(p.name), style = MaterialTheme.typography.labelSmall) },
-                                shape = RoundedCornerShape(10.dp)
+                            val isSelected = p.id == selectedPremisesId
+                            PresenceFilterChip(
+                                label = p.name,
+                                selected = isSelected,
+                                onClick = { selectedPremisesId = p.id }
                             )
                         }
                     }
                 }
             }
 
+            // Validation Helper Note
+            if (!valid) {
+                Text(
+                    text = "* Full Name and a valid Email Address are required to onboard an employee.",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 11.sp,
+                    color = Color(0xFF9CA3AF)
+                )
+            }
+
+            // Submit Button
             PresenceButton(
-                label = if (role == "MANAGER") "Add Manager" else "Add Staff",
+                label = "Add Employee",
+                icon = Icons.Default.Add,
                 onClick = {
-                    onAdd(role, name.trim(), email.trim(), department.trim(), selectedPremisesId)
+                    onAdd(
+                        "EMPLOYEE",
+                        name.trim(),
+                        email.trim(),
+                        department.trim(),
+                        address.trim().ifBlank { null },
+                        phone.trim().ifBlank { null },
+                        avatarBase64,
+                        selectedPremisesId
+                    )
                 },
                 enabled = valid,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(14.dp))
         }
     }
 }
@@ -943,15 +964,38 @@ private fun EditEmployeeModal(
     employee: UnifiedEmployeeItem,
     premisesList: List<PremisesDto>,
     onDismiss: () -> Unit,
-    onSave: (name: String, email: String, department: String, premisesId: String?) -> Unit
+    onSave: (
+        name: String,
+        email: String,
+        department: String,
+        address: String?,
+        phone: String?,
+        avatarBase64: String?,
+        premisesId: String?
+    ) -> Unit
 ) {
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var name by remember(employee) { mutableStateOf(employee.fullName) }
     var email by remember(employee) { mutableStateOf(employee.email) }
+    var phone by remember(employee) { mutableStateOf(employee.phone.orEmpty()) }
+    var address by remember(employee) { mutableStateOf(employee.address.orEmpty()) }
     var department by remember(employee) { mutableStateOf(employee.department.orEmpty()) }
     var selectedPremisesId by remember(employee, premisesList) {
         mutableStateOf(employee.premisesId ?: premisesList.firstOrNull()?.id)
+    }
+
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var avatarBase64 by remember { mutableStateOf<String?>(null) }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            selectedImageUri = uri
+            avatarBase64 = uriToBase64(context, uri)
+        }
     }
 
     val valid = name.trim().length >= 2 && email.trim().contains("@")
@@ -960,78 +1004,228 @@ private fun EditEmployeeModal(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = Color.White
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 680.dp)
+                .heightIn(max = 660.dp)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 18.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = "Edit Employee Profile",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            PresenceFieldGroup(title = "Account Overview") {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    PresenceDetailRow(label = "Role", value = employee.role)
-                    employee.staffCode?.let { PresenceDetailRow(label = "Code", value = it) }
+            // Header Bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFE8EEFF)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            tint = Color(0xFF2563EB),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Edit Employee Profile",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF171A34)
+                        )
+                        Text(
+                            text = "Update profile details & workplace assignments",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.sp,
+                            color = Color(0xFF747895)
+                        )
+                    }
+                }
+                IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close modal",
+                        tint = Color(0xFF6B7280),
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
 
-            PresenceFieldGroup(title = "Profile Details") {
-                PresenceTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = "Full Name"
-                )
-                PresenceTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = "Email Address"
-                )
-                PresenceTextField(
-                    value = department,
-                    onValueChange = { department = it },
-                    label = "Department"
-                )
-            }
+            HorizontalDivider(color = Color(0xFFF3F4F6))
 
-            if (premisesList.isNotEmpty()) {
-                PresenceFieldGroup(title = "Assigned Premises") {
-                    Row(
+            // Inline Top Row: Rectangular Photo Card + Name & Email
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                // Rectangular Photo Card (Compact Left)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.BottomEnd,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            .size(width = 84.dp, height = 98.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFFF3F4F6))
+                            .border(1.5.dp, Color(0xFFE5E7EB), RoundedCornerShape(14.dp))
+                            .clickable { galleryLauncher.launch("image/*") }
                     ) {
-                        premisesList.forEach { p ->
-                            FilterChip(
-                                selected = selectedPremisesId == p.id,
-                                onClick = { selectedPremisesId = p.id },
-                                label = { Text(Dates.cleanPremisesName(p.name), style = MaterialTheme.typography.labelSmall) },
-                                shape = RoundedCornerShape(10.dp)
+                        if (selectedImageUri != null) {
+                            AsyncImage(
+                                model = selectedImageUri,
+                                contentDescription = "Avatar",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(14.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else if (!employee.avatarUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = employee.avatarUrl,
+                                contentDescription = "Avatar",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(14.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = name.take(1).uppercase(),
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2563EB)
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .padding(4.dp)
+                                .size(24.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF2563EB))
+                                .border(1.dp, Color.White, RoundedCornerShape(6.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CameraAlt,
+                                contentDescription = "Change Photo",
+                                tint = Color.White,
+                                modifier = Modifier.size(13.dp)
                             )
                         }
                     }
+
+                    Text(
+                        text = "Change Photo",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2563EB)
+                    )
+                }
+
+                // Name & Email Fields (Right side Column)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Full Name *", fontSize = 11.sp) },
+                        leadingIcon = { Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(16.dp)) },
+                        shape = RoundedCornerShape(10.dp),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Email Address *", fontSize = 11.sp) },
+                        leadingIcon = { Icon(imageVector = Icons.Default.Email, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(16.dp)) },
+                        shape = RoundedCornerShape(10.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
+            // Contact & Work Section: Phone & Department side-by-side
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it },
+                    label = { Text("Mobile Number", fontSize = 11.sp) },
+                    leadingIcon = { Icon(imageVector = Icons.Default.Phone, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(16.dp)) },
+                    shape = RoundedCornerShape(10.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = department,
+                    onValueChange = { department = it },
+                    label = { Text("Department", fontSize = 11.sp) },
+                    leadingIcon = { Icon(imageVector = Icons.Default.Work, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(16.dp)) },
+                    shape = RoundedCornerShape(10.dp),
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // Address Field
+            OutlinedTextField(
+                value = address,
+                onValueChange = { address = it },
+                label = { Text("Address", fontSize = 11.sp) },
+                leadingIcon = { Icon(imageVector = Icons.Default.Home, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(16.dp)) },
+                shape = RoundedCornerShape(10.dp),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
             PresenceButton(
-                label = "Save Profile Changes",
+                label = "Save Changes",
                 onClick = {
-                    onSave(name.trim(), email.trim(), department.trim(), selectedPremisesId)
+                    onSave(
+                        name.trim(),
+                        email.trim(),
+                        department.trim(),
+                        address.trim().ifBlank { null },
+                        phone.trim().ifBlank { null },
+                        avatarBase64,
+                        selectedPremisesId
+                    )
                 },
                 enabled = valid,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(14.dp))
         }
     }
 }

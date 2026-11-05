@@ -134,21 +134,6 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun providePostalApiService(
-        okHttpClient: OkHttpClient,
-        json: Json
-    ): PostalApiService {
-        val contentType = "application/json".toMediaType()
-        val retrofit = Retrofit.Builder()
-            .baseUrl("https://api.postalpincode.in/")
-            .client(okHttpClient)
-            .addConverterFactory(json.asConverterFactory(contentType))
-            .build()
-        return retrofit.create(PostalApiService::class.java)
-    }
-
-    @Provides
-    @Singleton
     fun provideOlaMapsApiService(
         okHttpClient: OkHttpClient,
         json: Json

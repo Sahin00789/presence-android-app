@@ -110,6 +110,7 @@ fun OwnerRegistrationWizard(
     uiState: UiState<*>,
     pincodeState: UiState<List<PostOffice>> = UiState.Idle,
     gpsLocationState: UiState<GpsLocation> = UiState.Idle,
+    reverseGeocodeAddress: com.als.presence.core.location.ReverseGeocodedAddress? = null,
     googleIdentity: GoogleRegistrationIdentity?,
     onDismiss: () -> Unit,
     onRequestOtp: (String) -> Unit,
@@ -137,8 +138,22 @@ fun OwnerRegistrationWizard(
     var capturedLat by remember { mutableStateOf<String?>(null) }
     var capturedLng by remember { mutableStateOf<String?>(null) }
 
+    val requestLocationPermission = com.als.presence.core.location.rememberLocationPermissionState(
+        onPermissionGranted = {
+            onFetchGpsLocation()
+        }
+    )
+
     val scrollState = rememberScrollState()
     val loading = uiState is UiState.Loading
+
+    LaunchedEffect(reverseGeocodeAddress) {
+        reverseGeocodeAddress?.let { rev ->
+            if (rev.streetAddress.isNotBlank()) {
+                streetAddressInput = rev.streetAddress
+            }
+        }
+    }
 
     LaunchedEffect(gpsLocationState) {
         if (gpsLocationState is UiState.Success) {
@@ -166,18 +181,18 @@ fun OwnerRegistrationWizard(
         }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnBackPress = true,
-            dismissOnClickOutside = false
-        )
+    androidx.activity.compose.BackHandler {
+        if (step > 1) {
+            step--
+        } else {
+            onDismiss()
+        }
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color(0xFFF5F6FB)
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = Color(0xFFF5F6FB)
-        ) {
             if (uiState is UiState.Success) {
                 val registeredUser = (uiState as? UiState.Success<*>)?.data as? com.als.presence.domain.model.User
                 RegistrationSuccessGreetScreen(
@@ -195,17 +210,24 @@ fun OwnerRegistrationWizard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(Color.White)
+                            .statusBarsPadding()
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = 8.dp, end = 20.dp, top = 10.dp, bottom = 8.dp),
+                                .padding(start = 8.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            IconButton(onClick = onDismiss) {
+                            IconButton(onClick = {
+                                if (step > 1) {
+                                    step--
+                                } else {
+                                    onDismiss()
+                                }
+                            }) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Close registration"
+                                    contentDescription = "Back"
                                 )
                             }
                             Column(modifier = Modifier.weight(1f)) {
@@ -730,24 +752,14 @@ fun OwnerRegistrationWizard(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(16.dp)
                                 )
-                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    OutlinedTextField(
-                                        value = timezone,
-                                        onValueChange = { timezone = it },
-                                        label = { Text("Timezone") },
-                                        singleLine = true,
-                                        modifier = Modifier.weight(1.4f),
-                                        shape = RoundedCornerShape(16.dp)
-                                    )
-                                    OutlinedTextField(
-                                        value = currency,
-                                        onValueChange = { currency = it },
-                                        label = { Text("Currency") },
-                                        singleLine = true,
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(16.dp)
-                                    )
-                                }
+                                OutlinedTextField(
+                                    value = timezone,
+                                    onValueChange = { timezone = it },
+                                    label = { Text("Timezone") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(16.dp)
+                                )
                             }
 
                             else -> {
@@ -769,7 +781,7 @@ fun OwnerRegistrationWizard(
                                 )
 
                                 OutlinedButton(
-                                    onClick = onFetchGpsLocation,
+                                    onClick = requestLocationPermission,
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(14.dp)
                                 ) {
@@ -798,7 +810,7 @@ fun OwnerRegistrationWizard(
                                         ) {
                                             Column(modifier = Modifier.padding(12.dp)) {
                                                 Text(
-                                                    "🎯 Location Fix: ${String.format("%.6f", gps.latitude)}, ${String.format("%.6f", gps.longitude)} (±${gps.accuracyMeters.toInt()}m)",
+                                                    "🎯 Location Fix: ${String.format(Locale.getDefault(), "%.6f", gps.latitude)}, ${String.format(Locale.getDefault(), "%.6f", gps.longitude)} (±${gps.accuracyMeters.toInt()}m)",
                                                     fontWeight = FontWeight.Bold,
                                                     color = Color(0xFF2E7D32),
                                                     style = MaterialTheme.typography.labelMedium
@@ -807,7 +819,43 @@ fun OwnerRegistrationWizard(
                                         }
                                     }
                                     is UiState.Error -> {
-                                        Text(gpsLocationState.message, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(12.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Info,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = gpsLocationState.message,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
+                                                TextButton(
+                                                    onClick = requestLocationPermission,
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Allow GPS",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                     else -> {}
                                 }
@@ -871,7 +919,6 @@ fun OwnerRegistrationWizard(
             }
         }
     }
-}
 }
 
 @Composable

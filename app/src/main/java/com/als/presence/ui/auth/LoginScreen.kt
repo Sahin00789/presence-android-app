@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -40,35 +41,33 @@ import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.SupervisorAccount
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.RocketLaunch
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -80,6 +79,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -89,7 +89,6 @@ import androidx.compose.ui.window.DialogProperties
 import com.als.presence.R
 import com.als.presence.core.common.UiState
 import com.als.presence.core.designsystem.PrimaryIndigo
-import com.als.presence.core.designsystem.RoleManagerPrimary
 import com.als.presence.core.designsystem.RoleOwnerPrimary
 import com.als.presence.core.designsystem.RoleStaffPrimary
 import com.als.presence.core.designsystem.SecondaryEmerald
@@ -109,6 +108,13 @@ private enum class GoogleSignInPurpose {
     OWNER_REGISTRATION
 }
 
+data class RegistrationSuccessInfo(
+    val email: String,
+    val ownerName: String = "",
+    val organizationName: String,
+    val premisesName: String
+)
+
 @Composable
 fun LoginScreen(
     viewModel: AuthViewModel,
@@ -116,10 +122,12 @@ fun LoginScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val isOnline by viewModel.isOnline.collectAsState()
     val otpState by viewModel.otpState.collectAsState()
     val pincodeState by viewModel.pincodeState.collectAsState()
     val gpsLocationState by viewModel.gpsLocationState.collectAsState()
+    val reverseGeocodeAddress by viewModel.reverseGeocodeState.collectAsState()
+    val selectedRole by viewModel.selectedRole.collectAsState()
+
     val scrollState = rememberScrollState()
     val context = LocalContext.current
     val googleSignInClient = remember(context) {
@@ -133,19 +141,11 @@ fun LoginScreen(
 
     var emailInput by remember { mutableStateOf("") }
     var otpCodeInput by remember { mutableStateOf("") }
-    var selectedRole by remember { mutableStateOf(Role.STAFF) }
     var loginStep by remember { mutableStateOf(LoginStep.ENTER_EMAIL) }
     var showOwnerRegistrationWizard by remember { mutableStateOf(false) }
+    var registrationSuccessInfo by remember { mutableStateOf<RegistrationSuccessInfo?>(null) }
     var googleSignInPurpose by remember { mutableStateOf(GoogleSignInPurpose.LOGIN) }
     var googleRegistrationIdentity by remember { mutableStateOf<GoogleRegistrationIdentity?>(null) }
-
-    val activeRoleColor = remember(selectedRole) {
-        when (selectedRole) {
-            Role.STAFF -> RoleStaffPrimary
-            Role.MANAGER -> RoleManagerPrimary
-            Role.OWNER -> RoleOwnerPrimary
-        }
-    }
 
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -156,11 +156,12 @@ fun LoginScreen(
                 .getResult(ApiException::class.java)
             when (googleSignInPurpose) {
                 GoogleSignInPurpose.LOGIN -> {
+                    val idToken = account.idToken
                     val code = account.serverAuthCode
-                    if (code.isNullOrBlank()) {
-                        viewModel.showError("Google did not return an authorization code. Please try again.")
+                    if (idToken.isNullOrBlank() && code.isNullOrBlank()) {
+                        viewModel.showError("Google did not return a credential. Please try again.")
                     } else {
-                        viewModel.loginWithGoogle(code)
+                        viewModel.loginWithGoogle(idToken = idToken, serverAuthCode = code)
                     }
                 }
                 GoogleSignInPurpose.OWNER_REGISTRATION -> {
@@ -185,16 +186,31 @@ fun LoginScreen(
         viewModel.tryAutoLogin()
     }
 
+    LaunchedEffect(selectedRole) {
+        loginStep = LoginStep.ENTER_EMAIL
+        otpCodeInput = ""
+        viewModel.resetOtp()
+        viewModel.clearError()
+    }
+
     LaunchedEffect(uiState) {
         if (uiState is UiState.Success && !showOwnerRegistrationWizard) {
             val user = (uiState as UiState.Success<User>).data
-            onLoginSuccess(user)
+            if (registrationSuccessInfo == null) {
+                onLoginSuccess(user)
+            }
         }
     }
 
     fun startGoogleSignIn(purpose: GoogleSignInPurpose) {
         googleSignInPurpose = purpose
-        googleSignInLauncher.launch(googleSignInClient.signInIntent)
+        try {
+            googleSignInClient.signOut().addOnCompleteListener {
+                googleSignInLauncher.launch(googleSignInClient.signInIntent)
+            }
+        } catch (_: Exception) {
+            googleSignInLauncher.launch(googleSignInClient.signInIntent)
+        }
     }
 
     // Synchronize OTP response state to Step 2
@@ -205,7 +221,7 @@ fun LoginScreen(
 
     Surface(
         modifier = modifier.fillMaxSize(),
-        color = Color(0xFFF5F6FB)
+        color = Color(0xFFF1F5FB)
     ) {
         Column(
             modifier = Modifier
@@ -218,579 +234,287 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // 1. Centered Top Branding Hero Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                border = BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.3f)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(
-                            brush = Brush.linearGradient(
-                                colors = listOf(Color(0xFF12213F), Color(0xFF213665))
-                            )
-                        )
-                        .padding(vertical = 18.dp, horizontal = 16.dp),
-                    contentAlignment = Alignment.Center
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // 1. Sleek Glassmorphic Hero Banner
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.dp, Color(0xFF2E3D66).copy(alpha = 0.4f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        // CENTERED LOGO EMBLEM
-                        Box(
-                            modifier = Modifier
-                                .size(68.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(
-                                            PrimaryIndigo,
-                                            SecondaryEmerald,
-                                            PrimaryIndigo.copy(alpha = 0.2f)
-                                        )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(
+                                        Color(0xFF0F172A),
+                                        Color(0xFF1E293B),
+                                        Color(0xFF1E1B4B)
                                     )
                                 )
-                                .border(1.5.dp, Color.White.copy(alpha = 0.4f), CircleShape),
-                            contentAlignment = Alignment.Center
+                            )
+                            .padding(vertical = 18.dp, horizontal = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
+                            // Metallic Glowing Logo Emblem
                             Box(
                                 modifier = Modifier
-                                    .size(54.dp)
+                                    .size(66.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF0F172A)),
+                                    .background(
+                                        brush = Brush.radialGradient(
+                                            colors = listOf(
+                                                PrimaryIndigo,
+                                                SecondaryEmerald,
+                                                PrimaryIndigo.copy(alpha = 0.25f)
+                                            )
+                                        )
+                                    )
+                                    .border(1.5.dp, Color.White.copy(alpha = 0.4f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Image(
-                                    painter = painterResource(R.drawable.ic_logo_presence),
-                                    contentDescription = "Presence Logo",
-                                    modifier = Modifier.size(46.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Text(
-                            text = "PRESENCE",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White,
-                            letterSpacing = 4.sp,
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        Text(
-                            text = "Staff Attendance • GPS Geofence • Salary Wallet",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFCFD9F2),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 2. Single Parent Login Card (Role Selector + EMAIL OTP TOP + GOOGLE SIGN-IN BOTTOM)
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                border = BorderStroke(1.dp, Color(0xFFE7E8F0)),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color.White
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // ROLE SELECTOR INSIDE CARD
-                    Text(
-                        text = "Choose your workspace role",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF252943),
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Start
-                    )
-                    Text(
-                        text = "Select the account role you want to access.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF747895),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 2.dp, bottom = 10.dp),
-                        textAlign = TextAlign.Start
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Role.entries.forEach { role ->
-                            val isSelected = selectedRole == role
-                            val roleColor = when (role) {
-                                Role.STAFF -> RoleStaffPrimary
-                                Role.MANAGER -> RoleManagerPrimary
-                                Role.OWNER -> RoleOwnerPrimary
-                            }
-                            val roleIcon = when (role) {
-                                Role.STAFF -> Icons.Default.Badge
-                                Role.MANAGER -> Icons.Default.SupervisorAccount
-                                Role.OWNER -> Icons.Default.AdminPanelSettings
+                                Box(
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF090D16)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Image(
+                                        painter = painterResource(R.drawable.ic_logo_presence),
+                                        contentDescription = "Presence Logo",
+                                        modifier = Modifier.size(42.dp)
+                                    )
+                                }
                             }
 
-                            val animatedRoleBg by animateColorAsState(
-                                targetValue = if (isSelected) roleColor else MaterialTheme.colorScheme.surface,
-                                animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
-                                label = "RoleBgColor"
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Text(
+                                text = "PRESENCE",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 5.sp,
+                                textAlign = TextAlign.Center
                             )
-                            val animatedRoleIconTint by animateColorAsState(
-                                targetValue = if (isSelected) Color.White else roleColor,
-                                animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
-                                label = "RoleIconTint"
-                            )
-                            val animatedRoleTextTint by animateColorAsState(
-                                targetValue = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
-                                animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
-                                label = "RoleTextTint"
-                            )
+
+                            Spacer(modifier = Modifier.height(3.dp))
 
                             Surface(
-                                onClick = { selectedRole = role },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                color = animatedRoleBg,
-                                border = if (isSelected) null else BorderStroke(1.dp, Color(0xFFE7E8F0)),
-                                shadowElevation = if (isSelected) 2.dp else 0.dp
+                                shape = RoundedCornerShape(20.dp),
+                                color = Color.White.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = roleIcon,
-                                        contentDescription = role.name,
-                                        tint = animatedRoleIconTint,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = when (role) {
-                                            Role.STAFF -> "Staff"
-                                            Role.MANAGER -> "Manager"
-                                            Role.OWNER -> "Owner"
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = animatedRoleTextTint
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Text(
-                        text = when (selectedRole) {
-                            Role.STAFF -> "Staff: Clock-in/out, shifts & salary wallet"
-                            Role.MANAGER -> "Manager: Staff rosters, exceptions & payroll"
-                            Role.OWNER -> "Owner: Full organization governance & premises"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 11.sp,
-                        color = Color(0xFF747895),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 6.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider(color = Color(0xFFE7E8F0))
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // SECTION 2: EMAIL OTP SIGN IN (TOP)
-                    Text(
-                        text = if (loginStep == LoginStep.ENTER_OTP) "Check your inbox" else "Sign in as ${selectedRole.name.lowercase()}",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF171A34)
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // STEP 1: Enter Email & Request OTP
-                    AnimatedVisibility(
-                        visible = loginStep == LoginStep.ENTER_EMAIL,
-                        enter = fadeIn(),
-                        exit = fadeOut()
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            OutlinedTextField(
-                                value = emailInput,
-                                onValueChange = { emailInput = it },
-                                label = { Text("Work email") },
-                                placeholder = { Text("e.g. name@company.com") },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Email,
-                                        contentDescription = null,
-                                        tint = activeRoleColor,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Button(
-                                onClick = {
-                                    viewModel.requestOtp(emailInput, role = selectedRole)
-                                },
-                                enabled = uiState !is UiState.Loading && emailInput.isNotBlank(),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = activeRoleColor
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(46.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                if (uiState is UiState.Loading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Sending...", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.Email,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Send Email OTP",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // STEP 2: Enter OTP Code
-                    AnimatedVisibility(
-                        visible = loginStep == LoginStep.ENTER_OTP,
-                        enter = fadeIn(),
-                        exit = fadeOut()
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface
+                                Text(
+                                    text = "Presence to Pagar • Attendance to Salary",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFFE2E8F0),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                                    textAlign = TextAlign.Center
                                 )
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Email,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = activeRoleColor
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = emailInput,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-
-                            if (com.als.presence.BuildConfig.DEBUG && !otpState?.devOtp.isNullOrEmpty()) {
-                                otpState?.devOtp?.let { devOtp ->
-                                    Surface(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = 6.dp),
-                                        color = Color(0xFFF1F5FF),
-                                        shape = RoundedCornerShape(10.dp),
-                                        border = BorderStroke(1.dp, Color(0xFFDCE5FF))
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Text(
-                                                text = "Development OTP",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = Color(0xFF596579)
-                                            )
-                                            Text(
-                                                text = devOtp,
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF263F78),
-                                                letterSpacing = 2.sp
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            OutlinedTextField(
-                                value = otpCodeInput,
-                                onValueChange = { value ->
-                                    otpCodeInput = value.filter(Char::isDigit).take(6)
-                                },
-                                label = { Text("6-Digit OTP Code") },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Lock,
-                                        contentDescription = null,
-                                        tint = activeRoleColor,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                OutlinedButton(
-                                    onClick = {
-                                        loginStep = LoginStep.ENTER_EMAIL
-                                        viewModel.resetOtp()
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(42.dp),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Back", style = MaterialTheme.typography.labelMedium)
-                                }
-
-                                Button(
-                                    onClick = {
-                                        viewModel.verifyOtp(
-                                            email = emailInput,
-                                            code = otpCodeInput,
-                                            role = selectedRole
-                                        )
-                                    },
-                                    enabled = uiState !is UiState.Loading && otpCodeInput.isNotBlank(),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = activeRoleColor
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1.2f)
-                                        .height(42.dp),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    if (uiState is UiState.Loading) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            color = Color.White,
-                                            strokeWidth = 2.dp
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Verifying...", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                                    } else {
-                                        Text("Verify & Login", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
-                                    }
-                                }
                             }
                         }
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                    // DIVIDER FOR GOOGLE SIGN IN
+                // 2. Animated Segmented Workspace Switcher Tab Bar
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xFFE2E8F0),
+                    border = BorderStroke(1.dp, Color(0xFFCBD5E1))
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFE7E8F0))
-                        Text(
-                            text = "  or continue with Google  ",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF9295AA)
-                        )
-                        HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFE7E8F0))
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // SECTION 3: GOOGLE OAUTH SIGN IN BUTTON (BOTTOM)
-                    Button(
-                        onClick = { startGoogleSignIn(GoogleSignInPurpose.LOGIN) },
-                        enabled = uiState !is UiState.Loading,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White,
-                            contentColor = Color(0xFF202124),
-                            disabledContainerColor = Color(0xFFF4F5F7),
-                            disabledContentColor = Color(0xFF9295AA)
-                        ),
-                        border = BorderStroke(1.dp, Color(0xFFDADCE0)),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        if (uiState is UiState.Loading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = activeRoleColor,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Authenticating...", style = MaterialTheme.typography.labelMedium)
-                        } else {
-                            Image(
-                                painter = painterResource(R.drawable.ic_google_logo),
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Continue with Google",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
+                        val isEmployee = selectedRole == Role.EMPLOYEE
 
-                    // Network Offline Warning Banner
-                    AnimatedVisibility(visible = !isOnline) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 10.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFFFFF3E0)
-                            ),
-                            border = BorderStroke(1.dp, Color(0xFFFFB74D)),
-                            shape = RoundedCornerShape(12.dp)
+                        val empBgColor by animateColorAsState(
+                            targetValue = if (isEmployee) RoleStaffPrimary else Color.Transparent,
+                            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                            label = "EmpBg"
+                        )
+                        val empContentColor by animateColorAsState(
+                            targetValue = if (isEmployee) Color.White else Color(0xFF475569),
+                            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                            label = "EmpTxt"
+                        )
+
+                        Surface(
+                            onClick = { viewModel.selectRole(Role.EMPLOYEE) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = empBgColor,
+                            shadowElevation = if (isEmployee) 3.dp else 0.dp
                         ) {
                             Row(
-                                modifier = Modifier.padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier.padding(vertical = 11.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Info,
+                                    imageVector = Icons.Default.Badge,
                                     contentDescription = null,
-                                    tint = Color(0xFFE65100),
+                                    tint = empContentColor,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Server is not connected. Device is currently offline.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFFE65100),
-                                    fontWeight = FontWeight.SemiBold
+                                    text = "Employee Login",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = empContentColor
+                                )
+                            }
+                        }
+
+                        val isOwner = selectedRole == Role.OWNER
+
+                        val ownerBgColor by animateColorAsState(
+                            targetValue = if (isOwner) RoleOwnerPrimary else Color.Transparent,
+                            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                            label = "OwnerBg"
+                        )
+                        val ownerContentColor by animateColorAsState(
+                            targetValue = if (isOwner) Color.White else Color(0xFF475569),
+                            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                            label = "OwnerTxt"
+                        )
+
+                        Surface(
+                            onClick = { viewModel.selectRole(Role.OWNER) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = ownerBgColor,
+                            shadowElevation = if (isOwner) 3.dp else 0.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 11.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AdminPanelSettings,
+                                    contentDescription = null,
+                                    tint = ownerContentColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Owner Login",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ownerContentColor
                                 )
                             }
                         }
                     }
+                }
 
-                    // Error Banner
-                    AnimatedVisibility(visible = uiState is UiState.Error) {
-                        val errorMsg = (uiState as? UiState.Error)?.message ?: "Authentication failed"
-                        val isNotRegisteredErr = errorMsg.contains("not registered", ignoreCase = true) || errorMsg.contains("NOT_REGISTERED", ignoreCase = true)
+                Spacer(modifier = Modifier.height(14.dp))
 
-                        val displayMsg = when {
-                            isNotRegisteredErr && selectedRole != Role.OWNER ->
-                                "You are not registered. Please contact your Administrator to receive an invitation."
-                            isNotRegisteredErr && selectedRole == Role.OWNER ->
-                                "No Owner account found for this email. Please register your organization below."
-                            else -> errorMsg
+                // 3. Modern Workspace Card Container
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        if (selectedRole == Role.EMPLOYEE) {
+                            EmployeeLoginContent(
+                                emailInput = emailInput,
+                                onEmailChange = { emailInput = it },
+                                otpCodeInput = otpCodeInput,
+                                onOtpCodeChange = { otpCodeInput = it },
+                                loginStep = loginStep,
+                                uiState = uiState,
+                                otpState = otpState,
+                                onRequestOtp = { viewModel.requestOtp(emailInput.trim(), role = Role.EMPLOYEE) },
+                                onVerifyOtp = { viewModel.verifyOtp(email = emailInput.trim(), code = otpCodeInput, role = Role.EMPLOYEE) },
+                                onBackToEmail = {
+                                    loginStep = LoginStep.ENTER_EMAIL
+                                    viewModel.resetOtp()
+                                },
+                                onStartGoogle = { startGoogleSignIn(GoogleSignInPurpose.LOGIN) }
+                            )
+                        } else {
+                            OwnerLoginContent(
+                                emailInput = emailInput,
+                                onEmailChange = { emailInput = it },
+                                otpCodeInput = otpCodeInput,
+                                onOtpCodeChange = { otpCodeInput = it },
+                                loginStep = loginStep,
+                                uiState = uiState,
+                                otpState = otpState,
+                                onRequestOtp = { viewModel.requestOtp(emailInput.trim(), role = Role.OWNER) },
+                                onVerifyOtp = { viewModel.verifyOtp(email = emailInput.trim(), code = otpCodeInput, role = Role.OWNER) },
+                                onBackToEmail = {
+                                    loginStep = LoginStep.ENTER_EMAIL
+                                    viewModel.resetOtp()
+                                },
+                                onStartGoogle = { startGoogleSignIn(GoogleSignInPurpose.LOGIN) },
+                                onRegisterOwner = { showOwnerRegistrationWizard = true }
+                            )
                         }
 
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 10.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                        // Modern Alert Card for Errors
+                        AnimatedVisibility(visible = uiState is UiState.Error) {
+                            val errorMsg = (uiState as? UiState.Error)?.message ?: "Authentication failed"
+                            val isNotRegisteredErr = errorMsg.contains("not registered", ignoreCase = true) || errorMsg.contains("NOT_REGISTERED", ignoreCase = true)
+
+                            val displayMsg = when {
+                                isNotRegisteredErr && selectedRole != Role.OWNER ->
+                                    "You are not registered. Please contact your Organization Owner to receive an invitation."
+                                isNotRegisteredErr && selectedRole == Role.OWNER ->
+                                    "No Owner account found for this email address. Please register your business below."
+                                else -> errorMsg
+                            }
+
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 14.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFFFFF1F2)
+                                ),
+                                shape = RoundedCornerShape(14.dp),
+                                border = BorderStroke(1.dp, Color(0xFFFECDD3))
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Icon(
                                         imageVector = Icons.Default.Info,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onErrorContainer,
-                                        modifier = Modifier.size(18.dp)
+                                        tint = Color(0xFFE11D48),
+                                        modifier = Modifier.size(20.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
                                     Text(
                                         text = displayMsg,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        color = Color(0xFF9F1239),
                                         fontWeight = FontWeight.SemiBold
                                     )
-                                }
-
-                                if (isNotRegisteredErr && selectedRole == Role.OWNER) {
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Button(
-                                        onClick = { showOwnerRegistrationWizard = true },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.error
-                                        ),
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.height(36.dp)
-                                    ) {
-                                        Text("Register Organization Now", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                                    }
                                 }
                             }
                         }
@@ -800,109 +524,26 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 3. Role-Based Bottom Action / Note
-            if (selectedRole == Role.OWNER) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, Color(0xFFDCDFFF)),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFEFEEFF)
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(CircleShape)
-                                    .background(RoleOwnerPrimary.copy(alpha = 0.18f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Business,
-                                    contentDescription = null,
-                                    tint = RoleOwnerPrimary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "New Owner? Register business",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = RoleOwnerPrimary
-                            )
-                        }
-
-                        Button(
-                            onClick = { showOwnerRegistrationWizard = true },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = RoleOwnerPrimary
-                            ),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                            modifier = Modifier.height(36.dp),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text(
-                                text = "Register",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            } else {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color(0xFFF0F4F9),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0xFFE2E8F0))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = Color(0xFF5A6B82),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (selectedRole == Role.MANAGER)
-                                "Managers are added directly by the Organization Owner."
-                            else
-                                "Staff members are added directly by their Manager or Owner.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF5A6B82),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
+            // Modern Footer
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Shield,
+                    contentDescription = null,
+                    tint = Color(0xFF94A3B8),
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Encrypted & Secured by Arman Logical Systems",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF94A3B8),
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center
+                )
             }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Footer
-            Text(
-                text = "Built by Arman Logical Systems",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-                textAlign = TextAlign.Center
-            )
         }
     }
 
@@ -914,11 +555,12 @@ fun LoginScreen(
             uiState = uiState,
             pincodeState = pincodeState,
             gpsLocationState = gpsLocationState,
+            reverseGeocodeAddress = reverseGeocodeAddress,
             googleIdentity = googleRegistrationIdentity,
             onDismiss = { showOwnerRegistrationWizard = false },
             onRequestOtp = { ownerEmail ->
                 emailInput = ownerEmail
-                viewModel.requestOtp(ownerEmail, role = Role.OWNER)
+                viewModel.requestOtp(ownerEmail, role = Role.OWNER, isRegistration = true)
             },
             onResetOtp = {
                 viewModel.resetOtp()
@@ -933,6 +575,12 @@ fun LoginScreen(
                 viewModel.fetchGpsLocation()
             },
             onCompleteWithOtp = { ownerEmail, code, ownerName, orgName, timezone, currency, premisesName, radius, address, latitude, longitude ->
+                registrationSuccessInfo = RegistrationSuccessInfo(
+                    email = ownerEmail,
+                    ownerName = ownerName,
+                    organizationName = orgName,
+                    premisesName = premisesName
+                )
                 viewModel.verifyOtp(
                     email = ownerEmail,
                     code = code,
@@ -950,6 +598,12 @@ fun LoginScreen(
                 showOwnerRegistrationWizard = false
             },
             onCompleteWithGoogle = { idToken, orgName, timezone, currency, premisesName, radius, address, latitude, longitude ->
+                registrationSuccessInfo = RegistrationSuccessInfo(
+                    email = googleRegistrationIdentity?.email.orEmpty(),
+                    ownerName = googleRegistrationIdentity?.fullName.orEmpty(),
+                    organizationName = orgName,
+                    premisesName = premisesName
+                )
                 viewModel.registerOwnerWithGoogle(
                     idToken = idToken,
                     organizationName = orgName,
@@ -963,6 +617,1048 @@ fun LoginScreen(
                 )
                 showOwnerRegistrationWizard = false
             }
+        )
+    }
+
+    // Modal Dialog: Owner Registration Success Screen with Knowledge & Greeting
+    if (registrationSuccessInfo != null) {
+        OwnerRegistrationSuccessDialog(
+            successInfo = registrationSuccessInfo!!,
+            onGoToLogin = {
+                val registeredEmail = registrationSuccessInfo!!.email
+                registrationSuccessInfo = null
+                viewModel.selectRole(Role.OWNER)
+                emailInput = registeredEmail
+                loginStep = LoginStep.ENTER_EMAIL
+                viewModel.resetOtp()
+                viewModel.clearError()
+                val currentSuccess = uiState as? UiState.Success<User>
+                if (currentSuccess != null) {
+                    onLoginSuccess(currentSuccess.data)
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun EmployeeLoginContent(
+    emailInput: String,
+    onEmailChange: (String) -> Unit,
+    otpCodeInput: String,
+    onOtpCodeChange: (String) -> Unit,
+    loginStep: LoginStep,
+    uiState: UiState<User>,
+    otpState: com.als.presence.data.model.OtpResponse?,
+    onRequestOtp: () -> Unit,
+    onVerifyOtp: () -> Unit,
+    onBackToEmail: () -> Unit,
+    onStartGoogle: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Employee Badge Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(RoleStaffPrimary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Badge,
+                    contentDescription = null,
+                    tint = RoleStaffPrimary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Employee Portal",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = RoleStaffPrimary.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = "Staff",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = RoleStaffPrimary,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = "Clock-in attendance, rosters & salary wallet",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF64748B)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        HorizontalDivider(color = Color(0xFFF1F5F9))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Email OTP Section
+        if (loginStep == LoginStep.ENTER_EMAIL) {
+            OutlinedTextField(
+                value = emailInput,
+                onValueChange = onEmailChange,
+                label = { Text("Employee work email") },
+                placeholder = { Text("e.g. employee@company.com") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Email,
+                        contentDescription = null,
+                        tint = RoleStaffPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Go
+                ),
+                keyboardActions = KeyboardActions(
+                    onGo = { if (emailInput.isNotBlank()) onRequestOtp() }
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = RoleStaffPrimary,
+                    unfocusedBorderColor = Color(0xFFCBD5E1)
+                )
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = onRequestOtp,
+                enabled = uiState !is UiState.Loading && emailInput.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = RoleStaffPrimary),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                if (uiState is UiState.Loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Sending Code...", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Email,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Send Email OTP",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        } else {
+            // STEP 2: ENTER OTP
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFFF8FAFC),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Email,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = RoleStaffPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "OTP sent to:",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF64748B)
+                            )
+                            Text(
+                                text = emailInput,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0F172A)
+                            )
+                        }
+                    }
+
+                    TextButton(
+                        onClick = onBackToEmail,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit",
+                            modifier = Modifier.size(14.dp),
+                            tint = RoleStaffPrimary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Change",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = RoleStaffPrimary
+                        )
+                    }
+                }
+            }
+
+            if (com.als.presence.BuildConfig.DEBUG && !otpState?.devOtp.isNullOrEmpty()) {
+                otpState?.devOtp?.let { devOtp ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        color = Color(0xFFEFF6FF),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color(0xFFBFDBFE))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Dev OTP Code:",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF1D4ED8)
+                            )
+                            Text(
+                                text = devOtp,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF1E40AF),
+                                letterSpacing = 3.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedTextField(
+                value = otpCodeInput,
+                onValueChange = { value ->
+                    onOtpCodeChange(value.filter(Char::isDigit).take(6))
+                },
+                label = { Text("6-Digit OTP Code") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = RoleStaffPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { if (otpCodeInput.isNotBlank()) onVerifyOtp() }
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = RoleStaffPrimary,
+                    unfocusedBorderColor = Color(0xFFCBD5E1)
+                )
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onBackToEmail,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Back", style = MaterialTheme.typography.labelMedium)
+                }
+
+                Button(
+                    onClick = onVerifyOtp,
+                    enabled = uiState !is UiState.Loading && otpCodeInput.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = RoleStaffPrimary),
+                    modifier = Modifier
+                        .weight(1.3f)
+                        .height(44.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (uiState is UiState.Loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Verifying...", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    } else {
+                        Text("Verify & Login", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Google Sign-In Divider & Button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFE2E8F0))
+            Text(
+                text = "  or sign in with Google  ",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF94A3B8)
+            )
+            HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFE2E8F0))
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Button(
+            onClick = onStartGoogle,
+            enabled = uiState !is UiState.Loading,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.White,
+                contentColor = Color(0xFF1E293B)
+            ),
+            border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_google_logo),
+                contentDescription = "Google",
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text("Continue with Google", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Employee Info Card
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(0xFFF8FAFC),
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = Color(0xFF64748B),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Employee accounts are invited directly by your Organization Owner. Ask your Administrator if you haven't received an invitation.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF64748B),
+                    fontSize = 11.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OwnerLoginContent(
+    emailInput: String,
+    onEmailChange: (String) -> Unit,
+    otpCodeInput: String,
+    onOtpCodeChange: (String) -> Unit,
+    loginStep: LoginStep,
+    uiState: UiState<User>,
+    otpState: com.als.presence.data.model.OtpResponse?,
+    onRequestOtp: () -> Unit,
+    onVerifyOtp: () -> Unit,
+    onBackToEmail: () -> Unit,
+    onStartGoogle: () -> Unit,
+    onRegisterOwner: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Owner Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(RoleOwnerPrimary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AdminPanelSettings,
+                    contentDescription = null,
+                    tint = RoleOwnerPrimary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Owner Governance",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = RoleOwnerPrimary.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = "Admin",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = RoleOwnerPrimary,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = "Organization governance, premises & payroll",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF64748B)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        HorizontalDivider(color = Color(0xFFF1F5F9))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Email OTP Section
+        if (loginStep == LoginStep.ENTER_EMAIL) {
+            OutlinedTextField(
+                value = emailInput,
+                onValueChange = onEmailChange,
+                label = { Text("Owner business email") },
+                placeholder = { Text("e.g. owner@company.com") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Email,
+                        contentDescription = null,
+                        tint = RoleOwnerPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Go
+                ),
+                keyboardActions = KeyboardActions(
+                    onGo = { if (emailInput.isNotBlank()) onRequestOtp() }
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = RoleOwnerPrimary,
+                    unfocusedBorderColor = Color(0xFFCBD5E1)
+                )
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = onRequestOtp,
+                enabled = uiState !is UiState.Loading && emailInput.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = RoleOwnerPrimary),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                if (uiState is UiState.Loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Sending Code...", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Email,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Send Email OTP",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        } else {
+            // STEP 2: ENTER OTP
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFFF8FAFC),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Email,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = RoleOwnerPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "OTP sent to:",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF64748B)
+                            )
+                            Text(
+                                text = emailInput,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0F172A)
+                            )
+                        }
+                    }
+
+                    TextButton(
+                        onClick = onBackToEmail,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit",
+                            modifier = Modifier.size(14.dp),
+                            tint = RoleOwnerPrimary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Change",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = RoleOwnerPrimary
+                        )
+                    }
+                }
+            }
+
+            if (com.als.presence.BuildConfig.DEBUG && !otpState?.devOtp.isNullOrEmpty()) {
+                otpState?.devOtp?.let { devOtp ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        color = Color(0xFFF5F3FF),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color(0xFFDDD6FE))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Dev OTP Code:",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF6D28D9)
+                            )
+                            Text(
+                                text = devOtp,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF5B21B6),
+                                letterSpacing = 3.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedTextField(
+                value = otpCodeInput,
+                onValueChange = { value ->
+                    onOtpCodeChange(value.filter(Char::isDigit).take(6))
+                },
+                label = { Text("6-Digit OTP Code") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = RoleOwnerPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { if (otpCodeInput.isNotBlank()) onVerifyOtp() }
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = RoleOwnerPrimary,
+                    unfocusedBorderColor = Color(0xFFCBD5E1)
+                )
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onBackToEmail,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Back", style = MaterialTheme.typography.labelMedium)
+                }
+
+                Button(
+                    onClick = onVerifyOtp,
+                    enabled = uiState !is UiState.Loading && otpCodeInput.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = RoleOwnerPrimary),
+                    modifier = Modifier
+                        .weight(1.3f)
+                        .height(44.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (uiState is UiState.Loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Verifying...", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    } else {
+                        Text("Verify & Login", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Google Sign-In Divider & Button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFE2E8F0))
+            Text(
+                text = "  or sign in with Google  ",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF94A3B8)
+            )
+            HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFE2E8F0))
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Button(
+            onClick = onStartGoogle,
+            enabled = uiState !is UiState.Loading,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.White,
+                contentColor = Color(0xFF1E293B)
+            ),
+            border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_google_logo),
+                contentDescription = "Google",
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text("Continue with Google", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // Prominent Registration Card for New Owners
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, Color(0xFFDDD6FE)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F3FF))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(RoleOwnerPrimary.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Business,
+                            contentDescription = null,
+                            tint = RoleOwnerPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "New Owner? Register Business",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = RoleOwnerPrimary
+                        )
+                        Text(
+                            text = "Configure your organization & premises in 2 mins.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF6B21A8),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = onRegisterOwner,
+                    colors = ButtonDefaults.buttonColors(containerColor = RoleOwnerPrimary),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.RocketLaunch,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Register Organization Now",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Modal dialog presented after an Owner completes registration, providing a warm greeting,
+ * organization summary, quick-start guide, and a prominent "Go to Owner Login" button.
+ */
+@Composable
+private fun OwnerRegistrationSuccessDialog(
+    successInfo: RegistrationSuccessInfo,
+    onGoToLogin: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Celebration Icon
+                Box(
+                    modifier = Modifier
+                        .size(68.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE8F5E9)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Success",
+                        tint = Color(0xFF2E7D32),
+                        modifier = Modifier.size(38.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Warm Greeting
+                Text(
+                    text = if (successInfo.ownerName.isNotBlank()) "Welcome, ${successInfo.ownerName}! 👋" else "Welcome to PRESENCE! 👋",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A),
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "🎉 Organization Registered Successfully!",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF2E7D32),
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Organization Summary Card
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFFF8FAFC),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        ReviewRow(label = "Organization", value = successInfo.organizationName)
+                        ReviewRow(label = "Owner Email", value = successInfo.email)
+                        ReviewRow(label = "Initial Premises", value = successInfo.premisesName)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Quick Start Knowledge Guide for Owners
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F3FF)),
+                    border = BorderStroke(1.dp, Color(0xFFDDD6FE))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.RocketLaunch,
+                                contentDescription = null,
+                                tint = RoleOwnerPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "How to use PRESENCE (Quick Start)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = RoleOwnerPrimary
+                            )
+                        }
+
+                        HorizontalDivider(color = Color(0xFFDDD6FE))
+
+                        QuickGuideStep(
+                            icon = Icons.Default.Group,
+                            title = "1. Add Employees",
+                            description = "Go to Workforce in your Owner Dashboard to invite employees by email."
+                        )
+
+                        QuickGuideStep(
+                            icon = Icons.Default.Schedule,
+                            title = "2. Configure Shifts",
+                            description = "Define premises shifts and assign staff members to work rosters."
+                        )
+
+                        QuickGuideStep(
+                            icon = Icons.Default.Payments,
+                            title = "3. Automated Ledgers & Payroll",
+                            description = "GPS geofence + ONNX face verification automatically calculates earnings & payslips."
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Primary "Go to Owner Login" Button
+                Button(
+                    onClick = onGoToLogin,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = RoleOwnerPrimary)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Go to Owner Login",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickGuideStep(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    description: String
+) {
+    Row(verticalAlignment = Alignment.Top) {
+        Surface(
+            modifier = Modifier.size(26.dp),
+            shape = CircleShape,
+            color = RoleOwnerPrimary.copy(alpha = 0.12f)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = RoleOwnerPrimary,
+                modifier = Modifier
+                    .padding(5.dp)
+                    .size(14.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Column {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2E1065)
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF5B21B6),
+                fontSize = 11.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReviewRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xFF747895)
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF20243A)
         )
     }
 }

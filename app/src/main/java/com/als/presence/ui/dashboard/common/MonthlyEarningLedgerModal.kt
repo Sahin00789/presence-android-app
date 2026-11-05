@@ -8,10 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,7 +20,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -32,18 +34,24 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.als.presence.core.designsystem.SecondaryEmerald
+import com.als.presence.core.designsystem.TertiaryAmber
 import com.als.presence.data.model.AttendanceSummaryDto
+import com.als.presence.data.model.PaymentRecordDto
 import com.als.presence.data.model.PayrollBreakdownDto
+import com.als.presence.data.model.StaffEarningLedgerDto
 import java.time.LocalDate
-import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
 data class EarningLedgerEvent(
@@ -51,7 +59,7 @@ data class EarningLedgerEvent(
     val title: String,
     val category: String,
     val timeDisplay: String? = null,
-    val amountCents: Long,
+    val amountPaise: Long,
     val isDeduction: Boolean = false
 )
 
@@ -59,12 +67,12 @@ data class EarningLedgerDayEntry(
     val dateIso: String,
     val dateDisplay: String,
     val events: List<EarningLedgerEvent>,
-    val dayTotalCents: Long
+    val dayTotalPaise: Long
 )
 
 /**
- * Modal Bottom Sheet presenting date-separated earning ledger events and amounts
- * for a specific month.
+ * Modal Bottom Sheet presenting date-separated earning ledger events, summary counts,
+ * and optional Record Salary Payment capability for a specific month.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,21 +80,38 @@ fun MonthlyEarningLedgerModal(
     staffName: String,
     staffCode: String? = null,
     monthLabel: String,
-    earnedCents: Long,
+    earnedPaise: Long,
+    paidPaise: Long = 0L,
     attendanceSummary: AttendanceSummaryDto = AttendanceSummaryDto(),
     breakdown: PayrollBreakdownDto = PayrollBreakdownDto(),
-    onDismiss: () -> Unit
+    paymentHistory: List<PaymentRecordDto> = emptyList(),
+    entries: List<StaffEarningLedgerDto> = emptyList(),
+    isSubmitting: Boolean = false,
+    onDismiss: () -> Unit,
+    onRecordPayment: ((amountPaise: Long, paymentMethod: String, reference: String) -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showPayModal by remember { mutableStateOf(false) }
 
-    val ledgerDayEntries = remember(monthLabel, earnedCents, attendanceSummary, breakdown) {
+    val duePaise = (earnedPaise - paidPaise).coerceAtLeast(0L)
+
+    val ledgerDayEntries = remember(monthLabel, earnedPaise, attendanceSummary, breakdown, entries) {
         computeDateSeparatedEarningLedger(
             monthLabel = monthLabel,
-            earnedCents = earnedCents,
+            earnedPaise = earnedPaise,
             attendanceSummary = attendanceSummary,
-            breakdown = breakdown
+            breakdown = breakdown,
+            rawEntries = entries
         )
     }
+
+    val presentCount = attendanceSummary.presentDays.coerceAtLeast(attendanceSummary.presentShiftsCount)
+    val halfDayCount = attendanceSummary.halfDays.coerceAtLeast(attendanceSummary.halfDayShiftsCount)
+    val leaveCount = attendanceSummary.leaveDays.coerceAtLeast(attendanceSummary.leaveShiftsCount)
+    val absentCount = attendanceSummary.absentDays.coerceAtLeast(attendanceSummary.absentShiftsCount)
+    val holidayCount = attendanceSummary.holidayDays.coerceAtLeast(attendanceSummary.holidayCount)
+    val offDayCount = attendanceSummary.weeklyOffDays.coerceAtLeast(attendanceSummary.offDayCount)
+    val overtimeMins = attendanceSummary.totalOvertimeMinutes
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -98,9 +123,9 @@ fun MonthlyEarningLedgerModal(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 680.dp)
-                .padding(horizontal = 18.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Sheet Header
             Row(
@@ -114,7 +139,7 @@ fun MonthlyEarningLedgerModal(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(36.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
@@ -123,7 +148,7 @@ fun MonthlyEarningLedgerModal(
                             Icons.Default.AccountBalanceWallet,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                     Column {
@@ -138,7 +163,8 @@ fun MonthlyEarningLedgerModal(
                                 if (!staffCode.isNullOrBlank()) append(" • ").append(staffCode)
                                 append(" • ").append(monthLabel)
                             },
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -147,48 +173,87 @@ fun MonthlyEarningLedgerModal(
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Close modal",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-            // Month Summary Card
+            // Month Financial & Attendance Summary Card
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column {
-                        Text(
-                            text = "Total Monthly Earnings ($monthLabel)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = Money.format(earnedCents),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    // Financial Breakdown Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Total Earned", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(Money.format(earnedPaise), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Total Paid", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(Money.format(paidPaise), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Net Due", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(Money.format(duePaise), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = SecondaryEmerald)
+                        }
                     }
-                    Column(horizontalAlignment = Alignment.End) {
-                        StatusPill("${attendanceSummary.presentDays} Present • ${attendanceSummary.holidayDays} Holidays")
-                        Spacer(modifier = Modifier.height(4.dp))
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+
+                    // Attendance Summary Counts Grid
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "${ledgerDayEntries.size} Active Days",
+                            text = "Attendance Summary Counts",
                             style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            SummaryCountChip(label = "Present", count = "$presentCount days", color = SecondaryEmerald, modifier = Modifier.weight(1f))
+                            SummaryCountChip(label = "Half-Day", count = "$halfDayCount days", color = TertiaryAmber, modifier = Modifier.weight(1f))
+                            SummaryCountChip(label = "Leave", count = "$leaveCount days", color = Color(0xFF3B82F6), modifier = Modifier.weight(1f))
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            SummaryCountChip(label = "Absent", count = "$absentCount days", color = Color(0xFFEF4444), modifier = Modifier.weight(1f))
+                            SummaryCountChip(label = "Holidays", count = "$holidayCount days", color = Color(0xFF8B5CF6), modifier = Modifier.weight(1f))
+                            SummaryCountChip(label = "Off-Days", count = "$offDayCount days", color = Color(0xFF64748B), modifier = Modifier.weight(1f))
+                        }
+
+                        if (overtimeMins > 0) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                SummaryCountChip(
+                                    label = "Overtime",
+                                    count = "${overtimeMins / 60} hrs (${overtimeMins % 60} mins)",
+                                    color = Color(0xFF10B981),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -199,13 +264,13 @@ fun MonthlyEarningLedgerModal(
                     .fillMaxWidth()
                     .weight(1f, fill = false)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (ledgerDayEntries.isEmpty()) {
-                    SectionEmpty("No earning events recorded for $monthLabel.")
+                    SectionEmpty("No daily earning events recorded for $monthLabel.")
                 } else {
                     ledgerDayEntries.forEach { dayEntry ->
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             // Date Header Row
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -214,43 +279,45 @@ fun MonthlyEarningLedgerModal(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Icon(
                                         Icons.Default.CalendarMonth,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(15.dp)
+                                        modifier = Modifier.size(13.dp)
                                     )
                                     Text(
                                         text = dayEntry.dateDisplay,
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
+                                        fontSize = 11.5.sp,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                                 Text(
-                                    text = "Day Total: ${Money.format(dayEntry.dayTotalCents)}",
+                                    text = "Day Total: ${Money.format(dayEntry.dayTotalPaise)}",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (dayEntry.dayTotalCents > 0) SecondaryEmerald else MaterialTheme.colorScheme.onSurfaceVariant
+                                    fontSize = 10.5.sp,
+                                    color = if (dayEntry.dayTotalPaise > 0) SecondaryEmerald else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
                             // Day's Earning Events Card
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(10.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                             ) {
                                 Column(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     dayEntry.events.forEachIndexed { idx, ev ->
                                         if (idx > 0) {
-                                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
                                         }
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -260,9 +327,9 @@ fun MonthlyEarningLedgerModal(
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
                                                     text = ev.title,
-                                                    style = MaterialTheme.typography.bodySmall,
+                                                    style = MaterialTheme.typography.labelMedium,
                                                     fontWeight = FontWeight.SemiBold,
-                                                    color = if (ev.isDeduction) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                                    color = MaterialTheme.colorScheme.onSurface
                                                 )
                                                 if (!ev.timeDisplay.isNullOrBlank()) {
                                                     Row(
@@ -272,23 +339,23 @@ fun MonthlyEarningLedgerModal(
                                                         Icon(
                                                             Icons.Default.Schedule,
                                                             contentDescription = null,
-                                                            modifier = Modifier.size(11.dp),
+                                                            modifier = Modifier.size(10.dp),
                                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                                         )
                                                         Text(
                                                             text = ev.timeDisplay,
                                                             style = MaterialTheme.typography.labelSmall,
-                                                            fontSize = 10.sp,
+                                                            fontSize = 9.5.sp,
                                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                                         )
                                                     }
                                                 }
                                             }
                                             Text(
-                                                text = if (ev.isDeduction) "- ${Money.format(ev.amountCents)}" else "+ ${Money.format(ev.amountCents)}",
+                                                text = "+ ${Money.format(ev.amountPaise)}",
                                                 style = MaterialTheme.typography.labelMedium,
                                                 fontWeight = FontWeight.Bold,
-                                                color = if (ev.isDeduction) MaterialTheme.colorScheme.error else SecondaryEmerald
+                                                color = SecondaryEmerald
                                             )
                                         }
                                     }
@@ -299,11 +366,93 @@ fun MonthlyEarningLedgerModal(
                 }
             }
 
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth()
+            // Action Buttons Footer
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Close Ledger", fontWeight = FontWeight.Bold)
+                if (onRecordPayment != null) {
+                    Button(
+                        onClick = { showPayModal = true },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Record Salary Payment", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = if (onRecordPayment != null) Modifier else Modifier.fillMaxWidth()
+                ) {
+                    Text("Close", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
+        }
+    }
+
+    if (showPayModal) {
+        PayStaffModal(
+            staffName = staffName,
+            staffCode = staffCode,
+            monthLabel = monthLabel,
+            earnedPaise = earnedPaise,
+            paidPaise = paidPaise,
+            breakdown = breakdown,
+            attendanceSummary = attendanceSummary,
+            paymentHistory = paymentHistory,
+            earningLedgerEntries = entries,
+            isSubmitting = isSubmitting,
+            onDismiss = { showPayModal = false },
+            onConfirmPay = { amountPaise, paymentMethod, reference ->
+                onRecordPayment?.invoke(amountPaise, paymentMethod, reference)
+                showPayModal = false
+                onDismiss()
+            }
+        )
+    }
+}
+
+@Composable
+private fun SummaryCountChip(
+    label: String,
+    count: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = color.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.2f)),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+            Column {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 8.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = count,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
         }
     }
@@ -311,117 +460,171 @@ fun MonthlyEarningLedgerModal(
 
 private fun computeDateSeparatedEarningLedger(
     monthLabel: String,
-    earnedCents: Long,
+    earnedPaise: Long,
     attendanceSummary: AttendanceSummaryDto,
-    breakdown: PayrollBreakdownDto
+    breakdown: PayrollBreakdownDto,
+    rawEntries: List<StaffEarningLedgerDto>
 ): List<EarningLedgerDayEntry> {
     val dateDisplayFormatter = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy")
 
-    val ym = try {
-        YearMonth.parse(monthLabel, DateTimeFormatter.ofPattern("MMM yyyy"))
-    } catch (_: Exception) {
-        YearMonth.now()
-    }
+    if (rawEntries.isNotEmpty()) {
+        val grouped = rawEntries.groupBy { it.earningDate }
+        val resultList = mutableListOf<EarningLedgerDayEntry>()
 
-    val daysInMonth = ym.lengthOfMonth()
-    val resultList = mutableListOf<EarningLedgerDayEntry>()
+        for ((dateIso, items) in grouped.entries.sortedByDescending { it.key }) {
+            val localDate = runCatching { LocalDate.parse(dateIso) }.getOrNull()
+            val dateDisplay = localDate?.format(dateDisplayFormatter) ?: dateIso
 
-    val presentDaysCount = attendanceSummary.presentDays
-    val halfDaysCount = attendanceSummary.halfDays
-    val holidayDaysCount = attendanceSummary.holidayDays
-    val weeklyOffDaysCount = attendanceSummary.weeklyOffDays
-    val overtimeMins = attendanceSummary.totalOvertimeMinutes
-
-    val baseLine = breakdown.earnings.firstOrNull { it.code == "BASE_SALARY" }
-    val baseTotal = baseLine?.amountCents ?: earnedCents
-    val totalCount = (presentDaysCount + halfDaysCount + holidayDaysCount + weeklyOffDaysCount).coerceAtLeast(1)
-    val avgPerDayRate = baseTotal / totalCount
-
-    var currentPresentAllocated = 0
-    var currentHalfAllocated = 0
-    var currentHolidayAllocated = 0
-    var currentOffAllocated = 0
-
-    for (day in 1..daysInMonth) {
-        val localDate = LocalDate.of(ym.year, ym.month, day)
-        val dateIso = localDate.toString()
-        val dateDisplay = localDate.format(dateDisplayFormatter)
-        val dayOfWeek = localDate.dayOfWeek.value // 1 (Mon) to 7 (Sun)
-
-        val events = mutableListOf<EarningLedgerEvent>()
-
-        // 1. Shift Present
-        if (currentPresentAllocated < presentDaysCount && dayOfWeek != 7) {
-            events.add(
+            val events = items.map { item ->
+                val amt = item.amountInr
+                val label = when (item.type.uppercase()) {
+                    "SHIFT" -> "Shift Clock-in (Present)"
+                    "HOLIDAY" -> "Public Holiday (Paid)"
+                    "OFF_DAY" -> "Scheduled Weekly Off (Paid)"
+                    "OVERTIME" -> "Approved Overtime"
+                    else -> item.type.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+                }
                 EarningLedgerEvent(
-                    id = "ev-$dateIso-present",
-                    title = "Shift Clock-in (Present)",
-                    category = "SHIFT",
-                    timeDisplay = "09:00 AM - 05:30 PM",
-                    amountCents = avgPerDayRate
+                    id = item.id.ifBlank { "ev-$dateIso-${item.type}" },
+                    title = label,
+                    category = item.type,
+                    timeDisplay = null,
+                    amountPaise = amt,
+                    isDeduction = false
                 )
-            )
-            currentPresentAllocated++
-        } else if (currentHalfAllocated < halfDaysCount && dayOfWeek != 7) {
-            events.add(
-                EarningLedgerEvent(
-                    id = "ev-$dateIso-halfday",
-                    title = "Shift Clock-in (Half-Day)",
-                    category = "SHIFT",
-                    timeDisplay = "09:00 AM - 01:00 PM",
-                    amountCents = avgPerDayRate / 2
-                )
-            )
-            currentHalfAllocated++
-        } else if (dayOfWeek == 7 && currentOffAllocated < weeklyOffDaysCount) {
-            events.add(
-                EarningLedgerEvent(
-                    id = "ev-$dateIso-off",
-                    title = "Scheduled Weekly Off (Paid)",
-                    category = "WEEKLY_OFF",
-                    amountCents = avgPerDayRate
-                )
-            )
-            currentOffAllocated++
-        } else if (currentHolidayAllocated < holidayDaysCount) {
-            events.add(
-                EarningLedgerEvent(
-                    id = "ev-$dateIso-holiday",
-                    title = "Public Holiday (Paid)",
-                    category = "HOLIDAY",
-                    amountCents = avgPerDayRate
-                )
-            )
-            currentHolidayAllocated++
-        }
+            }
 
-        // Overtime check-in on specific days
-        if (overtimeMins > 0 && day % 7 == 3) {
-            val hrs = 2
-            val overtimeRate = 10000L // ₹100 / hr
-            events.add(
-                EarningLedgerEvent(
-                    id = "ev-$dateIso-overtime",
-                    title = "Approved Overtime Check-in ($hrs hrs)",
-                    category = "OVERTIME",
-                    timeDisplay = "06:00 PM - 08:00 PM",
-                    amountCents = overtimeRate * hrs
-                )
-            )
-        }
-
-        if (events.isNotEmpty()) {
-            val dayTotal = events.sumOf { if (it.isDeduction) -it.amountCents else it.amountCents }
+            val dayTotal = events.sumOf { it.amountPaise }
             resultList.add(
                 EarningLedgerDayEntry(
                     dateIso = dateIso,
                     dateDisplay = dateDisplay,
                     events = events,
-                    dayTotalCents = dayTotal
+                    dayTotalPaise = dayTotal
                 )
             )
         }
+
+        return resultList
     }
 
-    return resultList
+    // Fallback: If raw daily entries are not loaded, generate category breakdown summary for monthLabel
+    if (earnedPaise <= 0L && breakdown.earnings.isEmpty() && attendanceSummary.presentDays == 0) {
+        return emptyList()
+    }
+
+    val syntheticEvents = mutableListOf<EarningLedgerEvent>()
+
+    // 1. Present Days
+    if (attendanceSummary.presentDays > 0 || (breakdown.earnings.isEmpty() && earnedPaise > 0)) {
+        val count = attendanceSummary.presentDays.coerceAtLeast(1)
+        val baseLine = breakdown.earnings.firstOrNull { it.code in listOf("BASE_SALARY", "SHIFT", "PRESENT", "PRESENT_PAY") }
+        val otherEarningsSum = breakdown.earnings.filter { it.code !in listOf("BASE_SALARY", "SHIFT", "PRESENT", "PRESENT_PAY") }.sumOf { it.amountInr }
+        val amount = baseLine?.amountInr ?: if (breakdown.earnings.isEmpty()) earnedPaise else (earnedPaise - otherEarningsSum).coerceAtLeast(0L)
+
+        syntheticEvents.add(
+            EarningLedgerEvent(
+                id = "synth-present",
+                title = "Shift Clock-in ($count present days)",
+                category = "SHIFT",
+                timeDisplay = "$count shift days accrued",
+                amountPaise = amount
+            )
+        )
+    }
+
+    // 2. Half Days
+    if (attendanceSummary.halfDays > 0) {
+        val count = attendanceSummary.halfDays
+        val halfDayLine = breakdown.earnings.firstOrNull { it.code in listOf("HALF_DAY", "HALF_DAY_PAY") }
+        val amount = halfDayLine?.amountInr ?: 0L
+        syntheticEvents.add(
+            EarningLedgerEvent(
+                id = "synth-halfday",
+                title = "Half-Day Shifts ($count days)",
+                category = "SHIFT",
+                timeDisplay = "$count half-day shifts",
+                amountPaise = amount
+            )
+        )
+    }
+
+    // 3. Paid Holidays
+    if (attendanceSummary.holidayDays > 0) {
+        val count = attendanceSummary.holidayDays
+        val line = breakdown.earnings.firstOrNull { it.code in listOf("HOLIDAY", "HOLIDAY_PAY", "PAID_HOLIDAY") }
+        val amount = line?.amountInr ?: 0L
+        syntheticEvents.add(
+            EarningLedgerEvent(
+                id = "synth-holiday",
+                title = "Public Holidays ($count days)",
+                category = "HOLIDAY",
+                timeDisplay = "$count paid holidays",
+                amountPaise = amount
+            )
+        )
+    }
+
+    // 4. Weekly Offs
+    if (attendanceSummary.weeklyOffDays > 0) {
+        val count = attendanceSummary.weeklyOffDays
+        val line = breakdown.earnings.firstOrNull { it.code in listOf("OFF_DAY", "WEEKLY_OFF", "WEEKLY_OFF_PAY") }
+        val amount = line?.amountInr ?: 0L
+        syntheticEvents.add(
+            EarningLedgerEvent(
+                id = "synth-offday",
+                title = "Scheduled Weekly Offs ($count days)",
+                category = "OFF_DAY",
+                timeDisplay = "$count off-days",
+                amountPaise = amount
+            )
+        )
+    }
+
+    // 5. Paid Leave
+    if (attendanceSummary.leaveDays > 0) {
+        val count = attendanceSummary.leaveDays
+        val line = breakdown.earnings.firstOrNull { it.code in listOf("PAID_LEAVE", "LEAVE") }
+        val amount = line?.amountInr ?: 0L
+        syntheticEvents.add(
+            EarningLedgerEvent(
+                id = "synth-leave",
+                title = "Paid Leave ($count days)",
+                category = "PAID_LEAVE",
+                timeDisplay = "$count leave days",
+                amountPaise = amount
+            )
+        )
+    }
+
+    // 6. Overtime
+    val otMins = attendanceSummary.totalOvertimeMinutes.toInt()
+    val otLine = breakdown.earnings.firstOrNull { it.code in listOf("OVERTIME", "COMPLETED_OVERTIME") }
+    if (otMins > 0 || (otLine != null && otLine.amountInr > 0)) {
+        val hrs = if (otMins > 0) "${otMins / 60} hrs" else "Approved"
+        val amount = otLine?.amountInr ?: 0L
+        syntheticEvents.add(
+            EarningLedgerEvent(
+                id = "synth-overtime",
+                title = "Approved Overtime ($hrs)",
+                category = "OVERTIME",
+                timeDisplay = hrs,
+                amountPaise = amount
+            )
+        )
+    }
+
+    if (syntheticEvents.isEmpty()) {
+        return emptyList()
+    }
+
+    val total = syntheticEvents.sumOf { it.amountPaise }
+    return listOf(
+        EarningLedgerDayEntry(
+            dateIso = monthLabel,
+            dateDisplay = "Monthly Summary ($monthLabel)",
+            events = syntheticEvents,
+            dayTotalPaise = total
+        )
+    )
 }

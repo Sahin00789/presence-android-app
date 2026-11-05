@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -46,22 +48,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.als.presence.core.designsystem.SecondaryEmerald
-import com.als.presence.core.designsystem.TertiaryAmber
 import com.als.presence.data.model.AttendanceSummaryDto
 import com.als.presence.data.model.PaymentRecordDto
 import com.als.presence.data.model.PayrollBreakdownDto
-
-private data class SalaryBillLineItem(
-    val label: String,
-    val countLabel: String,
-    val lineTotalCents: Long,
-    val isDeduction: Boolean = false
-)
+import com.als.presence.data.model.StaffEarningLedgerDto
 
 /**
- * Modal Bottom Sheet to disburse/record salary payment for an employee.
- * Features an itemized monthly salary bill statement table (Attendance Line Item, Count, Line Total Amount),
- * payment history, partial/multiple payment entry, selectable payment method, and optional reference notes.
+ * Simplified Modal Bottom Sheet to disburse/record salary payment for an employee.
+ * Displays Earned, Paid, and Net Due amounts, with inputs for Amount to Pay,
+ * Payment Method, Transaction ID / Reference, and Submit.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,25 +64,26 @@ fun PayStaffModal(
     staffName: String,
     staffCode: String? = null,
     monthLabel: String? = null,
-    earnedCents: Long,
-    paidCents: Long,
+    earnedPaise: Long,
+    paidPaise: Long,
     breakdown: PayrollBreakdownDto = PayrollBreakdownDto(),
     attendanceSummary: AttendanceSummaryDto = AttendanceSummaryDto(),
     paymentHistory: List<PaymentRecordDto> = emptyList(),
+    earningLedgerEntries: List<StaffEarningLedgerDto> = emptyList(),
     isSubmitting: Boolean = false,
     onDismiss: () -> Unit,
-    onConfirmPay: (amountCents: Long, paymentMethod: String, reference: String) -> Unit
+    onConfirmPay: (amountPaise: Long, paymentMethod: String, reference: String) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val dueCents = (earnedCents - paidCents).coerceAtLeast(0L)
-    val defaultAmount = if (dueCents > 0) (dueCents / 100).toString() else if (earnedCents > 0) (earnedCents / 100).toString() else ""
+    val duePaise = (earnedPaise - paidPaise).coerceAtLeast(0L)
+    val defaultAmount = if (duePaise > 0) duePaise.toString() else if (earnedPaise > 0) earnedPaise.toString() else ""
 
     var amountInput by remember(defaultAmount) { mutableStateOf(defaultAmount) }
     var selectedMethod by remember { mutableStateOf("BANK_TRANSFER") }
-    var referenceInput by remember { mutableStateOf("") }
+    var transactionIdInput by remember { mutableStateOf("") }
 
-    val parsedCents = Money.parseToCents(amountInput) ?: 0L
+    val parsedPaise = Money.parseToInr(amountInput) ?: 0L
 
     val paymentMethods = listOf(
         "BANK_TRANSFER" to "Bank Transfer",
@@ -95,121 +91,6 @@ fun PayStaffModal(
         "CASH" to "Cash",
         "CHEQUE" to "Cheque"
     )
-
-    // Construct Itemized Bill Statement Line Items
-    val billItems = remember(earnedCents, breakdown, attendanceSummary) {
-        buildList {
-            // 1. Present Days
-            if (attendanceSummary.presentDays > 0 || (breakdown.earnings.isEmpty() && earnedCents > 0)) {
-                val count = attendanceSummary.presentDays.coerceAtLeast(1)
-                val baseLine = breakdown.earnings.firstOrNull { it.code == "BASE_SALARY" }
-                val amount = baseLine?.amountCents ?: earnedCents
-                add(
-                    SalaryBillLineItem(
-                        label = "Present Days",
-                        countLabel = "$count days",
-                        lineTotalCents = amount
-                    )
-                )
-            }
-
-            // 2. Half-Days
-            if (attendanceSummary.halfDays > 0) {
-                val count = attendanceSummary.halfDays
-                val halfDayLine = breakdown.earnings.firstOrNull { it.code == "HALF_DAY" }
-                val amount = halfDayLine?.amountCents ?: 0L
-                add(
-                    SalaryBillLineItem(
-                        label = "Half-Days",
-                        countLabel = "$count days",
-                        lineTotalCents = amount
-                    )
-                )
-            }
-
-            // 3. Paid Holidays
-            if (attendanceSummary.holidayDays > 0) {
-                val count = attendanceSummary.holidayDays
-                val line = breakdown.earnings.firstOrNull { it.code == "HOLIDAY_PAY" }
-                val amount = line?.amountCents ?: 0L
-                add(
-                    SalaryBillLineItem(
-                        label = "Paid Holidays",
-                        countLabel = "$count days",
-                        lineTotalCents = amount
-                    )
-                )
-            }
-
-            // 4. Weekly Offs
-            if (attendanceSummary.weeklyOffDays > 0) {
-                val count = attendanceSummary.weeklyOffDays
-                val line = breakdown.earnings.firstOrNull { it.code == "WEEKLY_OFF_PAY" }
-                val amount = line?.amountCents ?: 0L
-                add(
-                    SalaryBillLineItem(
-                        label = "Weekly Offs",
-                        countLabel = "$count days",
-                        lineTotalCents = amount
-                    )
-                )
-            }
-
-            // 5. Paid Leave
-            val leaveDaysCount = attendanceSummary.leaveDays
-            if (leaveDaysCount > 0) {
-                val line = breakdown.earnings.firstOrNull { it.code == "PAID_LEAVE" }
-                val amount = line?.amountCents ?: 0L
-                add(
-                    SalaryBillLineItem(
-                        label = "Paid Leave",
-                        countLabel = "$leaveDaysCount days",
-                        lineTotalCents = amount
-                    )
-                )
-            }
-
-            // 6. Completed Overtime
-            val overtimeMins = attendanceSummary.totalOvertimeMinutes.toInt()
-            val overtimeLine = breakdown.earnings.firstOrNull { it.code == "OVERTIME" || it.code == "COMPLETED_OVERTIME" }
-            if (overtimeMins > 0 || (overtimeLine != null && overtimeLine.amountCents > 0)) {
-                val hrs = if (overtimeMins > 0) "${overtimeMins / 60} hrs" else "Approved"
-                val amount = overtimeLine?.amountCents ?: 0L
-                add(
-                    SalaryBillLineItem(
-                        label = "Approved Overtime",
-                        countLabel = hrs,
-                        lineTotalCents = amount
-                    )
-                )
-            }
-
-            // 7. Other Earnings Lines
-            breakdown.earnings.filter { lineItem ->
-                lineItem.code !in listOf("BASE_SALARY", "HALF_DAY", "HOLIDAY_PAY", "WEEKLY_OFF_PAY", "PAID_LEAVE", "OVERTIME", "COMPLETED_OVERTIME")
-            }.forEach { lineItem ->
-                add(
-                    SalaryBillLineItem(
-                        label = lineItem.label,
-                        countLabel = "Earning",
-                        lineTotalCents = lineItem.amountCents
-                    )
-                )
-            }
-
-            // 8. Deductions
-            breakdown.deductions.forEach { lineItem ->
-                add(
-                    SalaryBillLineItem(
-                        label = lineItem.label,
-                        countLabel = "Deduction",
-                        lineTotalCents = lineItem.amountCents,
-                        isDeduction = true
-                    )
-                )
-            }
-        }
-    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -312,7 +193,7 @@ fun PayStaffModal(
                     }
                 }
 
-                // Itemized Salary Bill Table
+                // Salary Overview Card: Earned, Paid, Due
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
@@ -323,117 +204,44 @@ fun PayStaffModal(
                         modifier = Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Itemized Salary Bill (${monthLabel ?: "Monthly"})",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Surface(
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(
-                                    text = "MONTHLY STATEMENT",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 8.5.sp,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
+                        Text(
+                            text = "Salary Summary",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
 
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-                        // Table Header: Attendance Line Item | Count | Line Total
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Attendance Line Item", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1.8f))
-                            Text("Count", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(0.9f))
-                            Text("Line Total", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1.1f))
-                        }
-
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-                        // Table Rows
-                        if (billItems.isEmpty()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Present Base Salary", style = MaterialTheme.typography.bodySmall, fontSize = 11.5.sp, modifier = Modifier.weight(1.8f))
-                                Text("1 month", style = MaterialTheme.typography.bodySmall, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(0.9f))
-                                Text(Money.format(earnedCents), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, fontSize = 11.5.sp, modifier = Modifier.weight(1.1f))
-                            }
-                        } else {
-                            billItems.forEach { line ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = line.label,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontSize = 11.5.sp,
-                                        color = if (line.isDeduction) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1.8f)
-                                    )
-                                    Text(
-                                        text = line.countLabel,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontSize = 11.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.weight(0.9f)
-                                    )
-                                    Text(
-                                        text = if (line.isDeduction) "- ${Money.format(line.lineTotalCents)}" else Money.format(line.lineTotalCents),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.5.sp,
-                                        color = if (line.isDeduction) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1.1f)
-                                    )
-                                }
-                            }
-                        }
-
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                        // Sum of Totals -> Gross Total Salary, Less Paid, Net Unpaid Due
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("Gross Total Salary", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(Money.format(earnedCents), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Text("Total Earned", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(Money.format(earnedPaise), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Less: Paid", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(Money.format(paidCents), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                                Text("Total Paid", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(Money.format(paidPaise), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text("Net Unpaid Due", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(Money.format(dueCents), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SecondaryEmerald)
+                                Text("Net Due", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(Money.format(duePaise), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = SecondaryEmerald)
                             }
                         }
                     }
                 }
 
-                // Payment History for this month
-                if (paidCents > 0 || paymentHistory.isNotEmpty()) {
+                // Payment History for this month (if any)
+                if (paidPaise > 0 || paymentHistory.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "This Month's Payment History",
+                            text = "Payment History",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -462,14 +270,15 @@ fun PayStaffModal(
                                             )
                                             Column {
                                                 Text(
-                                                    text = "Paid ${Money.format(record.amountCents)} via ${record.paymentMethod}",
+                                                    text = "Paid ${Money.format(record.amountPaise)} via ${record.paymentMethod}",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     fontWeight = FontWeight.Bold,
                                                     color = MaterialTheme.colorScheme.onSurface
                                                 )
-                                                if (record.referenceNumber?.isNotBlank() == true) {
+                                                val refStr = record.referenceNumber ?: record.reference
+                                                if (!refStr.isNullOrBlank()) {
                                                     Text(
-                                                        text = "Ref: ${record.referenceNumber}",
+                                                        text = "Txn ID: $refStr",
                                                         style = MaterialTheme.typography.labelSmall,
                                                         fontSize = 10.sp,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -488,7 +297,7 @@ fun PayStaffModal(
                                     }
                                 }
                             }
-                        } else if (paidCents > 0) {
+                        } else if (paidPaise > 0) {
                             Surface(
                                 color = SecondaryEmerald.copy(alpha = 0.08f),
                                 shape = RoundedCornerShape(10.dp),
@@ -500,7 +309,7 @@ fun PayStaffModal(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "Total Paid: ${Money.format(paidCents)}",
+                                        text = "Total Paid: ${Money.format(paidPaise)}",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = SecondaryEmerald
@@ -514,24 +323,24 @@ fun PayStaffModal(
                 // Payment Entry Section
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Disburse Payment",
+                        text = "Disburse Salary Payment",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold
                     )
 
-                    // Amount Input
+                    // 1. Amount Input
                     OutlinedTextField(
                         value = amountInput,
-                        onValueChange = { amountInput = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                        onValueChange = { amountInput = it.filter { ch -> ch.isDigit() } },
                         label = { Text("Amount to Pay (₹)") },
                         placeholder = { Text("e.g. 5000") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Payment Method Selector
+                    // 2. Payment Method Selector
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
                             text = "Payment Method",
@@ -555,21 +364,15 @@ fun PayStaffModal(
                         }
                     }
 
-                    // Reference / Notes
+                    // 3. Transaction ID / Reference
                     OutlinedTextField(
-                        value = referenceInput,
-                        onValueChange = { referenceInput = it },
-                        label = { Text("Payment Reference / Notes (Optional)") },
-                        placeholder = { Text("e.g. Bank UTR, UPI Txn ID, Cheque No, or Note") },
+                        value = transactionIdInput,
+                        onValueChange = { transactionIdInput = it },
+                        label = { Text("Transaction ID / Reference") },
+                        placeholder = { Text("e.g. UTR / Txn ID / Cheque No / Notes") },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Text(
-                        text = "💡 You can make multiple partial payments for a month. Any remaining balance stays due for future payment.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -589,18 +392,18 @@ fun PayStaffModal(
 
                 Button(
                     onClick = {
-                        if (parsedCents > 0) {
+                        if (parsedPaise > 0) {
                             val methodLabel = paymentMethods.firstOrNull { it.first == selectedMethod }?.second ?: selectedMethod
-                            val finalRef = referenceInput.trim().ifEmpty { "Salary Payment via $methodLabel" }
-                            onConfirmPay(parsedCents, selectedMethod, finalRef)
+                            val finalRef = transactionIdInput.trim().ifEmpty { "Payment via $methodLabel" }
+                            onConfirmPay(parsedPaise, selectedMethod, finalRef)
                         }
                     },
-                    enabled = !isSubmitting && parsedCents > 0,
+                    enabled = !isSubmitting && parsedPaise > 0,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = if (isSubmitting) "Paying…" else "Confirm Payment",
+                        text = if (isSubmitting) "Submitting…" else "Submit Payment",
                         fontWeight = FontWeight.Bold
                     )
                 }

@@ -7,7 +7,8 @@ import com.als.presence.domain.model.User
 import kotlinx.coroutines.flow.Flow
 
 interface AuthRepository {
-    suspend fun requestOtp(email: String, role: String): Resource<OtpResponse>
+    suspend fun checkServerHealth(): Boolean
+    suspend fun requestOtp(email: String, role: String, isRegistration: Boolean = false): Resource<OtpResponse>
     suspend fun verifyOtp(
         email: String,
         otp: String,
@@ -22,7 +23,10 @@ interface AuthRepository {
         longitude: String? = null,
         radiusMeters: Int? = null
     ): Resource<User>
-    suspend fun googleExchange(idToken: String): Resource<User>
+    suspend fun googleExchange(
+        idToken: String? = null,
+        serverAuthCode: String? = null
+    ): Resource<User>
     suspend fun registerOwner(
         idToken: String,
         orgName: String,
@@ -40,4 +44,5 @@ interface AuthRepository {
     suspend fun refreshToken(): Resource<User>
     suspend fun updateProfile(fullName: String? = null, phone: String? = null, avatarBase64: String? = null): Resource<User>
     fun observeCurrentUser(): Flow<User?>
+    fun observeSessionChecking(): Flow<Boolean>
 }

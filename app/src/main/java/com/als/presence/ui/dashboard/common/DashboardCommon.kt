@@ -28,14 +28,126 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material3.IconButton
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.graphicsLayer
 import com.als.presence.core.common.UiState
+
+data class SyncState(
+    val isSyncing: Boolean = false,
+    val onSyncClick: () -> Unit = {}
+)
+
+val LocalSyncState = staticCompositionLocalOf { SyncState() }
+
+/**
+ * TopBar Refresh Sync button that triggers Room DB synchronization from remote APIs.
+ * Displays a continuous rotation animation while sync is in progress.
+ */
+@Composable
+fun TopBarSyncRefreshButton(
+    isSyncing: Boolean,
+    onSyncClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "SyncRotation")
+    val rotationAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "SyncRotationAngle"
+    )
+
+    IconButton(
+        onClick = onSyncClick,
+        enabled = !isSyncing,
+        modifier = modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(
+                if (isSyncing) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+    ) {
+        Icon(
+            imageVector = Icons.Default.Refresh,
+            contentDescription = "Sync Room Database",
+            tint = if (isSyncing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .size(20.dp)
+                .graphicsLayer {
+                    rotationZ = if (isSyncing) rotationAngle else 0f
+                }
+        )
+    }
+}
+
+/**
+ * TopBar Server Icon component that indicates server connectivity status.
+ * If server connection error occurs, the server icon is displayed with RED tint and background.
+ */
+@Composable
+fun TopBarServerIcon(
+    modifier: Modifier = Modifier,
+    isOnline: Boolean = true,
+    isServerConnected: Boolean = true,
+    onClick: () -> Unit = {}
+) {
+    val hasServerErr = !isOnline || !isServerConnected
+    val icon = if (hasServerErr) Icons.Default.CloudOff else Icons.Default.Dns
+    val iconColor = if (hasServerErr) Color(0xFFD32F2F) else Color(0xFF2E7D32)
+    val bgColor = if (hasServerErr) Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    val dotColor = if (hasServerErr) Color(0xFFD32F2F) else Color(0xFF2E7D32)
+
+    IconButton(
+        onClick = onClick,
+        enabled = hasServerErr,
+        modifier = modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(bgColor)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = if (hasServerErr) "Server connection error" else "Server connected",
+                tint = iconColor,
+                modifier = Modifier.size(20.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 4.dp, end = 4.dp)
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(dotColor)
+            )
+        }
+    }
+}
 
 /**
  * Renders a [UiState] with consistent loading, error, empty and content states.
@@ -206,22 +318,34 @@ fun MetricTile(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.18f))
     ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp)) {
+        Column(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Text(
                 text = value,
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                color = accent
+                color = accent,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(1.dp))
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
             )
         }
     }
@@ -351,12 +475,26 @@ fun SectionLoading(text: String) {
 
 @Composable
 fun SectionError(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.error,
-        modifier = Modifier.padding(vertical = 8.dp)
-    )
+    val isServerConnErr = text.contains("server", ignoreCase = true) ||
+            text.contains("network", ignoreCase = true) ||
+            text.contains("connect", ignoreCase = true) ||
+            text.contains("timeout", ignoreCase = true)
+
+    if (isServerConnErr) {
+        Text(
+            text = "Using cached offline data",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier = Modifier.padding(vertical = 4.dp)
+        )
+    } else {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+    }
 }
 
 @Composable

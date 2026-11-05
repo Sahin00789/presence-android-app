@@ -4,7 +4,7 @@ import com.als.presence.core.common.Resource
 import com.als.presence.data.model.*
 
 interface AttendanceRepository {
-    suspend fun getAttendanceRecords(from: String? = null, to: String? = null): Resource<List<AttendanceRecordDto>>
+    suspend fun getAttendanceRecords(from: String? = null, to: String? = null, staffProfileId: String? = null): Resource<List<AttendanceRecordDto>>
     suspend fun getFaceStatus(): Resource<FaceStatusDto>
     suspend fun clockIn(request: ClockInRequest): Resource<AttendanceRecordDto>
     suspend fun clockOut(eventId: String): Resource<ClockOutResponseDto>

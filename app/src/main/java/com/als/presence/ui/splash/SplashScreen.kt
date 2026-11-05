@@ -11,6 +11,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +38,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.painterResource
+import com.als.presence.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -111,67 +114,25 @@ fun SplashScreen(
                     .scale(scale.value)
                     .alpha(alpha.value)
             ) {
-                // APP LOGO EMBLEM: Pulsing Double Ring Shield
+                // APP LOGO EMBLEM: High-Contrast Presence Brand Icon
                 Box(
                     modifier = Modifier
-                        .size(135.dp)
+                        .size(130.dp)
                         .scale(pulseScale.value)
                         .clip(CircleShape)
-                        .background(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    PrimaryIndigo,
-                                    SecondaryEmerald,
-                                    PrimaryIndigo.copy(alpha = 0.2f)
-                                )
-                            )
-                        )
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                         .border(
                             width = 2.dp,
-                            color = PrimaryIndigo.copy(alpha = 0.4f),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
                             shape = CircleShape
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(106.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF0F172A)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Assignment,
-                                contentDescription = "Attendance Register",
-                                tint = Color(0xFFF1F5F9).copy(alpha = 0.35f),
-                                modifier = Modifier.size(72.dp)
-                            )
-                            Icon(
-                                imageVector = Icons.Default.Shield,
-                                contentDescription = "Biometric Security Shield",
-                                tint = SecondaryEmerald.copy(alpha = 0.85f),
-                                modifier = Modifier.size(56.dp)
-                            )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.LocationOn,
-                                    contentDescription = "GPS Location Geofence",
-                                    tint = Color(0xFF0284C7),
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = "Verified Attendance Tick",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
-                    }
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_logo_presence),
+                        contentDescription = "Presence App Emblem",
+                        modifier = Modifier.size(116.dp)
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(28.dp))
@@ -187,9 +148,9 @@ fun SplashScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Staff Attendance • GPS Geofence • Salary Wallet",
+                    text = "Presence to Pagar • Attendance, Shifts & Salary",
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 

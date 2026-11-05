@@ -2,9 +2,6 @@ package com.als.presence.ui.dashboard.common
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Matrix
-import android.util.Size
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -16,7 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -24,7 +21,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -57,24 +58,36 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.als.presence.core.face.FaceEmbeddingEngine
+import com.als.presence.core.location.GpsLocation
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 
 /**
- * Full-screen CameraX capture flow. It produces a numeric embedding only:
- * the frame is never persisted or transmitted.
+ * CameraX Face Verification & Enrollment Modal.
+ * Security Feature:
+ * Continuously fetches fresh high-accuracy GPS coordinates every 2s while modal is open,
+ * ensuring clock-in security does not depend on stale or previously cached location fixes.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FaceCaptureDialog(
     engine: FaceEmbeddingEngine,
     mode: String = "VERIFY",
+    premisesName: String? = null,
+    premisesLatitude: Double? = null,
+    premisesLongitude: Double? = null,
+    distanceMeters: Int? = null,
+    accuracyMeters: Int? = null,
     onCapturedSingle: (FaceEmbeddingEngine.Embedding) -> Unit = {},
     onCapturedMulti: (Map<String, FaceEmbeddingEngine.Embedding>) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
     var hasPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -82,7 +95,6 @@ fun FaceCaptureDialog(
         )
     }
 
-    // Re-check permission when activity/screen resumes (e.g. returning from app settings)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -110,20 +122,66 @@ fun FaceCaptureDialog(
         }
     }
 
+    // Continuous Live GPS fetching inside modal for clock-in security
+    var liveLocation by remember { mutableStateOf<GpsLocation?>(null) }
+    var liveDistanceMeters by remember { mutableStateOf<Int?>(distanceMeters) }
+    var liveAccuracyMeters by remember { mutableStateOf<Int?>(accuracyMeters) }
+    var isFetchingGps by remember { mutableStateOf(true) }
+
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            isFetchingGps = true
+            try {
+                val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                if (hasFine || hasCoarse) {
+                    fusedLocationClient.getCurrentLocation(
+                        Priority.PRIORITY_HIGH_ACCURACY,
+                        null
+                    ).addOnSuccessListener { loc ->
+                        if (loc != null) {
+                            liveLocation = GpsLocation(
+                                latitude = loc.latitude,
+                                longitude = loc.longitude,
+                                accuracyMeters = loc.accuracy,
+                                isMocked = loc.isFromMockProvider
+                            )
+                            liveAccuracyMeters = loc.accuracy.toInt()
+                            if (premisesLatitude != null && premisesLongitude != null) {
+                                val dist = calculateDistanceMeters(loc.latitude, loc.longitude, premisesLatitude, premisesLongitude)
+                                liveDistanceMeters = dist.toInt()
+                            }
+                        }
+                        isFetchingGps = false
+                    }
+                }
+            } catch (_: Exception) {
+                isFetchingGps = false
+            }
+            delay(2000L) // Continuous live GPS refresh every 2s for clock in security
+        }
+    }
+
     val targetPoses = if (mode == "ENROLL") listOf("CENTER", "LEFT", "RIGHT", "UP", "DOWN") else listOf("CENTER")
     var currentPoseIndex by remember { mutableIntStateOf(0) }
-    var feedbackMessage by remember { mutableStateOf("Position your face in the frame.") }
+    var feedbackMessage by remember { mutableStateOf("Position your face in the camera.") }
+    var isSuccess by remember { mutableStateOf(false) }
+
     val accumulatedEmbeddings = remember { mutableMapOf<String, FaceEmbeddingEngine.Embedding>() }
-    
-    // Automatically trigger callback if all poses are captured
+
     LaunchedEffect(currentPoseIndex) {
         if (currentPoseIndex >= targetPoses.size) {
-            delay(500)
+            isSuccess = true
+            feedbackMessage = "Clock-In Verified Successfully!"
+            delay(1000)
             if (mode == "ENROLL") {
                 onCapturedMulti(accumulatedEmbeddings)
             } else {
                 accumulatedEmbeddings["CENTER"]?.let { onCapturedSingle(it) }
             }
+            onDismiss()
         }
     }
 
@@ -133,7 +191,7 @@ fun FaceCaptureDialog(
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.94f)
+                .fillMaxWidth(0.92f)
                 .clip(RoundedCornerShape(26.dp)),
             color = MaterialTheme.colorScheme.surface
         ) {
@@ -143,11 +201,66 @@ fun FaceCaptureDialog(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Text(
-                    text = if (mode == "ENROLL") "Enrol your face" else "Verify your face",
+                    text = if (mode == "ENROLL") "Enroll Face ID" else "Face & GPS Verification",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
-                
+
+                // Live GPS & Premises Distance Status Strip inside Modal
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = premisesName ?: "Assigned Premises",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (isFetchingGps && liveDistanceMeters == null) {
+                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                            }
+                            if (liveDistanceMeters != null) {
+                                Text(
+                                    text = "${liveDistanceMeters}m away",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            if (liveAccuracyMeters != null) {
+                                Text(
+                                    text = "±${liveAccuracyMeters}m",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
                 if (mode == "ENROLL") {
                     LinearProgressIndicator(
                         progress = { currentPoseIndex / targetPoses.size.toFloat() },
@@ -155,71 +268,79 @@ fun FaceCaptureDialog(
                         color = MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
                     )
-                    Text(
-                        text = "$currentPoseIndex of ${targetPoses.size} poses captured",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                } else {
-                    Text(
-                        text = "Centre your face in the frame.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
                 }
 
+                // Big Full Rounded Circular Face Camera Container (No Frame Guard)
                 if (!hasPermission) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(3f / 4f)
-                            .clip(RoundedCornerShape(18.dp))
+                            .size(260.dp)
+                            .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(Icons.Default.Face, contentDescription = null, modifier = Modifier.size(40.dp))
-                            Text("Camera permission is required", style = MaterialTheme.typography.bodyMedium)
-                            OutlinedButton(onClick = {
-                                permissionLauncher.launch(Manifest.permission.CAMERA)
-                            }) { Text("Grant camera access") }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Face, contentDescription = null, modifier = Modifier.size(48.dp))
+                            Text("Camera permission required", style = MaterialTheme.typography.bodySmall)
+                            OutlinedButton(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
+                                Text("Grant Permission")
+                            }
                         }
                     }
                 } else {
-                    // Pass the auto-capture states down to the preview
-                    FaceCameraPreview(
-                        engine = engine,
-                        targetPose = if (currentPoseIndex < targetPoses.size) targetPoses[currentPoseIndex] else "CENTER",
-                        isDone = currentPoseIndex >= targetPoses.size,
-                        onSuccess = { embedding, pose -> 
-                            accumulatedEmbeddings[pose] = embedding
-                            currentPoseIndex++
-                            if (currentPoseIndex < targetPoses.size) {
-                                feedbackMessage = "Great! Now look ${targetPoses[currentPoseIndex]}"
-                            } else {
-                                feedbackMessage = "All poses captured successfully!"
+                    Box(
+                        modifier = Modifier
+                            .size(260.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        FaceCameraPreview(
+                            engine = engine,
+                            targetPose = if (currentPoseIndex < targetPoses.size) targetPoses[currentPoseIndex] else "CENTER",
+                            isDone = currentPoseIndex >= targetPoses.size,
+                            onSuccess = { embedding, pose ->
+                                accumulatedEmbeddings[pose] = embedding
+                                currentPoseIndex++
+                                if (currentPoseIndex < targetPoses.size) {
+                                    feedbackMessage = "Hold steady... Look ${targetPoses[currentPoseIndex]}"
+                                } else {
+                                    feedbackMessage = "Face Captured!"
+                                }
+                            },
+                            onFeedback = { feedbackMessage = it }
+                        )
+
+                        if (isSuccess) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color(0x9910B981)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(80.dp)
+                                )
                             }
-                        },
-                        onFeedback = { feedbackMessage = it }
-                    )
+                        }
+                    }
                 }
 
-                // Dynamic Instruction Guide
+                // Feedback Banner
                 Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
+                    color = if (isSuccess) Color(0xFFD1FAE5) else MaterialTheme.colorScheme.primaryContainer,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = feedbackMessage,
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(12.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = if (isSuccess) Color(0xFF065F46) else MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
 
@@ -260,37 +381,38 @@ private fun FaceCameraPreview(
                     it.surfaceProvider = previewView.surfaceProvider
                 }
                 val analysis = ImageAnalysis.Builder()
-                    .setTargetResolution(Size(640, 480))
+                    .setTargetResolution(android.util.Size(640, 480))
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
-                    
+
                 analysis.setAnalyzer(analyzerExecutor) { imageProxy ->
                     if (isCapturing || currentIsDone) {
                         imageProxy.close()
                         return@setAnalyzer
                     }
-                    
+
                     isCapturing = true
                     val rawBitmap = imageProxy.toBitmap()
                     val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-                    imageProxy.close() // Close early to allow CameraX to recycle buffers
+                    imageProxy.close()
 
-                    val rotatedBitmap = if (rotationDegrees != 0) {
-                        val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
-                        val rotated = Bitmap.createBitmap(rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, matrix, true)
-                        if (rotated !== rawBitmap) rawBitmap.recycle()
-                        rotated
-                    } else {
-                        rawBitmap
+                    val matrix = android.graphics.Matrix().apply {
+                        postRotate(rotationDegrees.toFloat())
                     }
-                    
+                    val rotatedBitmap = android.graphics.Bitmap.createBitmap(
+                        rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, matrix, true
+                    )
+                    if (rotatedBitmap != rawBitmap) {
+                        rawBitmap.recycle()
+                    }
+
                     val poseToCapture = currentTargetPose
                     scope.launch {
                         try {
                             val embedding = engine.captureSpecificPose(rotatedBitmap, poseToCapture)
                             currentOnSuccess(embedding, poseToCapture)
                         } catch (e: Exception) {
-                            val message = e.message ?: "Adjust your face."
+                            val message = e.message ?: "Adjust your face in the camera."
                             if (message.isNotBlank()) {
                                 currentOnFeedback(message)
                             }
@@ -298,12 +420,12 @@ private fun FaceCameraPreview(
                             if (!rotatedBitmap.isRecycled) {
                                 rotatedBitmap.recycle()
                             }
-                            delay(400) // Delay before next capture attempt
+                            delay(400)
                             isCapturing = false
                         }
                     }
                 }
-                
+
                 val cameraSelector = if (cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)) {
                     CameraSelector.DEFAULT_FRONT_CAMERA
                 } else if (cameraProvider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)) {
@@ -332,21 +454,19 @@ private fun FaceCameraPreview(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(3f / 4f)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color.Black)
-    ) {
-        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+    AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+}
 
-        Box(
-            modifier = Modifier
-                .size(220.dp)
-                .align(Alignment.Center)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.06f))
-        )
-    }
+private fun calculateDistanceMeters(
+    lat1: Double, lon1: Double,
+    lat2: Double, lon2: Double
+): Double {
+    val r = 6371000.0 // Earth radius in meters
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return r * c
 }

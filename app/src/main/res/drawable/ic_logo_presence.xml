@@ -5,61 +5,47 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Outer Radiant Glow -->
+    <!-- Crisp Light Surface Background Frame -->
     <path
         android:pathData="M54,54m-48,0a48,48 0 1,0 96,0a48,48 0 1,0 -96,0"
-        android:fillColor="#1E1B4B"
-        android:fillAlpha="0.9"/>
+        android:fillColor="#F8FAFC"/>
 
+    <!-- Deep Navy Base Container Frame -->
     <path
-        android:pathData="M54,54m-38,0a38,38 0 1,0 76,0a38,38 0 1,0 -76,0"
-        android:fillColor="#312E81"
-        android:fillAlpha="0.6"/>
+        android:pathData="M34,22 L74,22 A12,12 0 0,1 86,34 L86,74 A12,12 0 0,1 74,86 L34,86 A12,12 0 0,1 22,74 L22,34 A12,12 0 0,1 34,22 Z"
+        android:fillColor="#0F172A"/>
 
-    <!-- Attendance Register Sheet Layer -->
+    <!-- Subtle Accent Frame Border -->
     <path
-        android:pathData="M38,24 L70,24 A4,4 0 0,1 74,28 L74,80 A4,4 0 0,1 70,84 L38,84 A4,4 0 0,1 34,80 L34,28 A4,4 0 0,1 38,24 Z"
-        android:fillColor="#F8FAFC"
-        android:fillAlpha="0.95"/>
-
-    <!-- Sheet Binder Clip -->
-    <path
-        android:pathData="M46,20 L62,20 A2,2 0 0,1 64,22 L64,26 A2,2 0 0,1 62,28 L46,28 A2,2 0 0,1 44,26 L44,22 A2,2 0 0,1 46,20 Z"
-        android:fillColor="#4F46E5"/>
-
-    <!-- Sheet Horizontal Ledger Lines -->
-    <path
-        android:pathData="M42,36 L66,36 M42,44 L66,44 M42,52 L66,52 M42,60 L66,60 M42,68 L66,68 M42,76 L66,76"
+        android:pathData="M34,22 L74,22 A12,12 0 0,1 86,34 L86,74 A12,12 0 0,1 74,86 L34,86 A12,12 0 0,1 22,74 L22,34 A12,12 0 0,1 34,22 Z"
         android:strokeWidth="1.5"
-        android:strokeColor="#CBD5E1"/>
+        android:strokeColor="#1E293B"/>
 
-    <!-- Biometric Security Shield -->
+    <!-- Stylized Modern 'P' (Presence) Monogram -->
+    <!-- Vertical Spine -->
     <path
-        android:pathData="M54,32 C68,32 78,36 78,36 C78,55 72,73 54,82 C36,73 30,55 30,36 C30,36 40,32 54,32 Z"
-        android:fillColor="#0F172A"
-        android:fillAlpha="0.92"/>
-
-    <path
-        android:pathData="M54,36 C64,36 73,39 73,39 C73,53 68,69 54,77 C40,69 35,53 35,39 C35,39 44,36 54,36 Z"
-        android:fillColor="#059669"
-        android:fillAlpha="0.88"/>
-
-    <!-- Biometric Fingerprint Arcs -->
-    <path
-        android:pathData="M54,46 C48,46 44,50 44,56 C44,62 48,66 54,66 C60,66 64,62 64,56"
-        android:strokeWidth="2"
-        android:strokeColor="#EEF2FF"
+        android:pathData="M38,34 L38,74"
+        android:strokeWidth="7"
+        android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"/>
 
-    <!-- GPS Location Pin -->
+    <!-- 'P' Loop Arc -->
     <path
-        android:pathData="M54,44 C48.5,44 44,48.5 44,54 C44,61.5 54,72 54,72 C54,72 64,61.5 64,54 C64,48.5 59.5,44 54,44 Z"
-        android:fillColor="#0284C7"/>
+        android:pathData="M38,37.5 L56,37.5 C63.5,37.5 69.5,43.5 69.5,51 C69.5,58.5 63.5,64.5 56,64.5 L38,64.5"
+        android:strokeWidth="7"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
 
-    <!-- Verified Attendance Checkmark ✓ -->
+    <!-- Verified Attendance Badge (Emerald Green Circle + White Checkmark ✓) -->
     <path
-        android:pathData="M48,53 L52,57 L60,48"
-        android:strokeWidth="2.8"
+        android:pathData="M67,65m-10,0a10,10 0 1,0 20,0a10,10 0 1,0 -20,0"
+        android:fillColor="#10B981"/>
+
+    <!-- Checkmark ✓ -->
+    <path
+        android:pathData="M62,65 L65.5,68.5 L72,61.5"
+        android:strokeWidth="2.5"
         android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>

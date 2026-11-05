@@ -28,16 +28,25 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -81,7 +90,8 @@ fun LocationsTab(
             .padding(top = 16.dp, bottom = 28.dp)
     ) {
         when (user.role) {
-            Role.OWNER, Role.MANAGER -> LocationPresenceTabContent(
+            Role.OWNER -> LocationPresenceTabContent(
+                user = user,
                 premisesState = premisesState,
                 presenceState = presenceState,
                 selectedPremisesId = selectedPremisesId,
@@ -90,7 +100,7 @@ fun LocationsTab(
                 onResolveGpsException = onResolveGpsException,
                 onCancelOvertime = onCancelOvertime
             )
-            Role.STAFF -> employeeLocationsTabContent(
+            Role.EMPLOYEE -> employeeLocationsTabContent(
                 presenceState = presenceState,
                 onRefresh = onRefresh
             )
@@ -104,6 +114,7 @@ fun LocationsTab(
 
 @Composable
 private fun LocationPresenceTabContent(
+    user: User,
     premisesState: UiState<List<PremisesDto>>,
     presenceState: UiState<LocationTodayPresenceResponseDto>,
     selectedPremisesId: String?,
@@ -127,7 +138,7 @@ private fun LocationPresenceTabContent(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Daily staff presence & GPS monitoring",
+                    text = "Daily employee presence & GPS monitoring",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -150,16 +161,72 @@ private fun LocationPresenceTabContent(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        if (premisesList.isNotEmpty()) {
+        if (user.role == Role.EMPLOYEE) {
+            val assignedPremisesName = remember(user, premisesList, selectedPremisesId) {
+                val matched = premisesList.find { it.id == (selectedPremisesId ?: user.premisesId) }
+                matched?.name?.let { Dates.cleanPremisesName(it) }
+                    ?: user.premisesName?.let { Dates.cleanPremisesName(it) }
+                    ?.takeIf { it.isNotBlank() }
+                    ?: premisesList.firstOrNull()?.name?.let { Dates.cleanPremisesName(it) }
+                    ?: "Assigned Premises"
+            }
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Business,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "ASSIGNED PREMISES",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                        Text(
+                            text = assignedPremisesName,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        } else if (premisesList.size > 1) {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
             ) {
                 items(premisesList) { premises ->
                     FilterChip(
                         selected = premises.id == selectedPremisesId,
                         onClick = { onSelectPremises(premises.id) },
-                        label = { Text(premises.name) },
+                        label = { Text(Dates.cleanPremisesName(premises.name)) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Place,
@@ -174,7 +241,6 @@ private fun LocationPresenceTabContent(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(12.dp))
         }
 
         when (presenceState) {
@@ -182,15 +248,24 @@ private fun LocationPresenceTabContent(
             is UiState.Error -> PresenceErrorState(message = presenceState.message, onRetry = onRefresh)
             is UiState.Success -> {
                 val data = presenceState.data
+                val staffMembers = data.staffList
 
-                if (data.staff.isEmpty()) {
+                if (staffMembers.isEmpty()) {
                     EmptyStaffPresenceState()
                 } else {
                     LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(data.staff, key = { it.employeeId }) { card ->
+                        item {
+                            LocationSectionHeader(
+                                title = "Employees",
+                                count = staffMembers.size,
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                        items(staffMembers, key = { "staff_${it.employeeId}" }) { card ->
                             DailyStaffPresenceCard(
                                 card = card,
                                 onResolveGpsException = onResolveGpsException,
@@ -205,6 +280,45 @@ private fun LocationPresenceTabContent(
     }
 }
 
+@Composable
+private fun LocationSectionHeader(
+    title: String,
+    count: Int,
+    containerColor: Color,
+    contentColor: Color
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp)
+    ) {
+        Surface(
+            color = containerColor,
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text(
+                text = title.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = contentColor,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+            )
+        }
+        Text(
+            text = "($count)",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        )
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Daily Staff Presence Card
 // ---------------------------------------------------------------------------
@@ -216,6 +330,9 @@ fun DailyStaffPresenceCard(
     onCancelOvertime: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var pendingAction by remember { mutableStateOf<String?>(null) } // "ABSENT", "HALF_DAY", "CANCEL_OVERTIME"
+    var reasonText by remember { mutableStateOf("") }
+
     val locationColor = when (card.locationStatus) {
         "Inside" -> SecondaryEmerald
         "Outside" -> Color(0xFFDC2626)
@@ -235,7 +352,7 @@ fun DailyStaffPresenceCard(
         modifier = modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Header Row: Avatar + Name/ID + Single Location Badge
+            // Header Row: Avatar + Name/ID + Role Badge + Single Location Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -281,7 +398,7 @@ fun DailyStaffPresenceCard(
                                 shape = RoundedCornerShape(6.dp)
                             ) {
                                 Text(
-                                    text = if (isManager) "Manager" else "Staff",
+                                    text = if (isManager) "Manager" else "Employee",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isManager) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
@@ -329,7 +446,7 @@ fun DailyStaffPresenceCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Attendance & Clock-In Status Bar
+            // Attendance Status, Status Info & Earnings Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -348,14 +465,52 @@ fun DailyStaffPresenceCard(
                     )
                 }
 
+                // Earned Salary Badge
+                Surface(
+                    color = SecondaryEmerald.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, SecondaryEmerald.copy(alpha = 0.3f))
+                ) {
+                    Text(
+                        text = "Earnings: ${Money.format(card.earnedAmountPaise)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = SecondaryEmerald,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Clock-In Time & Completion Time Row
+            val completedTimeText = when {
+                card.clockOutTime != null -> "Completed: ${Dates.formatTime(card.clockOutTime)}"
+                card.clockInTime != null && !card.regularShiftEndTime.isNullOrBlank() -> "Expected End: ${Dates.formatTime(card.regularShiftEndTime)}"
+                !card.regularShiftEndTime.isNullOrBlank() -> "Scheduled End: ${Dates.formatTime(card.regularShiftEndTime)}"
+                else -> "End: —"
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
                     text = if (card.clockInTime != null)
-                        "Clock-In: ${Dates.formatTime(card.clockInTime)}${if (card.clockOutTime != null) " • Out: " + Dates.formatTime(card.clockOutTime) else ""}"
+                        "Clock-In: ${Dates.formatTime(card.clockInTime)}"
                     else
                         "Clock-In: Not started",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = if (card.clockInTime != null) SecondaryEmerald else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Text(
+                    text = completedTimeText,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (card.clockOutTime != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -426,12 +581,12 @@ fun DailyStaffPresenceCard(
 
                         if (isOvertimeException && card.overtimeId != null) {
                             Button(
-                                onClick = { onCancelOvertime(card.overtimeId) },
+                                onClick = { pendingAction = "CANCEL_OVERTIME" },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Delete overtime", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("Cancel overtime", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         } else {
                             // Resolution Action Buttons (Absent, Half-Day)
@@ -440,26 +595,74 @@ fun DailyStaffPresenceCard(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Button(
-                                    onClick = { onResolveGpsException(exceptionId, "ABSENT", "Marked absent by manager") },
+                                    onClick = { pendingAction = "ABSENT" },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("Absent", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("Mark Absent", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
 
                                 Button(
-                                    onClick = { onResolveGpsException(exceptionId, "HALF_DAY", "Marked half-day by manager") },
+                                    onClick = { pendingAction = "HALF_DAY" },
                                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("Half-Day", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("Mark Half-Day", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
                     }
                 }
+            }
+
+            if (pendingAction != null) {
+                AlertDialog(
+                    onDismissRequest = { pendingAction = null },
+                    title = {
+                        Text(
+                            text = if (pendingAction == "CANCEL_OVERTIME") "Confirm Cancel Overtime" else "Confirm Attendance Correction",
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Employee: ${card.employeeName}", fontWeight = FontWeight.SemiBold)
+                            Text("Shift / Work: ${card.shiftName.ifBlank { "Assigned Shift" }} (${card.dayOfWeek})")
+                            Text("New Status: ${if (pendingAction == "CANCEL_OVERTIME") "CANCELLED" else pendingAction}")
+
+                            OutlinedTextField(
+                                value = reasonText,
+                                onValueChange = { reasonText = it },
+                                label = { Text("Reason (Optional)") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val act = pendingAction
+                                pendingAction = null
+                                if (act == "CANCEL_OVERTIME" && card.overtimeId != null) {
+                                    onCancelOvertime(card.overtimeId)
+                                } else if (act != null) {
+                                    onResolveGpsException(card.exceptionId ?: "", act, reasonText.ifBlank { "Manual correction by owner" })
+                                }
+                                reasonText = ""
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = if (pendingAction == "ABSENT" || pendingAction == "CANCEL_OVERTIME") Color(0xFFDC2626) else MaterialTheme.colorScheme.primary)
+                        ) {
+                            Text("Confirm")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingAction = null }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -475,7 +678,15 @@ fun DailyStaffPresenceCard(
             ) {
                 Column(modifier = Modifier.padding(10.dp)) {
                     if (card.clockInTime == null) {
-                        // Not Clocked In -> Upcoming Shift Card
+                        // Not Clocked In -> Upcoming Shift / Overtime Card
+                        val regStart = card.regularShiftStartTime
+                        val otStart = card.overtimeStartTime
+                        val isOtEarlier = card.hasOvertimeToday && (
+                            regStart == null ||
+                            card.shiftName == "No shift assigned" ||
+                            (otStart != null && otStart < regStart)
+                        )
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -484,29 +695,46 @@ fun DailyStaffPresenceCard(
                             Icon(
                                 imageVector = Icons.Default.Schedule,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = if (isOtEarlier) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
                             Column {
                                 Text(
-                                    text = "Upcoming Shift Scheduled",
+                                    text = if (isOtEarlier) "Upcoming Overtime Scheduled" else "Upcoming Shift Scheduled",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = if (isOtEarlier) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
                                 )
-                                Text(
-                                    text = "${card.dayOfWeek} • ${card.shiftName} (${Dates.formatWindow(card.regularShiftStartTime, card.regularShiftEndTime)})",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                if (card.hasOvertimeToday) {
+                                if (isOtEarlier) {
                                     Text(
-                                        text = "OT: ${card.overtimeName ?: "Overtime"} (${if (card.overtimeStartTime != null && card.overtimeEndTime != null) Dates.formatWindow(card.overtimeStartTime, card.overtimeEndTime) else "Approved"})",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        text = "${card.dayOfWeek} • ${card.overtimeName ?: "Overtime"} (${if (card.overtimeStartTime != null && card.overtimeEndTime != null) Dates.formatWindow(card.overtimeStartTime, card.overtimeEndTime) else "Approved"})",
+                                        style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.tertiary
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
+                                    if (card.regularShiftStartTime != null && card.shiftName != "No shift assigned") {
+                                        Text(
+                                            text = "Regular Shift: ${card.shiftName} (${Dates.formatWindow(card.regularShiftStartTime, card.regularShiftEndTime)})",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                } else {
+                                    Text(
+                                        text = "${card.dayOfWeek} • ${card.shiftName} (${Dates.formatWindow(card.regularShiftStartTime, card.regularShiftEndTime)})",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (card.hasOvertimeToday) {
+                                        Text(
+                                            text = "OT: ${card.overtimeName ?: "Overtime"} (${if (card.overtimeStartTime != null && card.overtimeEndTime != null) Dates.formatWindow(card.overtimeStartTime, card.overtimeEndTime) else "Approved"})",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.tertiary
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -925,7 +1153,7 @@ private fun PresenceLoadingState() {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "Loading location & staff presence...",
+            text = "Loading location & employee presence...",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -970,7 +1198,7 @@ private fun EmptyStaffPresenceState() {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "No staff members assigned to this location",
+                text = "No employees assigned to this location",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

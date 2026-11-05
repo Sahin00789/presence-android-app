@@ -29,7 +29,19 @@ data class CreateLeaveRequest(
 
 @Serializable
 data class LeaveRequestCreate(
-    val shiftAssignmentId: String,
+    val shiftAssignmentId: String? = null,
     val workDate: String,
     val reason: String
+)
+
+@Serializable
+data class ReviewLeaveBody(
+    val reviewRemarks: String? = null,
+    val note: String? = null
+)
+
+@Serializable
+data class ReviewLeaveRequest(
+    val decision: String,
+    val reviewRemarks: String? = null
 )

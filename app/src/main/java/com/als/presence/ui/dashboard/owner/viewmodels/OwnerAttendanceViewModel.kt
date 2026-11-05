@@ -20,7 +20,8 @@ import javax.inject.Inject
 /** Owner "Attendance" tab state management. */
 @HiltViewModel
 class OwnerAttendanceViewModel @Inject constructor(
-    private val repository: OperationsRepository
+    private val repository: OperationsRepository,
+    private val syncCoordinator: com.als.presence.data.sync.SyncCoordinator
 ) : ViewModel() {
 
     private val _records = MutableStateFlow<UiState<List<AttendanceRecordDto>>>(UiState.Loading)
@@ -35,16 +36,23 @@ class OwnerAttendanceViewModel @Inject constructor(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    fun consumeMessage() {
+        _message.value = null
+    }
+
     init {
         refresh()
     }
 
     fun refresh() {
-        loadRecords()
-        loadExceptions()
+        viewModelScope.launch {
+            syncCoordinator.performSelectiveSync(com.als.presence.data.sync.SyncCoordinator.SyncDomain.ATTENDANCE)
+            loadRecords()
+            loadExceptions()
+        }
     }
 
-    fun loadRecords(from: String = Dates.isoDaysAgo(30), to: String = Dates.todayIso()) {
+    fun loadRecords(from: String = Dates.isoDaysAgo(365), to: String = Dates.todayIso()) {
         viewModelScope.launch {
             _records.value = UiState.Loading
             _records.value = repository.getAttendanceRecords(from = from, to = to).toUiState()
@@ -79,7 +87,5 @@ class OwnerAttendanceViewModel @Inject constructor(
         }
     }
 
-    fun consumeMessage() {
-        _message.value = null
-    }
+
 }
