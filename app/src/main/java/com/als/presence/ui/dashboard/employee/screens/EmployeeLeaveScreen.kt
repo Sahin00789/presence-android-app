@@ -14,13 +14,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EventAvailable
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.als.presence.core.common.UiState
 import com.als.presence.core.designsystem.PresenceDesign
 import com.als.presence.data.model.LeaveDto
+import com.als.presence.data.model.UpcomingShiftDto
 import com.als.presence.domain.model.User
 import com.als.presence.ui.dashboard.common.LeaveViewModel
 import com.als.presence.ui.dashboard.common.MessageSnackbar
@@ -48,7 +49,6 @@ import com.als.presence.ui.dashboard.common.PresenceCard
 import com.als.presence.ui.dashboard.common.PresenceEmptyState
 import com.als.presence.ui.dashboard.common.PresenceErrorState
 import com.als.presence.ui.dashboard.common.PresenceFilterChip
-import com.als.presence.ui.dashboard.common.PresenceIconButton
 import com.als.presence.ui.dashboard.common.PresenceLoading
 import com.als.presence.ui.dashboard.common.PresenceMetaStrip
 import com.als.presence.ui.dashboard.common.PresenceSecondaryScaffold
@@ -58,7 +58,7 @@ import com.als.presence.ui.dashboard.common.PresenceTone
 
 /**
  * Employee Leave Requests Screen.
- * Allows employees to request shift leave and view their request status and review notes.
+ * Allows employees to select upcoming shifts with date toggles and submit leave requests.
  */
 @Composable
 fun EmployeeLeaveScreen(
@@ -68,6 +68,7 @@ fun EmployeeLeaveScreen(
     viewModel: LeaveViewModel = hiltViewModel()
 ) {
     val leavesState by viewModel.leaves.collectAsStateWithLifecycle()
+    val upcomingShiftsState by viewModel.upcomingShifts.collectAsStateWithLifecycle()
     val isSubmitting by viewModel.isSubmitting.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
 
@@ -87,7 +88,10 @@ fun EmployeeLeaveScreen(
         title = "Apply Leave",
         onBack = onBack,
         modifier = modifier,
-        onRefresh = viewModel::refresh
+        onRefresh = {
+            viewModel.refresh()
+            viewModel.loadUpcomingShifts()
+        }
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             // Header Overview Card
@@ -130,7 +134,10 @@ fun EmployeeLeaveScreen(
                         PresenceButton(
                             label = "Request Leave",
                             icon = Icons.Default.EventAvailable,
-                            onClick = { showRequestDialog = true },
+                            onClick = {
+                                viewModel.loadUpcomingShifts()
+                                showRequestDialog = true
+                            },
                             size = PresenceSize.Sm
                         )
                     }
@@ -216,16 +223,13 @@ fun EmployeeLeaveScreen(
 
     if (showRequestDialog) {
         LeaveRequestDialog(
+            upcomingShiftsState = upcomingShiftsState,
             isSubmitting = isSubmitting,
             onDismiss = { showRequestDialog = false },
-            onSubmit = { startDate, endDate, type, shiftName, reason ->
+            onSubmit = { selectedShifts, reason ->
                 viewModel.requestLeave(
-                    startDate = startDate,
-                    endDate = endDate,
-                    type = type,
-                    reason = reason,
-                    employeeId = user.id,
-                    shiftName = shiftName
+                    selectedShifts = selectedShifts,
+                    reason = reason
                 )
                 showRequestDialog = false
             }
@@ -248,7 +252,7 @@ private fun EmployeeLeaveCard(leave: LeaveDto) {
                         color = PresenceDesign.Ink
                     )
                     Text(
-                        text = "Shift: ${leave.shiftName?.ifBlank { null } ?: "All Shifts"}",
+                        text = "Shift: ${leave.shiftName?.ifBlank { null } ?: "Assigned Shift"}",
                         fontSize = 10.5.sp,
                         color = PresenceDesign.LabelText
                     )
@@ -270,12 +274,11 @@ private fun EmployeeLeaveCard(leave: LeaveDto) {
             Spacer(modifier = Modifier.height(8.dp))
             PresenceMetaStrip(
                 items = listOf(
-                    "From" to (leave.startDate),
-                    "To" to (leave.endDate),
+                    "Work Date" to leave.workDate.ifBlank { leave.startDate },
                     "Requested" to (leave.createdAt?.take(10) ?: "—")
-                ).filter { it.second != null } as List<Pair<String, String>>
+                ).filter { it.second.isNotBlank() }
             )
-            leave.reason?.takeIf { it.isNotBlank() }?.let { reason ->
+            leave.reason.takeIf { it.isNotBlank() }?.let { reason ->
                 Spacer(modifier = Modifier.height(7.dp))
                 Text(
                     text = "Reason: $reason",
@@ -298,14 +301,12 @@ private fun EmployeeLeaveCard(leave: LeaveDto) {
 
 @Composable
 private fun LeaveRequestDialog(
+    upcomingShiftsState: UiState<List<UpcomingShiftDto>>,
     isSubmitting: Boolean,
     onDismiss: () -> Unit,
-    onSubmit: (startDate: String, endDate: String, type: String, shiftName: String?, reason: String) -> Unit
+    onSubmit: (selectedShifts: List<UpcomingShiftDto>, reason: String) -> Unit
 ) {
-    var startDate by remember { mutableStateOf("") }
-    var endDate by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("PAID") }
-    var shiftName by remember { mutableStateOf("") }
+    var selectedKeys by remember { mutableStateOf(setOf<String>()) }
     var reason by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -315,72 +316,134 @@ private fun LeaveRequestDialog(
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Dates use the format YYYY-MM-DD.", fontSize = 11.sp, color = PresenceDesign.LabelText)
-                OutlinedTextField(
-                    value = startDate,
-                    onValueChange = { startDate = it },
-                    label = { Text("Start date (YYYY-MM-DD)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                Text(
+                    text = "Toggle the upcoming shifts you wish to request leave for.",
+                    fontSize = 11.5.sp,
+                    color = PresenceDesign.LabelText
                 )
-                OutlinedTextField(
-                    value = endDate,
-                    onValueChange = { endDate = it },
-                    label = { Text("End date (YYYY-MM-DD)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = shiftName,
-                    onValueChange = { shiftName = it },
-                    label = { Text("Shift name (e.g. Morning Shift or All Shifts)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    listOf("PAID", "UNPAID", "SICK").forEach { option ->
-                        PresenceFilterChip(
-                            selected = type == option,
-                            onClick = { type = option },
-                            label = option.lowercase().replaceFirstChar { it.uppercase() }
-                        )
+
+                when (upcomingShiftsState) {
+                    is UiState.Loading, is UiState.Idle -> PresenceLoading("Loading upcoming shifts…")
+                    is UiState.Error -> PresenceErrorState(
+                        message = upcomingShiftsState.message,
+                        onRetry = {}
+                    )
+                    is UiState.Success -> {
+                        val upcomingShifts = upcomingShiftsState.data
+                        if (upcomingShifts.isEmpty()) {
+                            Text(
+                                text = "No upcoming assigned shifts found for leave request.",
+                                fontSize = 11.5.sp,
+                                color = PresenceDesign.LabelText
+                            )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                upcomingShifts.forEach { shift ->
+                                    val key = "${shift.shiftAssignmentId}_${shift.workDate}"
+                                    val isSelected = selectedKeys.contains(key)
+
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isSelected) {
+                                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                            }
+                                        ),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                        )
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "${shift.dayOfWeek ?: ""} • ${shift.workDate}",
+                                                    fontSize = 12.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = PresenceDesign.Ink
+                                                )
+                                                Text(
+                                                    text = "${shift.shiftName}${if (!shift.startTime.isNullOrBlank()) " (${shift.startTime?.take(5)} - ${shift.endTime?.take(5)})" else ""}",
+                                                    fontSize = 11.sp,
+                                                    color = PresenceDesign.LabelText
+                                                )
+                                                if (!shift.premisesName.isNullOrBlank()) {
+                                                    Text(
+                                                        text = shift.premisesName,
+                                                        fontSize = 10.sp,
+                                                        color = PresenceDesign.NeutralText
+                                                    )
+                                                }
+                                            }
+
+                                            if (shift.alreadyRequested) {
+                                                PresenceBadge(
+                                                    label = "Already Requested",
+                                                    tone = PresenceTone.Neutral
+                                                )
+                                            } else {
+                                                Switch(
+                                                    checked = isSelected,
+                                                    onCheckedChange = { checked ->
+                                                        selectedKeys = if (checked) {
+                                                            selectedKeys + key
+                                                        } else {
+                                                            selectedKeys - key
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
+
                 OutlinedTextField(
                     value = reason,
-                    onValueChange = { reason = it },
+                    onValueChange = {
+                        reason = it
+                        if (error != null) error = null
+                    },
                     label = { Text("Reason for leave") },
+                    placeholder = { Text("e.g. Personal work, family function, doctor visit") },
                     modifier = Modifier.fillMaxWidth()
                 )
+
                 if (error != null) {
                     Text(error!!, color = PresenceDesign.Danger, fontSize = 11.sp)
                 }
             }
         },
         confirmButton = {
+            val shiftsList = (upcomingShiftsState as? UiState.Success)?.data.orEmpty()
+            val selectedShifts = shiftsList.filter { selectedKeys.contains("${it.shiftAssignmentId}_${it.workDate}") }
+
             Button(
-                enabled = !isSubmitting,
+                enabled = !isSubmitting && selectedShifts.isNotEmpty() && reason.isNotBlank(),
                 onClick = {
-                    if (!Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(startDate) ||
-                        !Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(endDate)
-                    ) {
-                        error = "Enter both dates as YYYY-MM-DD."
-                    } else if (endDate < startDate) {
-                        error = "The end date cannot be before the start date."
+                    if (selectedShifts.isEmpty()) {
+                        error = "Please toggle at least one shift."
                     } else if (reason.isBlank()) {
-                        error = "Add a reason for the leave."
+                        error = "Please enter a reason for the leave."
                     } else {
-                        onSubmit(startDate, endDate, type, shiftName.trim().ifBlank { null }, reason)
+                        onSubmit(selectedShifts, reason)
                     }
                 }
-            ) { Text(if (isSubmitting) "Submitting…" else "Submit request") }
+            ) { Text(if (isSubmitting) "Submitting…" else "Submit request (${selectedShifts.size})") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

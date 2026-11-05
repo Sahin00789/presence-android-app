@@ -141,9 +141,12 @@ dependencies {
     implementation(libs.camerax.view)
     implementation(libs.onnxruntime.android)
 
-    // Location & WorkManager
+    // Location, Credentials & WorkManager
     implementation(libs.play.services.location)
     implementation(libs.play.services.auth)
+    implementation(libs.credentials.core)
+    implementation(libs.credentials.auth)
+    implementation(libs.googleid.auth)
     implementation(libs.work.runtime.ktx)
 
     // Coroutines

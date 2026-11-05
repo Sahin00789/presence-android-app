@@ -92,6 +92,8 @@ import com.als.presence.core.designsystem.PrimaryIndigo
 import com.als.presence.core.designsystem.RoleOwnerPrimary
 import com.als.presence.core.designsystem.RoleStaffPrimary
 import com.als.presence.core.designsystem.SecondaryEmerald
+import com.als.presence.data.model.GoogleRegistrationIdentity
+import com.als.presence.data.model.GoogleSignInPurpose
 import com.als.presence.domain.model.Role
 import com.als.presence.domain.model.User
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -101,11 +103,6 @@ import com.google.android.gms.common.api.ApiException
 private enum class LoginStep {
     ENTER_EMAIL,
     ENTER_OTP
-}
-
-private enum class GoogleSignInPurpose {
-    LOGIN,
-    OWNER_REGISTRATION
 }
 
 data class RegistrationSuccessInfo(
@@ -204,13 +201,22 @@ fun LoginScreen(
 
     fun startGoogleSignIn(purpose: GoogleSignInPurpose) {
         googleSignInPurpose = purpose
-        try {
-            googleSignInClient.signOut().addOnCompleteListener {
-                googleSignInLauncher.launch(googleSignInClient.signInIntent)
+        viewModel.launchGoogleSignIn(
+            context = context,
+            purpose = purpose,
+            onRegistrationIdentity = { identity ->
+                googleRegistrationIdentity = identity
+            },
+            onFallbackToLegacy = {
+                try {
+                    googleSignInClient.signOut().addOnCompleteListener {
+                        googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                    }
+                } catch (_: Exception) {
+                    googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                }
             }
-        } catch (_: Exception) {
-            googleSignInLauncher.launch(googleSignInClient.signInIntent)
-        }
+        )
     }
 
     // Synchronize OTP response state to Step 2

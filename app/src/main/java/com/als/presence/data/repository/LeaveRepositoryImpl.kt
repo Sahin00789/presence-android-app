@@ -4,6 +4,7 @@ import com.als.presence.core.common.Resource
 import com.als.presence.core.network.safeApiCall
 import com.als.presence.data.model.LeaveDto
 import com.als.presence.data.model.LeaveRequestCreate
+import com.als.presence.data.model.UpcomingShiftDto
 import com.als.presence.data.remote.LeaveApiService
 import com.als.presence.domain.repository.LeaveRepository
 import javax.inject.Inject
@@ -20,7 +21,13 @@ class LeaveRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun requestLeave(request: LeaveRequestCreate): Resource<LeaveDto> {
+    override suspend fun getUpcomingShifts(): Resource<List<UpcomingShiftDto>> {
+        return safeApiCall("Error loading upcoming shifts") {
+            leaveApiService.getUpcomingShifts()
+        }
+    }
+
+    override suspend fun requestLeave(request: LeaveRequestCreate): Resource<List<LeaveDto>> {
         return safeApiCall("Error submitting leave request") {
             leaveApiService.create(request)
         }

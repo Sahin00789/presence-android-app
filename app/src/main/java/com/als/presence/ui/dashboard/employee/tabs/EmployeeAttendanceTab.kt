@@ -66,7 +66,11 @@ fun EmployeeAttendanceTab(
     viewModel: EmployeeAttendanceViewModel,
     modifier: Modifier = Modifier
 ) {
-    MyAttendanceContent(modifier = modifier, viewModel = viewModel)
+    MyAttendanceContent(
+        modifier = modifier,
+        viewModel = viewModel,
+        isScrollable = true
+    )
 }
 
 /* -------------------------------------------------------------------------

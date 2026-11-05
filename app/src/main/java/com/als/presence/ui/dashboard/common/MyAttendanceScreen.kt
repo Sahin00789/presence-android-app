@@ -86,7 +86,8 @@ fun MyAttendanceScreen(
         ) {
             MyAttendanceContent(
                 modifier = Modifier.fillMaxSize(),
-                viewModel = viewModel
+                viewModel = viewModel,
+                isScrollable = false
             )
         }
     }
@@ -95,7 +96,8 @@ fun MyAttendanceScreen(
 @Composable
 fun MyAttendanceContent(
     modifier: Modifier = Modifier,
-    viewModel: EmployeeAttendanceViewModel = hiltViewModel()
+    viewModel: EmployeeAttendanceViewModel = hiltViewModel(),
+    isScrollable: Boolean = true
 ) {
     val recordsState by viewModel.records.collectAsStateWithLifecycle()
     val overtimeState by viewModel.overtime.collectAsStateWithLifecycle()
@@ -197,8 +199,15 @@ fun MyAttendanceContent(
         .coerceAtLeast(monthShifts.count { it.status.equals("OFF_DAY", ignoreCase = true) })
     val totalOvertimesCount = dayGroups.sumOf { it.overtimes.size }
 
+    val scrollState = rememberScrollState()
+    val scrollModifier = if (isScrollable) Modifier.verticalScroll(scrollState) else Modifier
+
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(scrollModifier)
+            .padding(horizontal = if (isScrollable) 14.dp else 0.dp)
+            .padding(top = if (isScrollable) 10.dp else 0.dp, bottom = if (isScrollable) 28.dp else 0.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 1. Month-Year Scrollable Chip Selector

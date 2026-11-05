@@ -11,6 +11,7 @@ data class LeaveDto(
     val staffCode: String? = null,
     val shiftName: String? = null,
     val type: String = "PAID",
+    val workDate: String = "",
     val startDate: String = "",
     val endDate: String = "",
     val reason: String = "",
@@ -28,10 +29,31 @@ data class CreateLeaveRequest(
 )
 
 @Serializable
+data class AssignedShiftIdWithDate(
+    val shiftAssignmentId: String,
+    val workDate: String
+)
+
+@Serializable
 data class LeaveRequestCreate(
     val shiftAssignmentId: String? = null,
-    val workDate: String,
+    val workDate: String? = null,
+    val assignedShiftIdWithDate: List<AssignedShiftIdWithDate>? = null,
+    val assignedshiftidwithdate: List<AssignedShiftIdWithDate>? = null,
     val reason: String
+)
+
+@Serializable
+data class UpcomingShiftDto(
+    val shiftAssignmentId: String,
+    val shiftId: String? = null,
+    val shiftName: String,
+    val workDate: String,
+    val dayOfWeek: String? = null,
+    val startTime: String? = null,
+    val endTime: String? = null,
+    val premisesName: String? = null,
+    val alreadyRequested: Boolean = false
 )
 
 @Serializable

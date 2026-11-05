@@ -113,3 +113,15 @@ data class AuthResponse(
     val refreshToken: String,
     val user: AuthUserDto
 )
+
+enum class GoogleSignInPurpose {
+    LOGIN,
+    OWNER_REGISTRATION
+}
+
+data class GoogleRegistrationIdentity(
+    val idToken: String,
+    val email: String,
+    val fullName: String
+)
+

@@ -91,16 +91,9 @@ import androidx.compose.ui.window.DialogProperties
 import com.als.presence.R
 import com.als.presence.core.common.UiState
 import com.als.presence.core.location.GpsLocation
+import com.als.presence.data.model.GoogleRegistrationIdentity
 import com.als.presence.data.model.OtpResponse
 import com.als.presence.data.model.PostOffice
-
-
-
-data class GoogleRegistrationIdentity(
-    val idToken: String,
-    val email: String,
-    val fullName: String
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

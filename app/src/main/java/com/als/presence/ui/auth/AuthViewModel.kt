@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.als.presence.core.common.Resource
 import com.als.presence.core.common.UiState
 import com.als.presence.core.location.GpsLocation
+import com.als.presence.data.model.GoogleRegistrationIdentity
+import com.als.presence.data.model.GoogleSignInPurpose
 import com.als.presence.data.model.OtpResponse
 import com.als.presence.data.model.PostOffice
 import com.als.presence.domain.model.LoggedDevice
@@ -27,6 +29,8 @@ import com.als.presence.domain.usecase.owner.RegisterOwnerWithGoogleUseCase
 import com.als.presence.domain.repository.AuthRepository
 import com.als.presence.domain.repository.OperationsRepository
 import com.als.presence.core.network.NetworkMonitor
+import com.als.presence.core.auth.GoogleAuthManager
+import com.als.presence.core.auth.GoogleAuthResult
 import com.als.presence.data.model.OrganizationDto
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +46,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
+    private val googleAuthManager: GoogleAuthManager,
     private val operationsRepository: OperationsRepository,
     private val sessionManager: SessionManager,
     private val requestOtpUseCase: RequestOtpUseCase,
@@ -248,6 +253,52 @@ class AuthViewModel @Inject constructor(
                 }
                 is Resource.Loading -> {
                     _uiState.value = UiState.Loading
+                }
+            }
+        }
+    }
+
+    fun launchGoogleSignIn(
+        context: Context,
+        purpose: GoogleSignInPurpose = GoogleSignInPurpose.LOGIN,
+        onRegistrationIdentity: ((GoogleRegistrationIdentity) -> Unit)? = null,
+        onFallbackToLegacy: (() -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            if (!isOnline.value) {
+                _uiState.value = UiState.Error(
+                    message = "Server is not connected. Device is currently offline."
+                )
+                return@launch
+            }
+            _uiState.value = UiState.Loading
+            when (val result = googleAuthManager.getGoogleIdToken(context)) {
+                is GoogleAuthResult.Success -> {
+                    when (purpose) {
+                        GoogleSignInPurpose.LOGIN -> {
+                            loginWithGoogle(idToken = result.idToken)
+                        }
+                        GoogleSignInPurpose.OWNER_REGISTRATION -> {
+                            _uiState.value = UiState.Idle
+                            onRegistrationIdentity?.invoke(
+                                GoogleRegistrationIdentity(
+                                    idToken = result.idToken,
+                                    email = result.email.orEmpty(),
+                                    fullName = result.displayName.orEmpty()
+                                )
+                            )
+                        }
+                    }
+                }
+                is GoogleAuthResult.Cancelled -> {
+                    _uiState.value = UiState.Idle
+                }
+                is GoogleAuthResult.FallbackToLegacy -> {
+                    _uiState.value = UiState.Idle
+                    onFallbackToLegacy?.invoke()
+                }
+                is GoogleAuthResult.Error -> {
+                    _uiState.value = UiState.Error(message = result.message)
                 }
             }
         }
