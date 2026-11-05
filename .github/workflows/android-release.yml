@@ -11,6 +11,11 @@ on:
       - '*.md'
   workflow_dispatch:
 
+# Required by softprops/action-gh-release to create/update the "latest"
+# release and upload presence.apk with the default GITHUB_TOKEN.
+permissions:
+  contents: write
+
 jobs:
   build-and-release:
     name: Build & Upload Latest Release APK

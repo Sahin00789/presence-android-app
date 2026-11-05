@@ -23,3 +23,6 @@ fix.vbs
 /server/
 /presence/
 
+# The marketing site lives in its own git repository (presence-marketing):
+/marketing/
+
