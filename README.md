@@ -69,10 +69,10 @@ The app is distributed via **GitHub Releases** (Play Store is not used).
   # Output: app/build/outputs/apk/release/presence.apk
   ```
 
-### Quick Setup & Push to GitHub
+### Quick Setup & Push to GitHub (via SSH)
 
 ```bash
-git remote add origin https://github.com/Sahin00789/presence-android-app.git
+git remote add origin git@github.com:Sahin00789/presence-android-app.git
 git branch -M main
 git push -u origin main
 ```

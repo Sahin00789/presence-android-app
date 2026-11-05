@@ -39,25 +39,27 @@ CORS_ORIGIN=https://presence.app
 
 ---
 
-## 3. Android Build & GitHub Release Distribution
-The project uses GitHub Releases for client APK distribution instead of Google Play Store.
+## 3. Android Build & Public Release Strategy (Private Source Code)
+The application source code (`.kt`, `.ts`, Gradle build scripts) remains **strictly private**, while binary releases (`presence.apk`) and user documentation (`docs/`, `README.md`) are published to the public GitHub repository.
 
 ### 3.1 APK Output Configuration
-- **Gradle Task**: `./gradlew assembleRelease`
-- **Output File**: `app/build/outputs/apk/release/presence.apk`
-- **Filename Rule**: Configured in `app/build.gradle.kts` via `applicationVariants` to automatically set `outputFileName = "presence.apk"`.
+- **Gradle Build Task**: `./gradlew assembleRelease`
+- **Output File Location**: `app/build/outputs/apk/release/presence.apk`
+- **Output Naming Rule**: Configured in `app/build.gradle.kts` to output `presence.apk`.
 
-### 3.2 Git Remote & Repository Setup
-To push updates to the GitHub repository:
-```bash
-git remote add origin https://github.com/Sahin00789/presence-android-app.git
-git branch -M main
-git push -u origin main
+### 3.2 Private Repository vs Public Releases Architecture
+1. **Private Repository (Source Code)**:
+   - Contains full source code (`app/src/`, `server/src/`, build configurations).
+   - Set repository visibility to **Private** on GitHub.
+2. **Public Releases & Documentation**:
+   - The compiled binary `presence.apk` is attached to GitHub Releases for public download.
+   - Public users receive only `presence.apk` and `docs/` documentation without access to raw Kotlin/Node.js source code.
+
+### 3.3 Automated Public Release Script
+Run the automated PowerShell script to build the release APK and publish it to the public releases page:
+```powershell
+.\scripts\publish-public-release.ps1 -TagName "v1.0.0"
 ```
-
-### 3.3 GitHub Release Deployment Workflow
-1. **Automated CI/CD Release (GitHub Actions)**:
-   - On every push to `main` branch, `.github/workflows/android-release.yml` automatically compiles `presence.apk` and updates the `latest` GitHub Release tag.
    - Users can always download the latest APK directly from `https://github.com/Sahin00789/presence-android-app/releases`.
 2. **Local PowerShell Release Script**:
    - Run `.\scripts\release-github.ps1` in PowerShell to assemble the release APK and publish/update the `latest` release on GitHub via `gh` CLI.

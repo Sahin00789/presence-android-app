@@ -354,11 +354,20 @@ fun OwnerWorkforceTab(
                             payrollPeriods = periods,
                             payrollItemsMap = payrollItemsMap,
                             onOpenLedger = { cardData ->
+                                val itemId = cardData.payrollItemId
+                                    ?: periods.firstNotNullOfOrNull { period ->
+                                        payrollItemsMap[period.id]?.firstOrNull { item ->
+                                            item.employeeId == member.id || item.staffProfileId == member.id || item.resolvedEmployeeId == member.id || item.staffEmail.equals(member.email, ignoreCase = true)
+                                        }
+                                    }?.let { item -> item.id.ifBlank { item.monthlyPayrollId } }
+
                                 ledgerTarget = WorkforceLedgerTarget(
+                                    payrollItemId = if (!itemId.isNullOrBlank() && itemId.length > 20 && itemId.contains("-")) itemId else null,
                                     staffName = member.fullName,
                                     staffCode = member.staffCode,
                                     monthLabel = cardData.monthYearLabel,
                                     earnedPaise = cardData.earnedPaise,
+                                    paidPaise = cardData.paidPaise,
                                     attendanceSummary = cardData.attendanceSummary,
                                     breakdown = cardData.breakdown,
                                 )
