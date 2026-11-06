@@ -78,6 +78,11 @@ data class DayInfo(
     val isWeekend: Boolean
 )
 
+private data class EditingShiftState(
+    val template: ShiftTemplateDto,
+    val dayOfWeek: Int
+)
+
 val WeekDaysList = listOf(
     DayInfo(1, "Mon", "Monday", false),
     DayInfo(2, "Tue", "Tuesday", false),
@@ -112,7 +117,7 @@ fun ShiftManagementScreen(
 
     var createForDayOfWeek by remember { mutableStateOf<Int?>(null) }
     var showCreateTemplate by remember { mutableStateOf(false) }
-    var editingTemplate by remember { mutableStateOf<ShiftTemplateDto?>(null) }
+    var editingShiftState by remember { mutableStateOf<EditingShiftState?>(null) }
 
     val templates = (templatesState as? UiState.Success)?.data.orEmpty()
     val staff = (staffState as? UiState.Success)?.data.orEmpty()
@@ -164,8 +169,8 @@ fun ShiftManagementScreen(
                                 createForDayOfWeek = dayOfWeek
                                 showCreateTemplate = true
                             },
-                            onEditShift = { template ->
-                                editingTemplate = template
+                            onEditShift = { template, dayOfWeek ->
+                                editingShiftState = EditingShiftState(template, dayOfWeek)
                             }
                         )
                     }
@@ -200,15 +205,16 @@ fun ShiftManagementScreen(
         )
     }
 
-    val activeEditing = editingTemplate
+    val activeEditing = editingShiftState
     if (activeEditing != null) {
         EditShiftModal(
-            template = activeEditing,
+            template = activeEditing.template,
+            targetDayOfWeek = activeEditing.dayOfWeek,
             premisesList = premises,
-            onDismiss = { editingTemplate = null },
+            onDismiss = { editingShiftState = null },
             onConfirm = { name, start, end, dayName, halfDayThreshold, premisesId, isActive ->
-                val id = activeEditing.id
-                editingTemplate = null
+                val id = activeEditing.template.id
+                editingShiftState = null
                 viewModel.updateShift(
                     id = id,
                     shiftName = name,
@@ -220,8 +226,8 @@ fun ShiftManagementScreen(
                 )
             },
             onDelete = {
-                val id = activeEditing.id
-                editingTemplate = null
+                val id = activeEditing.template.id
+                editingShiftState = null
                 viewModel.deleteShift(id)
             }
         )
@@ -235,7 +241,7 @@ private fun DayShiftCard(
     premisesList: List<PremisesDto>,
     canManage: Boolean,
     onAddShift: (dayOfWeek: Int) -> Unit,
-    onEditShift: (template: ShiftTemplateDto) -> Unit
+    onEditShift: (template: ShiftTemplateDto, dayOfWeek: Int) -> Unit
 ) {
     PresenceCard(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -309,7 +315,7 @@ private fun DayShiftCard(
                         template = template,
                         premisesName = premisesName,
                         canManage = canManage,
-                        onEditShift = { onEditShift(template) }
+                        onEditShift = { onEditShift(template, dayInfo.dayOfWeek) }
                     )
                 }
             }
@@ -541,7 +547,7 @@ private fun CreateShiftModal(
     var halfDayThreshold by remember { mutableStateOf("11:00") }
 
     val dayObj = WeekDaysList.find { it.dayOfWeek == initialDayOfWeek }
-    var dayName by remember(initialDayOfWeek) { mutableStateOf(dayObj?.fullName ?: "Everyday") }
+    var dayName by remember(initialDayOfWeek) { mutableStateOf(dayObj?.fullName ?: "Monday") }
 
     val targetPremisesId = initialPremisesId ?: premisesList.firstOrNull()?.id.orEmpty()
 
@@ -640,6 +646,7 @@ private fun CreateShiftModal(
 @Composable
 private fun EditShiftModal(
     template: ShiftTemplateDto,
+    targetDayOfWeek: Int? = null,
     premisesList: List<PremisesDto> = emptyList(),
     onDismiss: () -> Unit,
     onConfirm: (
@@ -655,8 +662,11 @@ private fun EditShiftModal(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    val targetDayObj = targetDayOfWeek?.let { dow -> WeekDaysList.find { it.dayOfWeek == dow } }
     var name by remember(template) { mutableStateOf(template.name) }
-    var dayName by remember(template) { mutableStateOf(template.dayName) }
+    var dayName by remember(template, targetDayOfWeek) {
+        mutableStateOf(targetDayObj?.fullName ?: template.dayName)
+    }
     var start by remember(template) { mutableStateOf(template.startTime.take(5)) }
     var end by remember(template) { mutableStateOf(template.endTime.take(5)) }
     var halfDayThreshold by remember(template) { mutableStateOf(template.halfDayThreshold.take(5)) }

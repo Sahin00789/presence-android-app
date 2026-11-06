@@ -1,6 +1,7 @@
 package com.als.presence.ui.auth
 
 import android.location.Geocoder
+import android.widget.Toast
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Home
@@ -130,6 +132,13 @@ fun OwnerRegistrationWizard(
     val context = LocalContext.current
     var capturedLat by remember { mutableStateOf<String?>(null) }
     var capturedLng by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(otpResponse) {
+        val resp = otpResponse
+        if (resp != null) {
+            Toast.makeText(context, "Verification code sent to ${resp.email}", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val requestLocationPermission = com.als.presence.core.location.rememberLocationPermissionState(
         onPermissionGranted = {
@@ -586,6 +595,32 @@ fun OwnerRegistrationWizard(
                                             }
                                         } else {
                                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                Surface(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    color = Color(0xFFECFDF5),
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    border = BorderStroke(1.dp, Color(0xFFA7F3D0))
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.CheckCircle,
+                                                            contentDescription = null,
+                                                            tint = Color(0xFF059669),
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Text(
+                                                            text = "Verification code sent successfully!",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = Color(0xFF065F46)
+                                                        )
+                                                    }
+                                                }
+
                                                 Card(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF2FF)),

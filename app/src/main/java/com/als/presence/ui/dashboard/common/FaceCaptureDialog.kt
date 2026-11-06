@@ -164,7 +164,7 @@ fun FaceCaptureDialog(
         }
     }
 
-    val targetPoses = if (mode == "ENROLL") listOf("CENTER", "LEFT", "RIGHT", "UP", "DOWN") else listOf("CENTER")
+    val targetPoses = listOf("CENTER")
     var currentPoseIndex by remember { mutableIntStateOf(0) }
     var feedbackMessage by remember { mutableStateOf("Position your face in the camera.") }
     var isSuccess by remember { mutableStateOf(false) }

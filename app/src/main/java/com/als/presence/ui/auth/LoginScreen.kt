@@ -1,6 +1,7 @@
 package com.als.presence.ui.auth
 
 import android.app.Activity
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Group
@@ -239,10 +241,14 @@ fun LoginScreen(
         )
     }
 
-    // Synchronize OTP response state to Step 2
-    if (otpState != null && loginStep == LoginStep.ENTER_EMAIL && !showOwnerRegistrationWizard) {
-        loginStep = LoginStep.ENTER_OTP
-        otpCodeInput = if (com.als.presence.BuildConfig.DEBUG) otpState?.devOtp.orEmpty() else ""
+    // Synchronize OTP response state to Step 2 and show Toast
+    LaunchedEffect(otpState) {
+        val otp = otpState
+        if (otp != null && loginStep == LoginStep.ENTER_EMAIL && !showOwnerRegistrationWizard) {
+            loginStep = LoginStep.ENTER_OTP
+            otpCodeInput = if (com.als.presence.BuildConfig.DEBUG) otp.devOtp.orEmpty() else ""
+            Toast.makeText(context, "OTP sent successfully to ${otp.email}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     Surface(
@@ -823,6 +829,32 @@ private fun EmployeeLoginContent(
         } else {
             // STEP 2: ENTER OTP
             Surface(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                color = Color(0xFFECFDF5),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFFA7F3D0))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = Color(0xFF059669),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "OTP sent successfully to $emailInput",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF065F46)
+                    )
+                }
+            }
+
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
                 color = Color(0xFFF8FAFC),
@@ -1222,6 +1254,32 @@ private fun OwnerLoginContent(
             }
         } else {
             // STEP 2: ENTER OTP
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                color = Color(0xFFECFDF5),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFFA7F3D0))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = Color(0xFF059669),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "OTP sent successfully to $emailInput",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF065F46)
+                    )
+                }
+            }
+
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
