@@ -15,6 +15,7 @@ import com.als.presence.data.model.OvertimeDto
 
 import com.als.presence.data.model.FaceStatusDto
 import com.als.presence.data.model.CreateEmployee
+import com.als.presence.data.model.UpdateEmployeeRequest
 import com.als.presence.data.model.OrganizationMemberDto
 import com.als.presence.data.model.PayrollItemDto
 import com.als.presence.data.model.PayrollPeriodDto
@@ -373,6 +374,43 @@ class OwnerWorkforceViewModel @Inject constructor(
                     refresh()
                 }
                 is Resource.Error -> _message.value = result.message
+                Resource.Loading -> Unit
+            }
+            _isSubmitting.value = false
+        }
+    }
+
+    fun updateStaff(
+        employeeId: String,
+        fullName: String,
+        department: String?,
+        designation: String? = null,
+        address: String? = null,
+        phone: String? = null,
+        avatarBase64: String? = null,
+        premisesId: String? = null
+    ) {
+        viewModelScope.launch {
+            _isSubmitting.value = true
+            when (
+                val result = repository.updateEmployee(
+                    employeeId = employeeId,
+                    request = UpdateEmployeeRequest(
+                        fullName = fullName.trim(),
+                        department = department?.trim()?.ifBlank { null },
+                        designation = designation?.trim()?.ifBlank { null },
+                        address = address?.trim()?.ifBlank { null },
+                        phone = phone?.trim()?.ifBlank { null },
+                        avatarBase64 = avatarBase64,
+                        premisesId = premisesId
+                    )
+                )
+            ) {
+                is Resource.Success<*> -> {
+                    _message.value = "Employee profile updated."
+                    refresh()
+                }
+                is Resource.Error -> _message.value = result.message ?: "Failed to update employee profile"
                 Resource.Loading -> Unit
             }
             _isSubmitting.value = false

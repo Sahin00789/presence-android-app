@@ -18,7 +18,7 @@ data class StaffDto(
     val phone: String? = null,
     val address: String? = null,
     val avatarUrl: String? = null,
-    val role: String = "STAFF",
+    val role: String = "EMPLOYEE",
     val token: String? = null,
     val addedBy: String? = null,
     val premisesId: String? = null,
@@ -47,7 +47,7 @@ typealias CreateEmployee = CreateEmployeeRequest
 @Serializable
 data class CreateEmployeeRequest(
     val email: String,
-    val role: String,
+    val role: String = "EMPLOYEE",
     val fullName: String? = null,
     val staffCode: String? = null,
     val department: String? = null,
@@ -57,4 +57,16 @@ data class CreateEmployeeRequest(
     val avatarBase64: String? = null,
     val avatarUrl: String? = null,
     val premisesId: String? = null
+)
+
+@Serializable
+data class UpdateEmployeeRequest(
+    val fullName: String? = null,
+    val department: String? = null,
+    val designation: String? = null,
+    val premisesId: String? = null,
+    val phone: String? = null,
+    val address: String? = null,
+    val avatarBase64: String? = null,
+    val avatarUrl: String? = null
 )

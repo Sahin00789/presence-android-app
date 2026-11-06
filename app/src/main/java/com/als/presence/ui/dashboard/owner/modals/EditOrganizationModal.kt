@@ -53,6 +53,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import com.als.presence.ui.dashboard.common.PhotoUploadBox
+import com.als.presence.ui.dashboard.common.processImageUriWithProgress
 import com.als.presence.core.common.UiState
 import com.als.presence.data.model.OrganizationDto
 import com.als.presence.domain.model.User
@@ -74,13 +78,24 @@ fun EditOrganizationModal(
     var currency by remember { mutableStateOf("INR") }
     var selectedLogoUri by remember { mutableStateOf<Uri?>(null) }
     var logoBase64 by remember { mutableStateOf<String?>(null) }
+    var isUploading by remember { mutableStateOf(false) }
+    var uploadProgress by remember { mutableStateOf(0) }
+    val coroutineScope = rememberCoroutineScope()
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
             selectedLogoUri = uri
-            logoBase64 = uriToBase64(context, uri)
+            coroutineScope.launch {
+                isUploading = true
+                uploadProgress = 0
+                val b64 = processImageUriWithProgress(context, uri) { progress ->
+                    uploadProgress = progress
+                }
+                logoBase64 = b64
+                isUploading = false
+            }
         }
     }
 
@@ -125,73 +140,16 @@ fun EditOrganizationModal(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Logo Picker Section
-            Box(
-                contentAlignment = Alignment.BottomEnd,
-                modifier = Modifier
-                    .size(96.dp)
-                    .clickable { galleryLauncher.launch("image/*") }
-            ) {
-                if (selectedLogoUri != null) {
-                    AsyncImage(
-                        model = selectedLogoUri,
-                        contentDescription = "Selected Organization Logo",
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                } else if (!user.organizationLogoUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = user.organizationLogoUrl,
-                        contentDescription = "Organization Logo",
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), RoundedCornerShape(18.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = user.organizationName.orEmpty().take(1).uppercase().ifBlank { "O" },
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                        .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CameraAlt,
-                        contentDescription = "Upload Organization Logo",
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-
-            Text(
-                text = "Tap box to upload company logo",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp)
+            // Logo Picker Section with Cloudinary percentage loader
+            PhotoUploadBox(
+                model = selectedLogoUri ?: user.organizationLogoUrl,
+                isUploading = isUploading,
+                uploadProgress = uploadProgress,
+                onSelectImage = { galleryLauncher.launch("image/*") },
+                modifier = Modifier.size(96.dp),
+                shape = RoundedCornerShape(18.dp),
+                placeholderText = user.organizationName.orEmpty().take(1).uppercase().ifBlank { "O" },
+                helperText = "Tap box to upload company logo"
             )
 
             Spacer(modifier = Modifier.height(20.dp))

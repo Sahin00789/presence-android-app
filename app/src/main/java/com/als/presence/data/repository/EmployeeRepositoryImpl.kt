@@ -47,6 +47,17 @@ class EmployeeRepositoryImpl @Inject constructor(
         return result
     }
 
+    override suspend fun updateEmployee(employeeId: String, request: UpdateEmployeeRequest): Resource<EmployeeDto> {
+        val result = safeApiCall("Error updating employee profile") {
+            employeeApiService.update(employeeId, request)
+        }
+        if (result is Resource.Success && result.data != null) {
+            employeeDao.upsert(EmployeeEntity.fromDto(result.data))
+            snapshotProjectionEngine.rebuildOwnerEmployeesSnapshot("ALL")
+        }
+        return result
+    }
+
     override suspend fun deactivateMember(employeeId: String): Resource<Unit> {
         val result = safeApiCall("Error deactivating employee") {
             employeeApiService.deactivate(employeeId)

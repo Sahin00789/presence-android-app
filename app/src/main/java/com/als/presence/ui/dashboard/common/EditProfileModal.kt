@@ -55,6 +55,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import coil.compose.AsyncImage
 import com.als.presence.core.common.UiState
 import com.als.presence.domain.model.User
@@ -74,13 +76,24 @@ fun EditProfileModal(
     var phone by remember { mutableStateOf("") }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var avatarBase64 by remember { mutableStateOf<String?>(null) }
+    var isUploading by remember { mutableStateOf(false) }
+    var uploadProgress by remember { mutableStateOf(0) }
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
             selectedImageUri = uri
-            avatarBase64 = uriToBase64(context, uri)
+            coroutineScope.launch {
+                isUploading = true
+                uploadProgress = 0
+                val b64 = processImageUriWithProgress(context, uri) { progress ->
+                    uploadProgress = progress
+                }
+                avatarBase64 = b64
+                isUploading = false
+            }
         }
     }
 
@@ -125,72 +138,16 @@ fun EditProfileModal(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Profile Picture with Camera Overlay
-            Box(
-                contentAlignment = Alignment.BottomEnd,
-                modifier = Modifier
-                    .size(96.dp)
-                    .clickable { galleryLauncher.launch("image/*") }
-            ) {
-                if (selectedImageUri != null) {
-                    AsyncImage(
-                        model = selectedImageUri,
-                        contentDescription = "Selected Avatar",
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(CircleShape)
-                            .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                } else if (!user.avatarUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = user.avatarUrl,
-                        contentDescription = "User Avatar",
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(CircleShape)
-                            .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = user.fullName.take(1).uppercase(),
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                        .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CameraAlt,
-                        contentDescription = "Upload Photo",
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-
-            Text(
-                text = "Tap photo to change avatar",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp)
+            // Photo Upload Area with Cloudinary percentage loader
+            PhotoUploadBox(
+                model = selectedImageUri ?: user.avatarUrl,
+                isUploading = isUploading,
+                uploadProgress = uploadProgress,
+                onSelectImage = { galleryLauncher.launch("image/*") },
+                modifier = Modifier.size(96.dp),
+                shape = CircleShape,
+                placeholderText = user.fullName.take(1).uppercase(),
+                helperText = "Tap photo to change avatar"
             )
 
             Spacer(modifier = Modifier.height(20.dp))

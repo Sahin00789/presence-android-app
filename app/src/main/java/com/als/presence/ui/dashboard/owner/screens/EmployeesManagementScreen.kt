@@ -102,6 +102,10 @@ import com.als.presence.ui.dashboard.common.PresenceSize
 import com.als.presence.ui.dashboard.common.PresenceStatTile
 import com.als.presence.ui.dashboard.common.PresenceTone
 import com.als.presence.ui.dashboard.common.PresenceVariant
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import com.als.presence.ui.dashboard.common.PhotoUploadBox
+import com.als.presence.ui.dashboard.common.processImageUriWithProgress
 import com.als.presence.ui.dashboard.common.uriToBase64
 import com.als.presence.ui.dashboard.owner.modals.AssignShiftWithRulesModal
 import com.als.presence.ui.dashboard.owner.modals.BookOvertimeModal
@@ -278,9 +282,9 @@ fun EmployeesManagementScreen(
             premisesList = premises,
             onDismiss = { editTarget = null },
             onSave = { name, email, department, address, phone, avatarBase64, premisesId ->
-                viewModel.addStaff(
+                viewModel.updateStaff(
+                    employeeId = target.employeeId,
                     fullName = name,
-                    email = email,
                     department = department,
                     designation = null,
                     address = address,
@@ -675,13 +679,24 @@ private fun AddEmployeesModal(
 
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var avatarBase64 by remember { mutableStateOf<String?>(null) }
+    var isUploading by remember { mutableStateOf(false) }
+    var uploadProgress by remember { mutableStateOf(0) }
+    val coroutineScope = rememberCoroutineScope()
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
             selectedImageUri = uri
-            avatarBase64 = uriToBase64(context, uri)
+            coroutineScope.launch {
+                isUploading = true
+                uploadProgress = 0
+                val b64 = processImageUriWithProgress(context, uri) { progress ->
+                    uploadProgress = progress
+                }
+                avatarBase64 = b64
+                isUploading = false
+            }
         }
     }
 
@@ -757,70 +772,17 @@ private fun AddEmployeesModal(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.Top
             ) {
-                // Rectangular Photo Card (Compact Left)
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Box(
-                        contentAlignment = Alignment.BottomEnd,
-                        modifier = Modifier
-                            .size(width = 84.dp, height = 98.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFFF3F4F6))
-                            .border(1.5.dp, Color(0xFFE5E7EB), RoundedCornerShape(14.dp))
-                            .clickable { galleryLauncher.launch("image/*") }
-                    ) {
-                        if (selectedImageUri != null) {
-                            AsyncImage(
-                                model = selectedImageUri,
-                                contentDescription = "Employee Avatar",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(14.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Column(
-                                modifier = Modifier.fillMaxSize(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = Color(0xFF9CA3AF),
-                                    modifier = Modifier.size(36.dp)
-                                )
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .padding(4.dp)
-                                .size(24.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFF2563EB))
-                                .border(1.dp, Color.White, RoundedCornerShape(6.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CameraAlt,
-                                contentDescription = "Upload Photo",
-                                tint = Color.White,
-                                modifier = Modifier.size(13.dp)
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = if (selectedImageUri != null) "Change Photo" else "Upload Photo",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2563EB)
-                    )
-                }
+                // Photo Upload Box with Cloudinary Loader and percentage
+                PhotoUploadBox(
+                    model = selectedImageUri,
+                    isUploading = isUploading,
+                    uploadProgress = uploadProgress,
+                    onSelectImage = { galleryLauncher.launch("image/*") },
+                    modifier = Modifier.size(width = 84.dp, height = 98.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    placeholderText = name.take(1).uppercase().ifBlank { "E" },
+                    helperText = if (selectedImageUri != null) "Change Photo" else "Upload Photo"
+                )
 
                 // Name & Email Fields (Right side Column)
                 Column(
@@ -988,13 +950,24 @@ private fun EditEmployeeModal(
 
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var avatarBase64 by remember { mutableStateOf<String?>(null) }
+    var isUploading by remember { mutableStateOf(false) }
+    var uploadProgress by remember { mutableStateOf(0) }
+    val coroutineScope = rememberCoroutineScope()
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
             selectedImageUri = uri
-            avatarBase64 = uriToBase64(context, uri)
+            coroutineScope.launch {
+                isUploading = true
+                uploadProgress = 0
+                val b64 = processImageUriWithProgress(context, uri) { progress ->
+                    uploadProgress = progress
+                }
+                avatarBase64 = b64
+                isUploading = false
+            }
         }
     }
 
@@ -1071,78 +1044,17 @@ private fun EditEmployeeModal(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.Top
             ) {
-                // Rectangular Photo Card (Compact Left)
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Box(
-                        contentAlignment = Alignment.BottomEnd,
-                        modifier = Modifier
-                            .size(width = 84.dp, height = 98.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFFF3F4F6))
-                            .border(1.5.dp, Color(0xFFE5E7EB), RoundedCornerShape(14.dp))
-                            .clickable { galleryLauncher.launch("image/*") }
-                    ) {
-                        if (selectedImageUri != null) {
-                            AsyncImage(
-                                model = selectedImageUri,
-                                contentDescription = "Avatar",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(14.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else if (!employee.avatarUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model = employee.avatarUrl,
-                                contentDescription = "Avatar",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(14.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = name.take(1).uppercase(),
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF2563EB)
-                                )
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .padding(4.dp)
-                                .size(24.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFF2563EB))
-                                .border(1.dp, Color.White, RoundedCornerShape(6.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CameraAlt,
-                                contentDescription = "Change Photo",
-                                tint = Color.White,
-                                modifier = Modifier.size(13.dp)
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = "Change Photo",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2563EB)
-                    )
-                }
+                // Photo Upload Box with Cloudinary percentage loader
+                PhotoUploadBox(
+                    model = selectedImageUri ?: employee.avatarUrl,
+                    isUploading = isUploading,
+                    uploadProgress = uploadProgress,
+                    onSelectImage = { galleryLauncher.launch("image/*") },
+                    modifier = Modifier.size(width = 84.dp, height = 98.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    placeholderText = name.take(1).uppercase().ifBlank { "E" },
+                    helperText = "Change Photo"
+                )
 
                 // Name & Email Fields (Right side Column)
                 Column(

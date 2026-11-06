@@ -13,6 +13,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -343,14 +346,15 @@ fun PresenceSectionTitle(
 }
 
 /**
- * The inline label/value strip.
+ * The inline label/value strip with adaptive flow wrapping and truncation safeguards.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PresenceMetaStrip(
     items: List<Pair<String, String>>,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    FlowRow(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
@@ -358,10 +362,13 @@ fun PresenceMetaStrip(
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
             .padding(horizontal = 14.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items.forEach { (label, value) ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(vertical = 2.dp)
+            ) {
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
@@ -373,7 +380,9 @@ fun PresenceMetaStrip(
                     text = value,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -429,7 +438,7 @@ fun PresenceStatTile(
     }
 }
 
-/** One label/value pair on its own row. */
+/** One label/value pair on its own row, with weight-constrained value text. */
 @Composable
 fun PresenceDetailRow(
     label: String,
@@ -459,7 +468,10 @@ fun PresenceDetailRow(
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
             color = valueColor,
-            textAlign = TextAlign.End
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f, fill = false),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

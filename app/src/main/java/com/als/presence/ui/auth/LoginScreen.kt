@@ -143,11 +143,15 @@ fun LoginScreen(
     var registrationSuccessInfo by remember { mutableStateOf<RegistrationSuccessInfo?>(null) }
     var googleSignInPurpose by remember { mutableStateOf(GoogleSignInPurpose.LOGIN) }
     var googleRegistrationIdentity by remember { mutableStateOf<GoogleRegistrationIdentity?>(null) }
+    var isGoogleSigningIn by remember { mutableStateOf(false) }
 
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        if (result.resultCode != Activity.RESULT_OK) {
+            isGoogleSigningIn = false
+            return@rememberLauncherForActivityResult
+        }
         try {
             val account = GoogleSignIn.getSignedInAccountFromIntent(result.data)
                 .getResult(ApiException::class.java)
@@ -156,12 +160,14 @@ fun LoginScreen(
                     val idToken = account.idToken
                     val code = account.serverAuthCode
                     if (idToken.isNullOrBlank() && code.isNullOrBlank()) {
+                        isGoogleSigningIn = false
                         viewModel.showError("Google did not return a credential. Please try again.")
                     } else {
                         viewModel.loginWithGoogle(idToken = idToken, serverAuthCode = code)
                     }
                 }
                 GoogleSignInPurpose.OWNER_REGISTRATION -> {
+                    isGoogleSigningIn = false
                     val idToken = account.idToken
                     if (idToken.isNullOrBlank() || account.email.isNullOrBlank()) {
                         viewModel.showError("Google did not return the verified account details. Please try again.")
@@ -175,7 +181,15 @@ fun LoginScreen(
                 }
             }
         } catch (error: ApiException) {
-            viewModel.showError("Google sign-in failed (${error.statusCode}). Please try again.")
+            isGoogleSigningIn = false
+            val friendlyMessage = when (error.statusCode) {
+                10 -> "Google Developer Error (10): Register your app's package name 'com.als.presence' and debug SHA-1 fingerprint in Google Cloud Console."
+                7 -> "Google Network Error (7): Network unavailable or Google services unreachable. Please check your connection."
+                12500 -> "Google Sign-In Error (12500): Google Play Services internal error. Ensure Google Play Services is updated."
+                12501, 16 -> "Google sign-in was cancelled."
+                else -> "Google sign-in failed (Code ${error.statusCode}). Please try again."
+            }
+            viewModel.showError(friendlyMessage)
         }
     }
 
@@ -186,11 +200,15 @@ fun LoginScreen(
     LaunchedEffect(selectedRole) {
         loginStep = LoginStep.ENTER_EMAIL
         otpCodeInput = ""
+        isGoogleSigningIn = false
         viewModel.resetOtp()
         viewModel.clearError()
     }
 
     LaunchedEffect(uiState) {
+        if (uiState !is UiState.Loading) {
+            isGoogleSigningIn = false
+        }
         if (uiState is UiState.Success && !showOwnerRegistrationWizard) {
             val user = (uiState as UiState.Success<User>).data
             if (registrationSuccessInfo == null) {
@@ -200,11 +218,13 @@ fun LoginScreen(
     }
 
     fun startGoogleSignIn(purpose: GoogleSignInPurpose) {
+        isGoogleSigningIn = true
         googleSignInPurpose = purpose
         viewModel.launchGoogleSignIn(
             context = context,
             purpose = purpose,
             onRegistrationIdentity = { identity ->
+                isGoogleSigningIn = false
                 googleRegistrationIdentity = identity
             },
             onFallbackToLegacy = {
@@ -453,6 +473,7 @@ fun LoginScreen(
                                 loginStep = loginStep,
                                 uiState = uiState,
                                 otpState = otpState,
+                                isGoogleSigningIn = isGoogleSigningIn,
                                 onRequestOtp = { viewModel.requestOtp(emailInput.trim(), role = Role.EMPLOYEE) },
                                 onVerifyOtp = { viewModel.verifyOtp(email = emailInput.trim(), code = otpCodeInput, role = Role.EMPLOYEE) },
                                 onBackToEmail = {
@@ -470,6 +491,7 @@ fun LoginScreen(
                                 loginStep = loginStep,
                                 uiState = uiState,
                                 otpState = otpState,
+                                isGoogleSigningIn = isGoogleSigningIn,
                                 onRequestOtp = { viewModel.requestOtp(emailInput.trim(), role = Role.OWNER) },
                                 onVerifyOtp = { viewModel.verifyOtp(email = emailInput.trim(), code = otpCodeInput, role = Role.OWNER) },
                                 onBackToEmail = {
@@ -481,18 +503,14 @@ fun LoginScreen(
                             )
                         }
 
-                        // Modern Alert Card for Errors
+                        // Modern Alert Card for Errors - Displays authoritative server error message
                         AnimatedVisibility(visible = uiState is UiState.Error) {
-                            val errorMsg = (uiState as? UiState.Error)?.message ?: "Authentication failed"
-                            val isNotRegisteredErr = errorMsg.contains("not registered", ignoreCase = true) || errorMsg.contains("NOT_REGISTERED", ignoreCase = true)
-
-                            val displayMsg = when {
-                                isNotRegisteredErr && selectedRole != Role.OWNER ->
-                                    "You are not registered. Please contact your Organization Owner to receive an invitation."
-                                isNotRegisteredErr && selectedRole == Role.OWNER ->
-                                    "No Owner account found for this email address. Please register your business below."
-                                else -> errorMsg
-                            }
+                            val errorState = uiState as? UiState.Error
+                            val errorMsg = errorState?.message ?: "Authentication failed"
+                            val errorCode = errorState?.code
+                            val isNotRegisteredErr = errorMsg.contains("not registered", ignoreCase = true) ||
+                                errorMsg.contains("NOT_REGISTERED", ignoreCase = true) ||
+                                errorCode == "NOT_REGISTERED"
 
                             Card(
                                 modifier = Modifier
@@ -515,12 +533,33 @@ fun LoginScreen(
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        text = displayMsg,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFF9F1239),
-                                        fontWeight = FontWeight.SemiBold
-                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = errorMsg,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color(0xFF9F1239),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        if (isNotRegisteredErr) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = if (selectedRole == Role.OWNER)
+                                                    "Hint: Tap 'Register Organization' below to set up your business account."
+                                                else
+                                                    "Hint: Please ask your Organization Owner to add your email address to the team roster.",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color(0xFFBE123C),
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        } else if (!errorCode.isNullOrBlank()) {
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = "Code: $errorCode",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color(0xFFBE123C)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -656,6 +695,7 @@ private fun EmployeeLoginContent(
     loginStep: LoginStep,
     uiState: UiState<User>,
     otpState: com.als.presence.data.model.OtpResponse?,
+    isGoogleSigningIn: Boolean,
     onRequestOtp: () -> Unit,
     onVerifyOtp: () -> Unit,
     onBackToEmail: () -> Unit,
@@ -971,9 +1011,11 @@ private fun EmployeeLoginContent(
 
         Spacer(modifier = Modifier.height(14.dp))
 
+        val isGoogleAuthLoading = isGoogleSigningIn || (uiState is UiState.Loading && isGoogleSigningIn)
+
         Button(
             onClick = onStartGoogle,
-            enabled = uiState !is UiState.Loading,
+            enabled = !isGoogleAuthLoading && uiState !is UiState.Loading,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp),
@@ -985,13 +1027,31 @@ private fun EmployeeLoginContent(
             border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
             elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
         ) {
-            Image(
-                painter = painterResource(R.drawable.ic_google_logo),
-                contentDescription = "Google",
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text("Continue with Google", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            if (isGoogleAuthLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = RoleStaffPrimary,
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Signing in with Google...",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            } else {
+                Image(
+                    painter = painterResource(R.drawable.ic_google_logo),
+                    contentDescription = "Google",
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Continue with Google",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -1034,6 +1094,7 @@ private fun OwnerLoginContent(
     loginStep: LoginStep,
     uiState: UiState<User>,
     otpState: com.als.presence.data.model.OtpResponse?,
+    isGoogleSigningIn: Boolean,
     onRequestOtp: () -> Unit,
     onVerifyOtp: () -> Unit,
     onBackToEmail: () -> Unit,
@@ -1350,9 +1411,11 @@ private fun OwnerLoginContent(
 
         Spacer(modifier = Modifier.height(14.dp))
 
+        val isGoogleAuthLoading = isGoogleSigningIn || (uiState is UiState.Loading && isGoogleSigningIn)
+
         Button(
             onClick = onStartGoogle,
-            enabled = uiState !is UiState.Loading,
+            enabled = !isGoogleAuthLoading && uiState !is UiState.Loading,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp),
@@ -1364,13 +1427,31 @@ private fun OwnerLoginContent(
             border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
             elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
         ) {
-            Image(
-                painter = painterResource(R.drawable.ic_google_logo),
-                contentDescription = "Google",
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text("Continue with Google", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            if (isGoogleAuthLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = RoleOwnerPrimary,
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Signing in with Google...",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            } else {
+                Image(
+                    painter = painterResource(R.drawable.ic_google_logo),
+                    contentDescription = "Google",
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Continue with Google",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(18.dp))

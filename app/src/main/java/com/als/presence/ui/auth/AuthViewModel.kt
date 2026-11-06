@@ -198,7 +198,7 @@ class AuthViewModel @Inject constructor(
                 is Resource.Error -> {
                     val errorMsg = result.message?.takeIf { it.isNotBlank() }
                         ?: "Failed to send verification code. Server is not connected."
-                    _uiState.value = UiState.Error(message = errorMsg)
+                    _uiState.value = UiState.Error(message = errorMsg, code = result.code)
                 }
                 is Resource.Loading -> {
                     _uiState.value = UiState.Loading
@@ -249,7 +249,7 @@ class AuthViewModel @Inject constructor(
                 is Resource.Error -> {
                     val errorMsg = result.message?.takeIf { it.isNotBlank() }
                         ?: "OTP Verification failed. Server is not connected."
-                    _uiState.value = UiState.Error(message = errorMsg)
+                    _uiState.value = UiState.Error(message = errorMsg, code = result.code)
                 }
                 is Resource.Loading -> {
                     _uiState.value = UiState.Loading
@@ -325,7 +325,7 @@ class AuthViewModel @Inject constructor(
                 is Resource.Error -> {
                     val errorMsg = result.message?.takeIf { it.isNotBlank() }
                         ?: "Google login failed. Server is not connected."
-                    _uiState.value = UiState.Error(message = errorMsg)
+                    _uiState.value = UiState.Error(message = errorMsg, code = result.code)
                 }
                 is Resource.Loading -> {
                     _uiState.value = UiState.Loading
@@ -368,7 +368,7 @@ class AuthViewModel @Inject constructor(
                 is Resource.Error -> {
                     val errorMsg = result.message?.takeIf { it.isNotBlank() }
                         ?: "Owner registration failed. Server is not connected."
-                    _uiState.value = UiState.Error(message = errorMsg)
+                    _uiState.value = UiState.Error(message = errorMsg, code = result.code)
                 }
                 is Resource.Loading -> _uiState.value = UiState.Loading
             }
@@ -511,8 +511,8 @@ class AuthViewModel @Inject constructor(
         _uiState.value = UiState.Idle
     }
 
-    fun showError(message: String) {
-        _uiState.value = UiState.Error(message)
+    fun showError(message: String, code: String? = null) {
+        _uiState.value = UiState.Error(message = message, code = code)
     }
 
     fun resetOtp() {

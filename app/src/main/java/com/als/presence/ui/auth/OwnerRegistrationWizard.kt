@@ -471,7 +471,8 @@ fun OwnerRegistrationWizard(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         if (uiState is UiState.Error) {
-                            val errorMsg = uiState.message.ifBlank { "An error occurred" }
+                            val errorState = uiState as UiState.Error
+                            val errorMsg = errorState.message.ifBlank { "An error occurred" }
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(
@@ -490,12 +491,22 @@ fun OwnerRegistrationWizard(
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = errorMsg,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = errorMsg,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        if (!errorState.code.isNullOrBlank()) {
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = "Error Code: ${errorState.code}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -694,7 +705,31 @@ fun OwnerRegistrationWizard(
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(16.dp)
                                     ) {
-                                        Text(if (googleIdentity == null) "Choose a Google account" else "Choose another Google account")
+                                        if (loading) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(18.dp),
+                                                color = Color(0xFF5265D8),
+                                                strokeWidth = 2.dp
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Connecting to Google...",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        } else {
+                                            Image(
+                                                painter = painterResource(R.drawable.ic_google_logo),
+                                                contentDescription = "Google",
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = if (googleIdentity == null) "Choose a Google account" else "Choose another Google account",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
                             }

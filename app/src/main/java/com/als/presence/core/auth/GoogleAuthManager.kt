@@ -1,6 +1,7 @@
 package com.als.presence.core.auth
 
 import android.content.Context
+import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
@@ -68,15 +69,20 @@ class GoogleAuthManager @Inject constructor(
                     displayName = googleIdTokenCredential.displayName
                 )
             } else {
+                Log.w("GoogleAuthManager", "Unexpected credential type '${credential.type}', falling back to legacy Google Sign-In")
                 GoogleAuthResult.FallbackToLegacy
             }
         } catch (e: GetCredentialCancellationException) {
+            Log.d("GoogleAuthManager", "Google Sign-In was cancelled by user")
             GoogleAuthResult.Cancelled
         } catch (e: GetCredentialException) {
+            Log.w("GoogleAuthManager", "CredentialManager failed (${e.javaClass.simpleName}: ${e.message}), falling back to legacy Google Sign-In")
             GoogleAuthResult.FallbackToLegacy
         } catch (e: GoogleIdTokenParsingException) {
+            Log.e("GoogleAuthManager", "Failed to parse Google ID Token", e)
             GoogleAuthResult.Error("Invalid Google ID Token format.")
         } catch (e: Exception) {
+            Log.w("GoogleAuthManager", "Unexpected error in CredentialManager (${e.javaClass.simpleName}: ${e.message}), falling back to legacy Google Sign-In", e)
             GoogleAuthResult.FallbackToLegacy
         }
     }

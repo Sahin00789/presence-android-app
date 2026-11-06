@@ -561,9 +561,12 @@ fun DashboardScreen(
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.Bold,
                                                 maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f, fill = false)
                                             )
                                         }
+
+                                        Spacer(modifier = Modifier.width(8.dp))
 
                                         Surface(
                                             color = roleColor.copy(alpha = 0.18f),
@@ -1075,21 +1078,28 @@ private fun DashboardTopAppBar(
                                     ),
                                     fontWeight = FontWeight.ExtraBold,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
                             }
                         }
 
-                        Text(
-                            text = "/ ${user.role.name}",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 9.5.sp,
-                                letterSpacing = 0.5.sp
-                            ),
-                            fontWeight = FontWeight.Bold,
-                            color = roleColor,
-                            maxLines = 1
-                        )
+                        Surface(
+                            color = roleColor.copy(alpha = 0.15f),
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                text = user.role.name,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    letterSpacing = 0.5.sp
+                                ),
+                                fontWeight = FontWeight.ExtraBold,
+                                color = roleColor,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
@@ -1219,7 +1229,9 @@ private fun OrganizationMark(
         ) {
             Text(
                 text = initial,
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 13.sp
+                ),
                 fontWeight = FontWeight.ExtraBold,
                 color = accent
             )
