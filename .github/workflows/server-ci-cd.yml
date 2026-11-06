@@ -103,6 +103,12 @@ jobs:
       - name: Run Drizzle Database Migrations
         env:
           DATABASE_URL: postgresql://presence_user:presence_password@localhost:5432/presence_db
+          ACCESS_TOKEN_SECRET: ci_access_token_secret_at_least_32_characters
+          REFRESH_TOKEN_SECRET: ci_refresh_token_secret_at_least_32_characters
+          GOOGLE_WEB_CLIENT_ID: ci-client.apps.googleusercontent.com
+          CLOUDINARY_CLOUD_NAME: ci-cloud
+          CLOUDINARY_API_KEY: ci-key
+          CLOUDINARY_API_SECRET: ci-secret
         run: pnpm run db:migrate
 
       - name: Execute Vitest Tests
@@ -111,8 +117,12 @@ jobs:
           PORT: 3000
           HOST: 0.0.0.0
           DATABASE_URL: postgresql://presence_user:presence_password@localhost:5432/presence_db
-          JWT_SECRET: super_secret_jwt_key_testing_environment_32chars
-          REFRESH_TOKEN_SECRET: super_secret_refresh_token_key_testing_32chars
+          ACCESS_TOKEN_SECRET: ci_access_token_secret_at_least_32_characters
+          REFRESH_TOKEN_SECRET: ci_refresh_token_secret_at_least_32_characters
+          GOOGLE_WEB_CLIENT_ID: ci-client.apps.googleusercontent.com
+          CLOUDINARY_CLOUD_NAME: ci-cloud
+          CLOUDINARY_API_KEY: ci-key
+          CLOUDINARY_API_SECRET: ci-secret
         run: pnpm run test
 
   deploy:
@@ -150,6 +160,12 @@ jobs:
         if: ${{ secrets.DATABASE_URL != '' }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ACCESS_TOKEN_SECRET: ${{ secrets.ACCESS_TOKEN_SECRET || 'ci_access_token_secret_at_least_32_characters' }}
+          REFRESH_TOKEN_SECRET: ${{ secrets.REFRESH_TOKEN_SECRET || 'ci_refresh_token_secret_at_least_32_characters' }}
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID || 'ci-client.apps.googleusercontent.com' }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME || 'ci-cloud' }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY || 'ci-key' }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET || 'ci-secret' }}
         run: pnpm run db:migrate
 
       - name: Complete Deployment Verification
