@@ -2,6 +2,7 @@ package com.als.presence.ui.dashboard.owner.modals
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,12 +17,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -33,6 +36,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,13 +47,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.als.presence.core.designsystem.PresenceDesign
 import com.als.presence.data.model.CreateShiftAssignmentRequest
 import com.als.presence.data.model.ShiftTemplateDto
 import com.als.presence.data.model.StaffDto
 import com.als.presence.ui.dashboard.common.Dates
-import com.als.presence.ui.dashboard.common.Money
 import com.als.presence.ui.dashboard.common.PresenceButton
 import com.als.presence.ui.dashboard.common.PresenceSize
 import com.als.presence.ui.dashboard.common.PresenceTextField
@@ -63,22 +67,22 @@ data class ShiftPaymentState(
     val startTime: String,
     val endTime: String,
     val isEnabled: Boolean = false,
-    val isEditing: Boolean = false,
-    val presentPay: String = "600",
-    val halfDayPay: String = "300",
-    val leavePay: String = "600",
+    val presentPay: String = "0",
+    val halfDayPay: String = "0",
+    val leavePay: String = "0",
     val absentPay: String = "0"
 )
 
 data class DayCardState(
     val dayInfo: DayInfo,
-    val isDayEnabled: Boolean = true,
+    val isDayEnabled: Boolean = false,
     val shiftStates: List<ShiftPaymentState> = emptyList()
 )
 
 /**
  * Assigns a shift schedule and payment rules directly to a staff member or manager.
- * Supports per-shift various payment rates on 7-day cards and global unworked payment rules.
+ * Supports per-shift payment rates on 7-day cards and global unworked payment rules.
+ * Shifts and days start disabled, configured via a compact sub-modal with clear field labels.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,7 +117,7 @@ fun AssignShiftWithRulesModal(
 
     val startDate = remember { Dates.todayIso() }
 
-    // Initialize 7 day cards, each having its list of available premises shifts
+    // Initialize 7 day cards - all disabled initially, defaults to "0" if nothing from server
     var dayCardStates by remember(availableTemplates) {
         mutableStateOf(
             WeekDaysList.map { dayInfo ->
@@ -122,38 +126,81 @@ fun AssignShiftWithRulesModal(
                     days.isNullOrEmpty() || days.contains(dayInfo.dayOfWeek)
                 }
 
-                val shiftStates = matchingShifts.mapIndexed { shiftIndex, template ->
+                val shiftStates = matchingShifts.map { template ->
                     ShiftPaymentState(
                         templateId = template.id,
                         templateName = template.name,
                         startTime = template.startTime,
                         endTime = template.endTime,
-                        isEnabled = shiftIndex == 0,
-                        presentPay = "600",
-                        halfDayPay = "300",
-                        leavePay = "600",
+                        isEnabled = false,
+                        presentPay = "0",
+                        halfDayPay = "0",
+                        leavePay = "0",
                         absentPay = "0"
                     )
                 }
 
                 DayCardState(
                     dayInfo = dayInfo,
-                    isDayEnabled = shiftStates.any { it.isEnabled },
+                    isDayEnabled = false,
                     shiftStates = shiftStates
                 )
             }
         )
     }
 
-    // Global payment rules state
+    // Active shift being configured in sub-modal: Pair(dayIndex, shiftIndex)
+    var activeConfigTarget by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+
+    // Global payment rules state (defaults to "0")
     var isEditingGlobal by remember { mutableStateOf(false) }
-    var holidayPay by remember { mutableStateOf("600") }
-    var offDayPay by remember { mutableStateOf("600") }
+    var holidayPay by remember { mutableStateOf("0") }
+    var offDayPay by remember { mutableStateOf("0") }
+
+    // Sub-modal for configuring shift rates
+    activeConfigTarget?.let { (dayIdx, shiftIdx) ->
+        val dayCard = dayCardStates.getOrNull(dayIdx)
+        val shiftState = dayCard?.shiftStates?.getOrNull(shiftIdx)
+        if (dayCard != null && shiftState != null) {
+            ConfigureShiftRatesSubModal(
+                dayName = dayCard.dayInfo.fullName,
+                shiftState = shiftState,
+                onDismiss = { activeConfigTarget = null },
+                onSave = { isEnabled, presentPay, halfDayPay, leavePay, absentPay ->
+                    dayCardStates = dayCardStates.mapIndexed { dIdx, dCard ->
+                        if (dIdx == dayIdx) {
+                            val updatedShifts = dCard.shiftStates.mapIndexed { sIdx, sState ->
+                                if (sIdx == shiftIdx) {
+                                    sState.copy(
+                                        isEnabled = isEnabled,
+                                        presentPay = presentPay.ifBlank { "0" },
+                                        halfDayPay = halfDayPay.ifBlank { "0" },
+                                        leavePay = leavePay.ifBlank { "0" },
+                                        absentPay = absentPay.ifBlank { "0" }
+                                    )
+                                } else {
+                                    sState
+                                }
+                            }
+                            val hasEnabledShift = updatedShifts.any { it.isEnabled }
+                            dCard.copy(
+                                isDayEnabled = if (isEnabled) true else hasEnabledShift,
+                                shiftStates = updatedShifts
+                            )
+                        } else {
+                            dCard
+                        }
+                    }
+                    activeConfigTarget = null
+                }
+            )
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(
@@ -161,8 +208,8 @@ fun AssignShiftWithRulesModal(
                 .fillMaxWidth()
                 .heightIn(max = 720.dp)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
                 text = "Assign Shift & Payment Rules",
@@ -172,7 +219,7 @@ fun AssignShiftWithRulesModal(
             )
 
             Text(
-                text = "Configure weekly shift schedules and per-shift attendance payment rates for your workforce.",
+                text = "Select an employee, enable working days, and tap to configure shift payment rates.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -200,21 +247,21 @@ fun AssignShiftWithRulesModal(
             // Target Premises Info Badge
             if (selectedStaff?.premisesName != null) {
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             Icons.Default.LocationOn,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "Assigned Premises: ${Dates.cleanPremisesName(selectedStaff.premisesName)}",
                             style = MaterialTheme.typography.bodySmall,
@@ -226,7 +273,7 @@ fun AssignShiftWithRulesModal(
             }
 
             // 7 Day Cards Section
-            Text("Weekly Day Cards (Per-Shift Payment Rates)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            Text("Weekly Schedule & Shift Rates", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             if (availableTemplates.isEmpty()) {
                 Text(
                     text = if (selectedStaff?.premisesName != null)
@@ -243,52 +290,17 @@ fun AssignShiftWithRulesModal(
                         onToggleDayEnabled = { isDayEnabled ->
                             dayCardStates = dayCardStates.toMutableList().apply {
                                 val currentDay = this[dayIndex]
-                                val updatedShifts = currentDay.shiftStates.mapIndexed { idx, shift ->
-                                    shift.copy(
-                                        isEnabled = if (isDayEnabled) {
-                                            if (currentDay.shiftStates.none { it.isEnabled }) idx == 0 else shift.isEnabled
-                                        } else {
-                                            false
-                                        }
-                                    )
+                                val updatedShifts = currentDay.shiftStates.map { shift ->
+                                    if (!isDayEnabled) shift.copy(isEnabled = false) else shift
                                 }
-                                val hasEnabledShift = updatedShifts.any { it.isEnabled }
                                 this[dayIndex] = currentDay.copy(
-                                    isDayEnabled = isDayEnabled && hasEnabledShift,
+                                    isDayEnabled = isDayEnabled,
                                     shiftStates = updatedShifts
                                 )
                             }
                         },
-                        onToggleShiftEnabled = { shiftIndex, isEnabled ->
-                            dayCardStates = dayCardStates.toMutableList().apply {
-                                val currentDay = this[dayIndex]
-                                val updatedShifts = currentDay.shiftStates.toMutableList()
-                                updatedShifts[shiftIndex] = updatedShifts[shiftIndex].copy(isEnabled = isEnabled)
-                                val hasAnyEnabled = updatedShifts.any { it.isEnabled }
-                                this[dayIndex] = currentDay.copy(
-                                    isDayEnabled = hasAnyEnabled,
-                                    shiftStates = updatedShifts
-                                )
-                            }
-                        },
-                        onToggleShiftEditing = { shiftIndex ->
-                            dayCardStates = dayCardStates.toMutableList().apply {
-                                val currentShifts = this[dayIndex].shiftStates.toMutableList()
-                                currentShifts[shiftIndex] = currentShifts[shiftIndex].copy(isEditing = !currentShifts[shiftIndex].isEditing)
-                                this[dayIndex] = this[dayIndex].copy(shiftStates = currentShifts)
-                            }
-                        },
-                        onUpdateShiftRates = { shiftIndex, present, halfDay, leave, absent ->
-                            dayCardStates = dayCardStates.toMutableList().apply {
-                                val currentShifts = this[dayIndex].shiftStates.toMutableList()
-                                currentShifts[shiftIndex] = currentShifts[shiftIndex].copy(
-                                    presentPay = present,
-                                    halfDayPay = halfDay,
-                                    leavePay = leave,
-                                    absentPay = absent
-                                )
-                                this[dayIndex] = this[dayIndex].copy(shiftStates = currentShifts)
-                            }
+                        onOpenConfig = { shiftIndex ->
+                            activeConfigTarget = Pair(dayIndex, shiftIndex)
                         }
                     )
                 }
@@ -297,13 +309,13 @@ fun AssignShiftWithRulesModal(
             // Global Unworked Payment Rules
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             ) {
                 Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -313,7 +325,7 @@ fun AssignShiftWithRulesModal(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Global Unworked Payment Rules",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
@@ -332,23 +344,23 @@ fun AssignShiftWithRulesModal(
                         )
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         PresenceTextField(
                             value = offDayPay,
                             onValueChange = { offDayPay = it.filter { ch -> ch.isDigit() } },
-                            label = "Weekly Off Rate (₹)",
+                            label = "Weekly Off (₹)",
                             enabled = isEditingGlobal,
                             modifier = Modifier.weight(1f)
                         )
                         PresenceTextField(
                             value = holidayPay,
                             onValueChange = { holidayPay = it.filter { ch -> ch.isDigit() } },
-                            label = "Public Holiday Rate (₹)",
+                            label = "Public Holiday (₹)",
                             enabled = isEditingGlobal,
                             modifier = Modifier.weight(1f)
                         )
@@ -377,15 +389,15 @@ fun AssignShiftWithRulesModal(
                     dayCard.shiftStates.filter { it.isEnabled }.forEach { shiftState ->
                         val key = AssignmentKey(
                             templateId = shiftState.templateId,
-                            presentPay = shiftState.presentPay,
-                            halfDayPay = shiftState.halfDayPay,
-                            leavePay = shiftState.leavePay,
-                            absentPay = shiftState.absentPay
+                            presentPay = shiftState.presentPay.ifBlank { "0" },
+                            halfDayPay = shiftState.halfDayPay.ifBlank { "0" },
+                            leavePay = shiftState.leavePay.ifBlank { "0" },
+                            absentPay = shiftState.absentPay.ifBlank { "0" }
                         )
                         map.getOrPut(key) { mutableListOf() }.add(dayCard.dayInfo.dayOfWeek)
                     }
                 }
-                map.map { (key, days) ->
+                map.map { (key, _) ->
                     CreateShiftAssignmentRequest(
                         shiftId = key.templateId,
                         presentPay = key.presentPay.toDoubleOrNull() ?: 0.0,
@@ -406,21 +418,21 @@ fun AssignShiftWithRulesModal(
                             compiledAssignments,
                             startDate,
                             targetPremisesId,
-                            holidayPay,
-                            offDayPay
+                            holidayPay.ifBlank { "0" },
+                            offDayPay.ifBlank { "0" }
                         )
                     }
                 },
                 enabled = selectedStaffId != null && compiledAssignments.isNotEmpty(),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp),
-                shape = RoundedCornerShape(12.dp)
+                    .height(46.dp),
+                shape = RoundedCornerShape(10.dp)
             ) {
                 Text("Submit Shift & Payment Rules", fontWeight = FontWeight.Bold)
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -429,19 +441,22 @@ fun AssignShiftWithRulesModal(
 private fun DayCardWithShifts(
     dayCardState: DayCardState,
     onToggleDayEnabled: (Boolean) -> Unit,
-    onToggleShiftEnabled: (shiftIndex: Int, isEnabled: Boolean) -> Unit,
-    onToggleShiftEditing: (shiftIndex: Int) -> Unit,
-    onUpdateShiftRates: (shiftIndex: Int, present: String, halfDay: String, leave: String, absent: String) -> Unit
+    onOpenConfig: (shiftIndex: Int) -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        shape = RoundedCornerShape(12.dp),
+        color = if (dayCardState.isDayEnabled) MaterialTheme.colorScheme.surface
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+        border = BorderStroke(
+            if (dayCardState.isDayEnabled) 1.5.dp else 1.dp,
+            if (dayCardState.isDayEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+        )
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // Day Header Row with Switch
             Row(
@@ -455,33 +470,37 @@ private fun DayCardWithShifts(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(32.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
+                            .background(
+                                if (dayCardState.isDayEnabled) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = dayCardState.dayInfo.shortName,
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = if (dayCardState.isDayEnabled) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
 
                     Column {
                         Text(
                             text = dayCardState.dayInfo.fullName,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )
                         val activeShiftsCount = dayCardState.shiftStates.count { it.isEnabled }
                         Text(
                             text = if (dayCardState.isDayEnabled)
-                                if (activeShiftsCount > 0) "$activeShiftsCount shift(s) configured" else "No shifts active"
+                                if (activeShiftsCount > 0) "$activeShiftsCount shift(s) active" else "Tap shift to configure"
                             else "Weekly Off / Day Disabled",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (dayCardState.isDayEnabled) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
                     }
                 }
@@ -494,7 +513,7 @@ private fun DayCardWithShifts(
 
             // Expanded Shifts List when Day is Enabled
             if (dayCardState.isDayEnabled) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
                 if (dayCardState.shiftStates.isEmpty()) {
                     Text(
@@ -504,17 +523,9 @@ private fun DayCardWithShifts(
                     )
                 } else {
                     dayCardState.shiftStates.forEachIndexed { shiftIndex, shiftState ->
-                        ShiftPaymentConfigRow(
+                        ShiftPaymentConfigSummaryRow(
                             shiftState = shiftState,
-                            onToggleEnabled = { isEnabled ->
-                                onToggleShiftEnabled(shiftIndex, isEnabled)
-                            },
-                            onToggleEditing = {
-                                onToggleShiftEditing(shiftIndex)
-                            },
-                            onUpdateRates = { present, halfDay, leave, absent ->
-                                onUpdateShiftRates(shiftIndex, present, halfDay, leave, absent)
-                            }
+                            onClick = { onOpenConfig(shiftIndex) }
                         )
                     }
                 }
@@ -524,127 +535,238 @@ private fun DayCardWithShifts(
 }
 
 @Composable
-private fun ShiftPaymentConfigRow(
+private fun ShiftPaymentConfigSummaryRow(
     shiftState: ShiftPaymentState,
-    onToggleEnabled: (Boolean) -> Unit,
-    onToggleEditing: () -> Unit,
-    onUpdateRates: (present: String, halfDay: String, leave: String, absent: String) -> Unit
+    onClick: () -> Unit
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(10.dp),
+        color = if (shiftState.isEnabled) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
+        border = BorderStroke(
+            if (shiftState.isEnabled) 1.5.dp else 1.dp,
+            if (shiftState.isEnabled) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+        )
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Shift Header Row with Switch
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Text(
                         text = shiftState.templateName,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        color = PresenceDesign.Ink
+                        color = if (shiftState.isEnabled) PresenceDesign.Ink else PresenceDesign.Ink.copy(alpha = 0.6f)
                     )
                     Text(
-                        text = "${Dates.formatTime(shiftState.startTime)} – ${Dates.formatTime(shiftState.endTime)}",
+                        text = "• ${Dates.formatTime(shiftState.startTime)} – ${Dates.formatTime(shiftState.endTime)}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = if (shiftState.isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         fontWeight = FontWeight.Medium
                     )
                 }
 
-                Switch(
-                    checked = shiftState.isEnabled,
-                    onCheckedChange = onToggleEnabled
-                )
-            }
-
-            // Rates Config when Shift is Enabled
-            if (shiftState.isEnabled) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                if (shiftState.isEnabled) {
+                    val pres = shiftState.presentPay.ifBlank { "0" }
+                    val half = shiftState.halfDayPay.ifBlank { "0" }
+                    val leave = shiftState.leavePay.ifBlank { "0" }
+                    val abs = shiftState.absentPay.ifBlank { "0" }
                     Text(
-                        text = "Attendance Rates for ${shiftState.templateName}",
+                        text = "Present: ₹$pres • Half: ₹$half • Leave: ₹$leave • Absent: ₹$abs",
                         style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = PresenceDesign.LabelText
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
                     )
-
-                    PresenceButton(
-                        label = if (shiftState.isEditing) "Save" else "Edit",
-                        onClick = onToggleEditing,
-                        variant = if (shiftState.isEditing) PresenceVariant.Primary else PresenceVariant.Secondary,
-                        size = PresenceSize.Sm,
-                        icon = if (shiftState.isEditing) Icons.Default.Check else Icons.Default.Edit
+                } else {
+                    Text(
+                        text = "Disabled • Tap to configure rates",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
                 }
+            }
 
-                // 4 Payment Fields
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        PresenceTextField(
-                            value = shiftState.presentPay,
-                            onValueChange = { present ->
-                                onUpdateRates(present, shiftState.halfDayPay, shiftState.leavePay, shiftState.absentPay)
-                            },
-                            label = "Present Rate (₹)",
-                            enabled = shiftState.isEditing,
-                            modifier = Modifier.weight(1f)
-                        )
-                        PresenceTextField(
-                            value = shiftState.halfDayPay,
-                            onValueChange = { halfDay ->
-                                onUpdateRates(shiftState.presentPay, halfDay, shiftState.leavePay, shiftState.absentPay)
-                            },
-                            label = "Half-Day Rate (₹)",
-                            enabled = shiftState.isEditing,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+            Spacer(modifier = Modifier.width(6.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        PresenceTextField(
-                            value = shiftState.leavePay,
-                            onValueChange = { leave ->
-                                onUpdateRates(shiftState.presentPay, shiftState.halfDayPay, leave, shiftState.absentPay)
-                            },
-                            label = "Leave Rate (₹)",
-                            enabled = shiftState.isEditing,
-                            modifier = Modifier.weight(1f)
-                        )
-                        PresenceTextField(
-                            value = shiftState.absentPay,
-                            onValueChange = { absent ->
-                                onUpdateRates(shiftState.presentPay, shiftState.halfDayPay, shiftState.leavePay, absent)
-                            },
-                            label = "Absent Pay (₹)",
-                            enabled = shiftState.isEditing,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = if (shiftState.isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = if (shiftState.isEnabled) Icons.Default.Edit else Icons.Default.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = if (shiftState.isEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = if (shiftState.isEnabled) "Edit" else "Configure",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (shiftState.isEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ConfigureShiftRatesSubModal(
+    dayName: String,
+    shiftState: ShiftPaymentState,
+    onDismiss: () -> Unit,
+    onSave: (
+        isEnabled: Boolean,
+        presentPay: String,
+        halfDayPay: String,
+        leavePay: String,
+        absentPay: String
+    ) -> Unit
+) {
+    var isEnabled by remember { mutableStateOf(shiftState.isEnabled) }
+    var presentPay by remember { mutableStateOf(shiftState.presentPay.ifBlank { "0" }) }
+    var halfDayPay by remember { mutableStateOf(shiftState.halfDayPay.ifBlank { "0" }) }
+    var leavePay by remember { mutableStateOf(shiftState.leavePay.ifBlank { "0" }) }
+    var absentPay by remember { mutableStateOf(shiftState.absentPay.ifBlank { "0" }) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text(
+                    text = "Configure ${shiftState.templateName}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "$dayName • ${Dates.formatTime(shiftState.startTime)} – ${Dates.formatTime(shiftState.endTime)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Enable switch
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isEnabled) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Enable Shift", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                            Text("Assign this shift to $dayName", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = isEnabled,
+                            onCheckedChange = { isEnabled = it }
+                        )
+                    }
+                }
+
+                if (isEnabled) {
+                    Text("Attendance Outcome Rates (₹)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = presentPay,
+                            onValueChange = { presentPay = it.filter { ch -> ch.isDigit() } },
+                            label = { Text("Present (₹)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = halfDayPay,
+                            onValueChange = { halfDayPay = it.filter { ch -> ch.isDigit() } },
+                            label = { Text("Half-Day (₹)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = leavePay,
+                            onValueChange = { leavePay = it.filter { ch -> ch.isDigit() } },
+                            label = { Text("Leave (₹)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = absentPay,
+                            onValueChange = { absentPay = it.filter { ch -> ch.isDigit() } },
+                            label = { Text("Absent (₹)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSave(isEnabled, presentPay.ifBlank { "0" }, halfDayPay.ifBlank { "0" }, leavePay.ifBlank { "0" }, absentPay.ifBlank { "0" })
+                },
+                enabled = true
+            ) {
+                Text("Save Rates", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
@@ -660,13 +782,13 @@ private fun OptionRow(
             .background(
                 if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
                 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                RoundedCornerShape(12.dp)
+                RoundedCornerShape(10.dp)
             )
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         RadioButton(selected = selected, onClick = onClick)
-        Column(modifier = Modifier.padding(vertical = 6.dp)) {
+        Column(modifier = Modifier.padding(vertical = 4.dp)) {
             Text(title, fontWeight = FontWeight.SemiBold)
             Text(
                 subtitle,

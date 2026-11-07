@@ -23,7 +23,7 @@ object NetworkModule {
      * `10.0.2.2` is the host loopback as seen from the Android emulator. Override
      * it for a physical device by pointing it at the machine's LAN address.
      */
-    private const val DEFAULT_BASE_URL = PRESENCE_BASE_URL
+    private val DEFAULT_BASE_URL = PRESENCE_BASE_URL
 
     @Provides
     @Singleton

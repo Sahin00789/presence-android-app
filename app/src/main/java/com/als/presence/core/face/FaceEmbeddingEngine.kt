@@ -145,19 +145,29 @@ class FaceEmbeddingEngine @Inject constructor(
         val detection = detectFace(activeModels.detector, bitmap)
             ?: throw FaceModelUnavailableException("No face detected in frame. Please look at the camera.")
 
-        // 1. Pose Estimation Check
+        // 1. Frame Centering Check
+        if (!FacePoseEstimator.isCenteredInFrame(detection.box, bitmap.width, bitmap.height)) {
+            throw FaceModelUnavailableException("Center your face in the camera frame.")
+        }
+
+        // 2. Facial Symmetry Check for CENTER pose
+        if (targetPose == "CENTER" && !FacePoseEstimator.isSymmetricallyCentered(detection.landmarks)) {
+            throw FaceModelUnavailableException("Align your face symmetrically facing center.")
+        }
+
+        // 3. Pose Estimation Check
         val estimatedPose = FacePoseEstimator.estimatePose(detection.landmarks)
         if (estimatedPose != targetPose) {
             throw FaceModelUnavailableException("Please look $targetPose. (Currently looking $estimatedPose)")
         }
 
-        // 2. Liveness Check
+        // 4. Liveness Check
         val isLive = FaceLivenessDetector.isLive(bitmap, detection.landmarks)
         if (!isLive) {
             throw FaceModelUnavailableException("Liveness check failed. Blink naturally.")
         }
 
-        // 3. Align and Extract 128-D Embedding
+        // 5. Align and Extract 128-D Embedding
         val aligned = alignFace(bitmap, detection.landmarks)
         try {
             val cropQuality = qualityScore(aligned)
@@ -198,8 +208,23 @@ class FaceEmbeddingEngine @Inject constructor(
             ?: throw FaceModelUnavailableException(
                 "No face detected. Centre your face in the frame and try again."
             )
+
+        // 1. Frame Centering Check
+        if (!FacePoseEstimator.isCenteredInFrame(detection.box, bitmap.width, bitmap.height)) {
+            throw FaceModelUnavailableException(
+                "Centre your face in the camera frame and try again."
+            )
+        }
+
+        // 2. Facial Symmetry Check for Center Pose
+        val estimatedPose = FacePoseEstimator.estimatePose(detection.landmarks)
+        if (estimatedPose == "CENTER" && !FacePoseEstimator.isSymmetricallyCentered(detection.landmarks)) {
+            throw FaceModelUnavailableException(
+                "Align your face symmetrically facing center and try again."
+            )
+        }
             
-        // Check for Multi-Pose Liveness
+        // 3. Check for Multi-Pose Liveness
         val isLive = FaceLivenessDetector.isLive(bitmap, detection.landmarks)
         if (!isLive) {
             throw FaceModelUnavailableException(

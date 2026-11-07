@@ -150,48 +150,57 @@ fun LoginScreen(
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode != Activity.RESULT_OK) {
-            isGoogleSigningIn = false
-            return@rememberLauncherForActivityResult
-        }
-        try {
-            val account = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-                .getResult(ApiException::class.java)
-            when (googleSignInPurpose) {
-                GoogleSignInPurpose.LOGIN -> {
-                    val idToken = account.idToken
-                    val code = account.serverAuthCode
-                    if (idToken.isNullOrBlank() && code.isNullOrBlank()) {
+        val intentData = result.data
+        if (intentData != null) {
+            try {
+                val account = GoogleSignIn.getSignedInAccountFromIntent(intentData)
+                    .getResult(ApiException::class.java)
+                when (googleSignInPurpose) {
+                    GoogleSignInPurpose.LOGIN -> {
+                        val idToken = account.idToken
+                        val code = account.serverAuthCode
+                        if (idToken.isNullOrBlank() && code.isNullOrBlank()) {
+                            isGoogleSigningIn = false
+                            viewModel.showError("Google did not return a credential. Please try again.")
+                        } else {
+                            viewModel.loginWithGoogle(idToken = idToken, serverAuthCode = code)
+                        }
+                    }
+                    GoogleSignInPurpose.OWNER_REGISTRATION -> {
                         isGoogleSigningIn = false
-                        viewModel.showError("Google did not return a credential. Please try again.")
-                    } else {
-                        viewModel.loginWithGoogle(idToken = idToken, serverAuthCode = code)
+                        val idToken = account.idToken
+                        if (idToken.isNullOrBlank() || account.email.isNullOrBlank()) {
+                            viewModel.showError("Google did not return the verified account details. Please try again.")
+                        } else {
+                            googleRegistrationIdentity = GoogleRegistrationIdentity(
+                                idToken = idToken,
+                                email = account.email.orEmpty(),
+                                fullName = account.displayName.orEmpty()
+                            )
+                        }
                     }
                 }
-                GoogleSignInPurpose.OWNER_REGISTRATION -> {
-                    isGoogleSigningIn = false
-                    val idToken = account.idToken
-                    if (idToken.isNullOrBlank() || account.email.isNullOrBlank()) {
-                        viewModel.showError("Google did not return the verified account details. Please try again.")
-                    } else {
-                        googleRegistrationIdentity = GoogleRegistrationIdentity(
-                            idToken = idToken,
-                            email = account.email.orEmpty(),
-                            fullName = account.displayName.orEmpty()
-                        )
+            } catch (error: ApiException) {
+                isGoogleSigningIn = false
+                val statusCode = error.statusCode
+                if (statusCode != 12501 && statusCode != 16) {
+                    val friendlyMessage = when (statusCode) {
+                        10 -> "Google Developer Error (10): Register your app's package name 'com.als.presence' and debug SHA-1 fingerprint in Google Cloud Console."
+                        7 -> "Google Network Error (7): Network unavailable or Google services unreachable. Please check your connection."
+                        12500 -> "Google Sign-In Error (12500): Google Play Services internal error. Ensure Google Play Services is updated."
+                        else -> "Google sign-in failed (Code $statusCode). Please try again."
                     }
+                    viewModel.showError(friendlyMessage)
                 }
+            } catch (error: Exception) {
+                isGoogleSigningIn = false
+                viewModel.showError("Google sign-in failed: ${error.localizedMessage ?: "Unknown error"}")
             }
-        } catch (error: ApiException) {
+        } else {
             isGoogleSigningIn = false
-            val friendlyMessage = when (error.statusCode) {
-                10 -> "Google Developer Error (10): Register your app's package name 'com.als.presence' and debug SHA-1 fingerprint in Google Cloud Console."
-                7 -> "Google Network Error (7): Network unavailable or Google services unreachable. Please check your connection."
-                12500 -> "Google Sign-In Error (12500): Google Play Services internal error. Ensure Google Play Services is updated."
-                12501, 16 -> "Google sign-in was cancelled."
-                else -> "Google sign-in failed (Code ${error.statusCode}). Please try again."
+            if (result.resultCode != Activity.RESULT_OK) {
+                // User cancelled or no intent data returned
             }
-            viewModel.showError(friendlyMessage)
         }
     }
 
@@ -246,8 +255,8 @@ fun LoginScreen(
         val otp = otpState
         if (otp != null && loginStep == LoginStep.ENTER_EMAIL && !showOwnerRegistrationWizard) {
             loginStep = LoginStep.ENTER_OTP
-            otpCodeInput = if (com.als.presence.BuildConfig.DEBUG) otp.devOtp.orEmpty() else ""
-            Toast.makeText(context, "OTP sent successfully to ${otp.email}", Toast.LENGTH_SHORT).show()
+            otpCodeInput = ""
+            Toast.makeText(context, "Verification code sent to ${otp.email}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -480,8 +489,8 @@ fun LoginScreen(
                                 uiState = uiState,
                                 otpState = otpState,
                                 isGoogleSigningIn = isGoogleSigningIn,
-                                onRequestOtp = { viewModel.requestOtp(emailInput.trim(), role = Role.EMPLOYEE) },
-                                onVerifyOtp = { viewModel.verifyOtp(email = emailInput.trim(), code = otpCodeInput, role = Role.EMPLOYEE) },
+                                onRequestOtp = { viewModel.requestOtp(emailInput.replace(Regex("[\\s\\u00A0]+"), "").lowercase(), role = Role.EMPLOYEE) },
+                                onVerifyOtp = { viewModel.verifyOtp(email = emailInput.replace(Regex("[\\s\\u00A0]+"), "").lowercase(), code = otpCodeInput, role = Role.EMPLOYEE) },
                                 onBackToEmail = {
                                     loginStep = LoginStep.ENTER_EMAIL
                                     viewModel.resetOtp()
@@ -498,8 +507,8 @@ fun LoginScreen(
                                 uiState = uiState,
                                 otpState = otpState,
                                 isGoogleSigningIn = isGoogleSigningIn,
-                                onRequestOtp = { viewModel.requestOtp(emailInput.trim(), role = Role.OWNER) },
-                                onVerifyOtp = { viewModel.verifyOtp(email = emailInput.trim(), code = otpCodeInput, role = Role.OWNER) },
+                                onRequestOtp = { viewModel.requestOtp(emailInput.replace(Regex("[\\s\\u00A0]+"), "").lowercase(), role = Role.OWNER) },
+                                onVerifyOtp = { viewModel.verifyOtp(email = emailInput.replace(Regex("[\\s\\u00A0]+"), "").lowercase(), code = otpCodeInput, role = Role.OWNER) },
                                 onBackToEmail = {
                                     loginStep = LoginStep.ENTER_EMAIL
                                     viewModel.resetOtp()
@@ -797,7 +806,7 @@ private fun EmployeeLoginContent(
 
             Button(
                 onClick = onRequestOtp,
-                enabled = uiState !is UiState.Loading && emailInput.isNotBlank(),
+                enabled = uiState !is UiState.Loading && emailInput.replace(Regex("[\\s\\u00A0]+"), "").isNotBlank(),
                 colors = ButtonDefaults.buttonColors(containerColor = RoleStaffPrimary),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -828,126 +837,15 @@ private fun EmployeeLoginContent(
             }
         } else {
             // STEP 2: ENTER OTP
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                color = Color(0xFFECFDF5),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color(0xFFA7F3D0))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = Color(0xFF059669),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "OTP sent successfully to $emailInput",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF065F46)
-                    )
-                }
-            }
+            OtpSentConfirmationCard(
+                email = emailInput,
+                primaryColor = RoleStaffPrimary,
+                uiState = uiState,
+                onRequestOtp = onRequestOtp,
+                onChangeEmail = onBackToEmail
+            )
 
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                color = Color(0xFFF8FAFC),
-                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Email,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = RoleStaffPrimary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = "OTP sent to:",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF64748B)
-                            )
-                            Text(
-                                text = emailInput,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0F172A)
-                            )
-                        }
-                    }
-
-                    TextButton(
-                        onClick = onBackToEmail,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit",
-                            modifier = Modifier.size(14.dp),
-                            tint = RoleStaffPrimary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Change",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = RoleStaffPrimary
-                        )
-                    }
-                }
-            }
-
-            if (com.als.presence.BuildConfig.DEBUG && !otpState?.devOtp.isNullOrEmpty()) {
-                otpState?.devOtp?.let { devOtp ->
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        color = Color(0xFFEFF6FF),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color(0xFFBFDBFE))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Dev OTP Code:",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF1D4ED8)
-                            )
-                            Text(
-                                text = devOtp,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Black,
-                                color = Color(0xFF1E40AF),
-                                letterSpacing = 3.sp
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             OutlinedTextField(
                 value = otpCodeInput,
@@ -1223,7 +1121,7 @@ private fun OwnerLoginContent(
 
             Button(
                 onClick = onRequestOtp,
-                enabled = uiState !is UiState.Loading && emailInput.isNotBlank(),
+                enabled = uiState !is UiState.Loading && emailInput.replace(Regex("[\\s\\u00A0]+"), "").isNotBlank(),
                 colors = ButtonDefaults.buttonColors(containerColor = RoleOwnerPrimary),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1254,126 +1152,15 @@ private fun OwnerLoginContent(
             }
         } else {
             // STEP 2: ENTER OTP
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                color = Color(0xFFECFDF5),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color(0xFFA7F3D0))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = Color(0xFF059669),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "OTP sent successfully to $emailInput",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF065F46)
-                    )
-                }
-            }
+            OtpSentConfirmationCard(
+                email = emailInput,
+                primaryColor = RoleOwnerPrimary,
+                uiState = uiState,
+                onRequestOtp = onRequestOtp,
+                onChangeEmail = onBackToEmail
+            )
 
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                color = Color(0xFFF8FAFC),
-                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Email,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = RoleOwnerPrimary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = "OTP sent to:",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF64748B)
-                            )
-                            Text(
-                                text = emailInput,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0F172A)
-                            )
-                        }
-                    }
-
-                    TextButton(
-                        onClick = onBackToEmail,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit",
-                            modifier = Modifier.size(14.dp),
-                            tint = RoleOwnerPrimary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Change",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = RoleOwnerPrimary
-                        )
-                    }
-                }
-            }
-
-            if (com.als.presence.BuildConfig.DEBUG && !otpState?.devOtp.isNullOrEmpty()) {
-                otpState?.devOtp?.let { devOtp ->
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        color = Color(0xFFF5F3FF),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color(0xFFDDD6FE))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Dev OTP Code:",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF6D28D9)
-                            )
-                            Text(
-                                text = devOtp,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Black,
-                                color = Color(0xFF5B21B6),
-                                letterSpacing = 3.sp
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             OutlinedTextField(
                 value = otpCodeInput,
@@ -1805,5 +1592,140 @@ private fun ReviewRow(label: String, value: String) {
             fontWeight = FontWeight.Bold,
             color = Color(0xFF20243A)
         )
+    }
+}
+
+@Composable
+private fun OtpSentConfirmationCard(
+    email: String,
+    primaryColor: Color,
+    uiState: UiState<User>,
+    onRequestOtp: () -> Unit,
+    onChangeEmail: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
+        border = BorderStroke(1.dp, Color(0xFFBBF7D0))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFDCFCE7)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Email,
+                        contentDescription = null,
+                        tint = Color(0xFF15803D),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "OTP Sent to Mail",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF14532D)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                    Text(
+                        text = email,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A)
+                    )
+                }
+
+                TextButton(
+                    onClick = onChangeEmail,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit Email",
+                        modifier = Modifier.size(14.dp),
+                        tint = primaryColor
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Change",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = primaryColor
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "We sent a 6-digit verification code to your email. Please check your inbox and spam folder.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF475569)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            HorizontalDivider(color = Color(0xFFDCFCE7))
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Didn't receive the email?",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF64748B)
+                )
+
+                TextButton(
+                    onClick = onRequestOtp,
+                    enabled = uiState !is UiState.Loading,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    if (uiState is UiState.Loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            color = primaryColor,
+                            strokeWidth = 1.5.dp
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Text(
+                        text = "Resend Code",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (uiState is UiState.Loading) Color(0xFF94A3B8) else primaryColor
+                    )
+                }
+            }
+        }
     }
 }

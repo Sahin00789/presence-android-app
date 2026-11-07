@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,14 +17,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import com.als.presence.ui.dashboard.owner.modals.CreateShiftModal
+import com.als.presence.ui.dashboard.owner.modals.EditShiftModal
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -56,7 +62,6 @@ import com.als.presence.ui.dashboard.common.MessageSnackbar
 import com.als.presence.ui.dashboard.common.PresenceBadge
 import com.als.presence.ui.dashboard.common.PresenceButton
 import com.als.presence.ui.dashboard.common.PresenceCard
-import com.als.presence.ui.dashboard.common.PresenceDetailRow
 import com.als.presence.ui.dashboard.common.PresenceErrorState
 import com.als.presence.ui.dashboard.common.PresenceFieldGroup
 import com.als.presence.ui.dashboard.common.PresenceIconButton
@@ -75,7 +80,7 @@ data class DayInfo(
     val dayOfWeek: Int,
     val shortName: String,
     val fullName: String,
-    val isWeekend: Boolean
+    val isWeekend: Boolean = false
 )
 
 private data class EditingShiftState(
@@ -84,18 +89,32 @@ private data class EditingShiftState(
 )
 
 val WeekDaysList = listOf(
-    DayInfo(1, "Mon", "Monday", false),
-    DayInfo(2, "Tue", "Tuesday", false),
-    DayInfo(3, "Wed", "Wednesday", false),
-    DayInfo(4, "Thu", "Thursday", false),
-    DayInfo(5, "Fri", "Friday", false),
-    DayInfo(6, "Sat", "Saturday", true),
-    DayInfo(0, "Sun", "Sunday", true)
+    DayInfo(1, "Mon", "Monday"),
+    DayInfo(2, "Tue", "Tuesday"),
+    DayInfo(3, "Wed", "Wednesday"),
+    DayInfo(4, "Thu", "Thursday"),
+    DayInfo(5, "Fri", "Friday"),
+    DayInfo(6, "Sat", "Saturday"),
+    DayInfo(0, "Sun", "Sunday")
 )
+
+/**
+ * Converts half-day threshold duration in minutes to HH:MM:SS wall clock time string based on shift startTime.
+ */
+private fun convertMinutesToThresholdTime(startTime: String, thresholdMinutes: Int): String {
+    val parts = startTime.split(":")
+    val startH = parts.getOrNull(0)?.toIntOrNull() ?: 9
+    val startM = parts.getOrNull(1)?.toIntOrNull() ?: 0
+    val totalM = (startH * 60 + startM + thresholdMinutes) % (24 * 60)
+    val h = totalM / 60
+    val m = totalM % 60
+    return String.format(java.util.Locale.US, "%02d:%02d:00", h, m)
+}
 
 /**
  * "Manage Shifts" management screen. 7-Day cards shift schedule with Add button on each day card and Edit on shifts.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShiftManagementScreen(
     onBack: () -> Unit,
@@ -115,6 +134,7 @@ fun ShiftManagementScreen(
         }
     }
 
+    var selectedPremisesId by remember { mutableStateOf<String?>(null) }
     var createForDayOfWeek by remember { mutableStateOf<Int?>(null) }
     var showCreateTemplate by remember { mutableStateOf(false) }
     var editingShiftState by remember { mutableStateOf<EditingShiftState?>(null) }
@@ -123,7 +143,11 @@ fun ShiftManagementScreen(
     val staff = (staffState as? UiState.Success)?.data.orEmpty()
     val premises = (premisesState as? UiState.Success)?.data.orEmpty()
 
-    val filteredTemplates = templates
+    val filteredTemplates = if (selectedPremisesId.isNullOrBlank()) {
+        templates
+    } else {
+        templates.filter { it.premisesId == selectedPremisesId }
+    }
 
     Box {
         PresenceSecondaryScaffold(
@@ -145,9 +169,49 @@ fun ShiftManagementScreen(
                 )
             )
 
+            if (premises.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "Premises Filter",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FilterChip(
+                            selected = selectedPremisesId == null,
+                            onClick = { selectedPremisesId = null },
+                            label = { Text("All Premises") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
+                        premises.forEach { prem ->
+                            FilterChip(
+                                selected = selectedPremisesId == prem.id,
+                                onClick = { selectedPremisesId = prem.id },
+                                label = { Text(Dates.cleanPremisesName(prem.name)) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
             PresenceSectionTitle(
                 title = "Weekly Shift Schedule",
-                description = "7-day view of shifts for the selected premises."
+                description = if (selectedPremisesId == null) "7-day view of shifts for all premises."
+                else "7-day view of shifts for selected premises."
             )
 
             when (val state = templatesState) {
@@ -182,24 +246,27 @@ fun ShiftManagementScreen(
     }
 
     if (showCreateTemplate) {
+        val targetDay = WeekDaysList.find { it.dayOfWeek == (createForDayOfWeek ?: 1) } ?: WeekDaysList.first()
+        val targetPremises = premises.find { it.id == selectedPremisesId } ?: premises.firstOrNull()
+
         CreateShiftModal(
-            initialPremisesId = premises.firstOrNull()?.id,
-            initialDayOfWeek = createForDayOfWeek ?: 1,
-            premisesList = premises,
+            selectedPremises = targetPremises,
+            selectedDay = targetDay,
             onDismiss = {
                 showCreateTemplate = false
                 createForDayOfWeek = null
             },
-            onConfirm = { name, start, end, dayName, halfDayThreshold, premisesId ->
+            onConfirm = { name, start, end, dayName, halfDayThresholdMinutes, premisesId ->
                 showCreateTemplate = false
                 createForDayOfWeek = null
+                val halfDayThresholdTime = convertMinutesToThresholdTime(start, halfDayThresholdMinutes)
                 viewModel.createShift(
                     premisesId = premisesId,
                     shiftName = name,
                     startTime = start,
                     endTime = end,
                     dayName = dayName,
-                    halfDayThreshold = halfDayThreshold
+                    halfDayThreshold = halfDayThresholdTime
                 )
             }
         )
@@ -212,16 +279,17 @@ fun ShiftManagementScreen(
             targetDayOfWeek = activeEditing.dayOfWeek,
             premisesList = premises,
             onDismiss = { editingShiftState = null },
-            onConfirm = { name, start, end, dayName, halfDayThreshold, premisesId, isActive ->
+            onConfirm = { name, start, end, dayName, halfDayThresholdMinutes, _, isActive ->
                 val id = activeEditing.template.id
                 editingShiftState = null
+                val halfDayThresholdTime = convertMinutesToThresholdTime(start, halfDayThresholdMinutes)
                 viewModel.updateShift(
                     id = id,
                     shiftName = name,
                     startTime = start,
                     endTime = end,
                     dayName = dayName,
-                    halfDayThreshold = halfDayThreshold,
+                    halfDayThreshold = halfDayThresholdTime,
                     isActive = isActive
                 )
             },
@@ -255,13 +323,13 @@ private fun DayShiftCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
+                            .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -290,7 +358,7 @@ private fun DayShiftCard(
 
                 if (canManage) {
                     PresenceButton(
-                        label = "Add",
+                        label = "Add Shift",
                         onClick = { onAddShift(dayInfo.dayOfWeek) },
                         variant = PresenceVariant.Secondary,
                         size = PresenceSize.Sm,
@@ -303,7 +371,7 @@ private fun DayShiftCard(
 
             if (shifts.isEmpty()) {
                 Text(
-                    text = "No shifts active on ${dayInfo.fullName}.",
+                    text = "No shifts scheduled for ${dayInfo.fullName}.",
                     style = MaterialTheme.typography.bodySmall,
                     color = PresenceDesign.LabelText,
                     modifier = Modifier.padding(vertical = 4.dp)
@@ -361,18 +429,33 @@ private fun ShiftItemRow(
                     )
                 }
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${Dates.formatTime(template.startTime)} – ${Dates.formatTime(template.endTime)}" +
-                            if (!premisesName.isNullOrBlank()) " • ${Dates.cleanPremisesName(premisesName)}" else "",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Schedule,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "${Dates.formatTime(template.startTime)} – ${Dates.formatTime(template.endTime)}" +
+                                if (!premisesName.isNullOrBlank()) " • ${Dates.cleanPremisesName(premisesName)}" else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     PresenceBadge(
                         label = "Day: ${template.dayName}",
                         tone = PresenceTone.Info
+                    )
+                    PresenceBadge(
+                        label = "Half-Day: ${template.halfDayThresholdMinutes} mins",
+                        tone = PresenceTone.Neutral
                     )
                 }
             }
@@ -385,406 +468,6 @@ private fun ShiftItemRow(
                     onClick = onEditShift
                 )
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DayNameSelector(
-    selectedDayName: String,
-    onDayNameChanged: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val allDaysSet = remember { setOf(1, 2, 3, 4, 5, 6, 0) }
-    val weekdaysSet = remember { setOf(1, 2, 3, 4, 5) }
-    val weekendsSet = remember { setOf(6, 0) }
-
-    fun parseDays(dayNameStr: String): Set<Int> {
-        val dn = dayNameStr.trim()
-        if (dn.isEmpty() || dn.equals("ALL", ignoreCase = true) || dn.equals("Everyday", ignoreCase = true) || dn.equals("Every Day", ignoreCase = true)) {
-            return allDaysSet
-        }
-        if (dn.equals("Weekdays", ignoreCase = true)) return weekdaysSet
-        if (dn.equals("Weekends", ignoreCase = true)) return weekendsSet
-
-        val set = mutableSetOf<Int>()
-        if (dn.contains("Monday", ignoreCase = true) || dn.contains("Mon", ignoreCase = true)) set.add(1)
-        if (dn.contains("Tuesday", ignoreCase = true) || dn.contains("Tue", ignoreCase = true)) set.add(2)
-        if (dn.contains("Wednesday", ignoreCase = true) || dn.contains("Wed", ignoreCase = true)) set.add(3)
-        if (dn.contains("Thursday", ignoreCase = true) || dn.contains("Thu", ignoreCase = true)) set.add(4)
-        if (dn.contains("Friday", ignoreCase = true) || dn.contains("Fri", ignoreCase = true)) set.add(5)
-        if (dn.contains("Saturday", ignoreCase = true) || dn.contains("Sat", ignoreCase = true)) set.add(6)
-        if (dn.contains("Sunday", ignoreCase = true) || dn.contains("Sun", ignoreCase = true)) set.add(0)
-        return if (set.isEmpty()) allDaysSet else set
-    }
-
-    fun formatDays(set: Set<Int>): String {
-        return when {
-            set.size == 7 -> "Everyday"
-            set == weekdaysSet -> "Weekdays"
-            set == weekendsSet -> "Weekends"
-            set.isEmpty() -> "Everyday"
-            else -> {
-                val dayOrder = listOf(1, 2, 3, 4, 5, 6, 0)
-                set.sortedBy { dayOrder.indexOf(it) }
-                    .mapNotNull { dow -> WeekDaysList.find { it.dayOfWeek == dow }?.fullName }
-                    .joinToString(", ")
-            }
-        }
-    }
-
-    var currentSelectedDays by remember(selectedDayName) {
-        mutableStateOf(parseDays(selectedDayName))
-    }
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = "Applicable Days",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            val isEveryday = currentSelectedDays.size == 7
-            FilterChip(
-                selected = isEveryday,
-                onClick = {
-                    val newSet = allDaysSet
-                    currentSelectedDays = newSet
-                    onDayNameChanged(formatDays(newSet))
-                },
-                label = { Text("Everyday") }
-            )
-
-            val isWeekdays = currentSelectedDays == weekdaysSet
-            FilterChip(
-                selected = isWeekdays,
-                onClick = {
-                    val newSet = weekdaysSet
-                    currentSelectedDays = newSet
-                    onDayNameChanged(formatDays(newSet))
-                },
-                label = { Text("Weekdays") }
-            )
-
-            val isWeekends = currentSelectedDays == weekendsSet
-            FilterChip(
-                selected = isWeekends,
-                onClick = {
-                    val newSet = weekendsSet
-                    currentSelectedDays = newSet
-                    onDayNameChanged(formatDays(newSet))
-                },
-                label = { Text("Weekends") }
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            WeekDaysList.forEach { dayInfo ->
-                val isSelected = currentSelectedDays.contains(dayInfo.dayOfWeek)
-                FilterChip(
-                    selected = isSelected,
-                    onClick = {
-                        val newSet = if (isSelected) {
-                            val updated = currentSelectedDays - dayInfo.dayOfWeek
-                            if (updated.isEmpty()) allDaysSet else updated
-                        } else {
-                            currentSelectedDays + dayInfo.dayOfWeek
-                        }
-                        currentSelectedDays = newSet
-                        onDayNameChanged(formatDays(newSet))
-                    },
-                    label = { Text(dayInfo.shortName) }
-                )
-            }
-        }
-
-        Text(
-            text = "Selected: ${formatDays(currentSelectedDays)}",
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.primary
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CreateShiftModal(
-    initialPremisesId: String? = null,
-    initialDayOfWeek: Int = 1,
-    premisesList: List<PremisesDto> = emptyList(),
-    onDismiss: () -> Unit,
-    onConfirm: (
-        name: String,
-        start: String,
-        end: String,
-        dayName: String,
-        halfDayThreshold: String,
-        premisesId: String
-    ) -> Unit
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    var name by remember { mutableStateOf("") }
-    var start by remember { mutableStateOf("09:00") }
-    var end by remember { mutableStateOf("18:00") }
-    var halfDayThreshold by remember { mutableStateOf("11:00") }
-
-    val dayObj = WeekDaysList.find { it.dayOfWeek == initialDayOfWeek }
-    var dayName by remember(initialDayOfWeek) { mutableStateOf(dayObj?.fullName ?: "Monday") }
-
-    val targetPremisesId = initialPremisesId ?: premisesList.firstOrNull()?.id.orEmpty()
-
-    val valid = name.trim().length >= 2 &&
-            targetPremisesId.isNotBlank() &&
-            start.matches(Regex("^\\d{2}:\\d{2}$")) &&
-            end.matches(Regex("^\\d{2}:\\d{2}$")) &&
-            halfDayThreshold.matches(Regex("^\\d{2}:\\d{2}$"))
-
-    val premiseObj = premisesList.find { it.id == targetPremisesId }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        containerColor = MaterialTheme.colorScheme.surface
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 680.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Text(
-                text = "New Shift",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            PresenceFieldGroup(title = "Scope Details") {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (premiseObj != null) {
-                        PresenceDetailRow(label = "Premises", value = Dates.cleanPremisesName(premiseObj.name))
-                    }
-                    PresenceDetailRow(label = "Selected Day", value = dayName)
-                }
-            }
-
-            PresenceFieldGroup(title = "Details & Days") {
-                PresenceTextField(value = name, onValueChange = { name = it }, label = "Shift name")
-                DayNameSelector(
-                    selectedDayName = dayName,
-                    onDayNameChanged = { dayName = it }
-                )
-            }
-
-            PresenceFieldGroup(title = "Timing & Thresholds") {
-                PresenceTextField(
-                    value = start,
-                    onValueChange = { start = it },
-                    label = "Start time (HH:MM)"
-                )
-                PresenceTextField(
-                    value = end,
-                    onValueChange = { end = it },
-                    label = "End time (HH:MM)"
-                )
-                PresenceTextField(
-                    value = halfDayThreshold,
-                    onValueChange = { halfDayThreshold = it },
-                    label = "Half-day threshold (HH:MM)"
-                )
-                Text(
-                    text = "Cutoff time (e.g. 11:00 or 13:00) when shift counts as Half-Day if clock-out is before this threshold.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = PresenceDesign.LabelText,
-                    modifier = Modifier.padding(start = 4.dp, top = 2.dp)
-                )
-            }
-
-            PresenceButton(
-                label = "Create Shift",
-                onClick = {
-                    onConfirm(
-                        name.trim(),
-                        start.trim(),
-                        end.trim(),
-                        dayName.trim(),
-                        halfDayThreshold.trim(),
-                        targetPremisesId
-                    )
-                },
-                enabled = valid,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun EditShiftModal(
-    template: ShiftTemplateDto,
-    targetDayOfWeek: Int? = null,
-    premisesList: List<PremisesDto> = emptyList(),
-    onDismiss: () -> Unit,
-    onConfirm: (
-        name: String,
-        start: String,
-        end: String,
-        dayName: String,
-        halfDayThreshold: String,
-        premisesId: String?,
-        isActive: Boolean
-    ) -> Unit,
-    onDelete: (() -> Unit)? = null
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    val targetDayObj = targetDayOfWeek?.let { dow -> WeekDaysList.find { it.dayOfWeek == dow } }
-    var name by remember(template) { mutableStateOf(template.name) }
-    var dayName by remember(template, targetDayOfWeek) {
-        mutableStateOf(targetDayObj?.fullName ?: template.dayName)
-    }
-    var start by remember(template) { mutableStateOf(template.startTime.take(5)) }
-    var end by remember(template) { mutableStateOf(template.endTime.take(5)) }
-    var halfDayThreshold by remember(template) { mutableStateOf(template.halfDayThreshold.take(5)) }
-    var isActive by remember(template) { mutableStateOf(template.isActive) }
-
-    val valid = name.trim().length >= 2 &&
-            start.matches(Regex("^\\d{2}:\\d{2}$")) &&
-            end.matches(Regex("^\\d{2}:\\d{2}$")) &&
-            halfDayThreshold.matches(Regex("^\\d{2}:\\d{2}$"))
-
-    val premiseObj = premisesList.find { it.id == template.premisesId }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        containerColor = MaterialTheme.colorScheme.surface
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 680.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Text(
-                text = "Edit Shift",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            PresenceFieldGroup(title = "Scope Details") {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (premiseObj != null) {
-                        PresenceDetailRow(label = "Premises", value = Dates.cleanPremisesName(premiseObj.name))
-                    }
-                    PresenceDetailRow(label = "Applicable Days", value = dayName)
-                }
-            }
-
-            PresenceFieldGroup(title = "Details & Days") {
-                PresenceTextField(value = name, onValueChange = { name = it }, label = "Shift name")
-                DayNameSelector(
-                    selectedDayName = dayName,
-                    onDayNameChanged = { dayName = it }
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Active status",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Switch(
-                        checked = isActive,
-                        onCheckedChange = { isActive = it }
-                    )
-                }
-            }
-
-            PresenceFieldGroup(title = "Timing & Thresholds") {
-                PresenceTextField(
-                    value = start,
-                    onValueChange = { start = it },
-                    label = "Start time (HH:MM)"
-                )
-                PresenceTextField(
-                    value = end,
-                    onValueChange = { end = it },
-                    label = "End time (HH:MM)"
-                )
-                PresenceTextField(
-                    value = halfDayThreshold,
-                    onValueChange = { halfDayThreshold = it },
-                    label = "Half-day threshold (HH:MM)"
-                )
-                Text(
-                    text = "Cutoff time (e.g. 11:00 or 13:00) when shift counts as Half-Day if clock-out is before this threshold.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = PresenceDesign.LabelText,
-                    modifier = Modifier.padding(start = 4.dp, top = 2.dp)
-                )
-            }
-
-            PresenceButton(
-                label = "Save Changes",
-                onClick = {
-                    onConfirm(
-                        name.trim(),
-                        start.trim(),
-                        end.trim(),
-                        dayName.trim(),
-                        halfDayThreshold.trim(),
-                        template.premisesId,
-                        isActive
-                    )
-                },
-                enabled = valid,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            if (onDelete != null) {
-                PresenceButton(
-                    label = "Delete Shift",
-                    onClick = onDelete,
-                    variant = PresenceVariant.Danger,
-                    size = PresenceSize.Sm,
-                    icon = Icons.Default.Delete,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

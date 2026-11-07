@@ -5,9 +5,66 @@ import kotlin.math.sqrt
 
 /**
  * Estimates the 3D head pose (Center, Left, Right, Up, Down) based on 
- * the relative positioning of the 5 facial landmarks detected by YuNet.
+ * the relative positioning of the 5 facial landmarks detected by YuNet,
+ * and verifies camera frame spatial centering and facial symmetry.
  */
 internal object FacePoseEstimator {
+
+    /**
+     * Checks if the detected face bounding box is spatially centered within the camera frame.
+     * [maxOffsetRatio] defines the maximum allowed offset from the frame center (default 25%).
+     */
+    fun isCenteredInFrame(
+        box: FaceBox,
+        frameWidth: Int,
+        frameHeight: Int,
+        maxOffsetRatio: Float = 0.25f
+    ): Boolean {
+        if (frameWidth <= 0 || frameHeight <= 0) return true
+        val centerX = (box.left + box.right) / 2f
+        val centerY = (box.top + box.bottom) / 2f
+        val normOffsetX = abs(centerX - frameWidth / 2f) / (frameWidth / 2f)
+        val normOffsetY = abs(centerY - frameHeight / 2f) / (frameHeight / 2f)
+        return normOffsetX <= maxOffsetRatio && normOffsetY <= maxOffsetRatio
+    }
+
+    /**
+     * Verifies proper 2D facial landmark symmetry for a centered face:
+     * 1. Left-right nose symmetry relative to both eyes (ratio within 0.85 .. 1.18).
+     * 2. Left-right nose symmetry relative to mouth corners (ratio within 0.85 .. 1.18).
+     * 3. Eye level alignment / tilt ratio (horizontal levelness of eyes).
+     */
+    fun isSymmetricallyCentered(landmarks: List<FacePoint>): Boolean {
+        if (landmarks.size < 5) return false
+
+        val rightEye = landmarks[0]
+        val leftEye = landmarks[1]
+        val nose = landmarks[2]
+        val rightMouth = landmarks[3]
+        val leftMouth = landmarks[4]
+
+        val distNoseToRightEye = distance(nose, rightEye)
+        val distNoseToLeftEye = distance(nose, leftEye)
+
+        if (distNoseToLeftEye <= 1e-6) return false
+        val eyeSymmetryRatio = distNoseToRightEye / distNoseToLeftEye
+
+        val distNoseToRightMouth = distance(nose, rightMouth)
+        val distNoseToLeftMouth = distance(nose, leftMouth)
+
+        if (distNoseToLeftMouth <= 1e-6) return false
+        val mouthSymmetryRatio = distNoseToRightMouth / distNoseToLeftMouth
+
+        val eyeDist = distance(rightEye, leftEye)
+        if (eyeDist <= 1e-6) return false
+
+        val eyeLevelDiff = abs(rightEye.y - leftEye.y)
+        val tiltRatio = eyeLevelDiff / eyeDist
+
+        return eyeSymmetryRatio in 0.85..1.18 &&
+                mouthSymmetryRatio in 0.85..1.18 &&
+                tiltRatio < 0.15
+    }
 
     /**
      * Returns one of: "CENTER", "LEFT", "RIGHT", "UP", "DOWN"

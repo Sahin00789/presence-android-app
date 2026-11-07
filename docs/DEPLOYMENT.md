@@ -18,9 +18,8 @@ PORT=3000
 DATABASE_URL=postgresql://presence_user:secure_password@postgres:5432/presence_db?sslmode=prefer
 REDIS_URL=redis://:redis_password@redis:6379
 
-GOOGLE_WEB_CLIENT_ID=123456789-web.apps.googleusercontent.com
-GOOGLE_WEB_CLIENT_SECRET=GOCSPX-secret_key
-GOOGLE_REDIRECT_URI=https://api.presence.app/api/v1/auth/google/callback
+GOOGLE_WEB_CLIENT_ID=your_google_web_client_id.apps.googleusercontent.com
+GOOGLE_WEB_CLIENT_SECRET=your_google_web_client_secret
 
 ACCESS_TOKEN_SECRET=super_secret_jwt_key_min_32_chars
 REFRESH_TOKEN_SECRET=super_secret_refresh_key_min_32_chars
@@ -31,8 +30,8 @@ CORS_ORIGIN=https://presence.app
 ---
 
 ## 2. Database Migrations & Seeding
-1. **Generate Migrations**: `pnpm run db:generate` generates SQL migrations from the Drizzle schema.
-2. **Apply Migrations**: `pnpm run db:migrate` runs `drizzle-kit migrate` against `DATABASE_URL`.
+1. **Generate Migrations**: `npm run db:generate` generates SQL migrations from the Drizzle schema.
+2. **Apply Migrations**: `npm run db:migrate` runs `drizzle-kit migrate` against `DATABASE_URL`.
 3. **Existing Databases**: Review generated SQL before applying it. The initial migration creates the application schema and is intended for a fresh database; do not apply it to a database that already contains these tables.
 4. **Zero Downtime**: Schema changes use additive migrations (adding nullable columns or new tables first before deprecating old ones).
 5. **Seeding**: Initial system seeds create permissions, default shift templates, and system configuration keys.

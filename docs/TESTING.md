@@ -7,5 +7,5 @@
 
 ## 2. Verification Commands
 - **Android Build & Test**: `./gradlew test assembleDebug`
-- **Backend Test**: `cd server && pnpm run test`
-- **Backend Typecheck**: `cd server && pnpm run typecheck`
+- **Backend Test**: `cd server && npm run test`
+- **Backend Typecheck**: `cd server && npm run typecheck`

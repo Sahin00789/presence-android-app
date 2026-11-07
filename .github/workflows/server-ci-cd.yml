@@ -31,29 +31,24 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - name: Setup Node.js (v20 LTS)
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
-          cache-dependency-path: server/pnpm-lock.yaml
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
 
       - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       - name: Run TypeScript Typecheck
-        run: pnpm run typecheck
+        run: npm run typecheck
 
       - name: Verify Drizzle Migration Generation
-        run: pnpm run db:generate
+        run: npm run db:generate
 
       - name: Build TypeScript Project
-        run: pnpm run build
+        run: npm run build
 
   unit-and-integration-tests:
     name: Run Vitest Suite & DB Migrations
@@ -82,23 +77,18 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - name: Setup Node.js (v20 LTS)
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
-          cache-dependency-path: server/pnpm-lock.yaml
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
 
       - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       - name: Generate Drizzle Schema Migrations
-        run: pnpm run db:generate
+        run: npm run db:generate
 
       - name: Run Drizzle Database Migrations
         env:
@@ -109,7 +99,7 @@ jobs:
           CLOUDINARY_CLOUD_NAME: ci-cloud
           CLOUDINARY_API_KEY: ci-key
           CLOUDINARY_API_SECRET: ci-secret
-        run: pnpm run db:migrate
+        run: npm run db:migrate
 
       - name: Execute Vitest Tests
         env:
@@ -123,7 +113,7 @@ jobs:
           CLOUDINARY_CLOUD_NAME: ci-cloud
           CLOUDINARY_API_KEY: ci-key
           CLOUDINARY_API_SECRET: ci-secret
-        run: pnpm run test
+        run: npm run test
 
   deploy:
     name: Deploy Server & Migrate Production DB
@@ -138,23 +128,18 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - name: Setup Node.js (v20 LTS)
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
-          cache-dependency-path: server/pnpm-lock.yaml
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
 
       - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       - name: Build Production Distribution
-        run: pnpm run build
+        run: npm run build
 
       - name: Run Production Database Migrations
         if: ${{ secrets.DATABASE_URL != '' }}
@@ -166,9 +151,10 @@ jobs:
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME || 'ci-cloud' }}
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY || 'ci-key' }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET || 'ci-secret' }}
-        run: pnpm run db:migrate
+        run: npm run db:migrate
 
       - name: Complete Deployment Verification
         run: |
           echo "Drizzle database migrations and production server build completed successfully."
           echo "Artifact dist/ is ready for production hosting."
+

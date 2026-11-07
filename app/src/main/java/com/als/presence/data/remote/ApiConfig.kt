@@ -1,12 +1,15 @@
 package com.als.presence.data.remote
 
+import com.als.presence.BuildConfig
+
 /**
  * Server Base URL configuration.
  *
- * For local backend development:
+ * For local backend development / debugging: "http://10.0.2.2:3000/"
  * - Android Emulator: "http://10.0.2.2:3000/"
- * - Physical Device (via Wi-Fi): "http://<YOUR_COMPUTER_LOCAL_IP>:3000/" (e.g. "http://192.168.1.5:3000/")
- * - Remote Production: "https://presenceapi.armanlogicalsystems.in/"
+ * - Physical Device (via Wi-Fi): "http://<YOUR_COMPUTER_LOCAL_IP>:3000/"
+ * For releases: "https://presenceapi.armanlogicalsystems.in/"
  */
-const val PRESENCE_BASE_URL = "https://presenceapi.armanlogicalsystems.in/"
+val PRESENCE_BASE_URL: String = BuildConfig.BASE_URL
+
 

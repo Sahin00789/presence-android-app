@@ -267,39 +267,24 @@ private fun DayScheduleAndPaymentCard(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
-                            .background(
-                                if (dayInfo.isWeekend) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)
-                                else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                            ),
+                            .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = dayInfo.shortName,
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.ExtraBold,
-                            color = if (dayInfo.isWeekend) MaterialTheme.colorScheme.onTertiaryContainer
-                            else MaterialTheme.colorScheme.onPrimaryContainer
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
 
                     Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = dayInfo.fullName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = PresenceDesign.Ink
-                            )
-                            if (dayInfo.isWeekend) {
-                                PresenceBadge(
-                                    label = "Weekend",
-                                    tone = PresenceTone.Warning
-                                )
-                            }
-                        }
+                        Text(
+                            text = dayInfo.fullName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = PresenceDesign.Ink
+                        )
                         Text(
                             text = when {
                                 assignedShifts.isNotEmpty() -> "${assignedShifts.size} Assigned Shift${if (assignedShifts.size > 1) "s" else ""}"

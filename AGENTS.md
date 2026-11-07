@@ -30,7 +30,7 @@ The **Employee Attendance, Shift Management & Salary Ledger System** (`presence`
 - **Runtime & Language**: Node.js LTS with TypeScript (Strict mode).
 - **Web Framework**: Fastify 5 + `fastify-type-provider-zod`.
 - **Database & ORM**: PostgreSQL 16+ (or NeonDB Serverless) with Drizzle ORM (`drizzle-orm` + `drizzle-kit`).
-- **PostgreSQL Client**: `postgres` (pnpm package `postgres`), NOT `pg`. Includes 4-minute keep-alive pings to prevent serverless cold starts.
+- **PostgreSQL Client**: `postgres` (npm package `postgres`), NOT `pg`. Includes 4-minute keep-alive pings to prevent serverless cold starts.
 - **Cache & Rate Limiting**: In-process sliding-window rate limiter & memory deduplication (PostgreSQL-only, zero Redis requirement).
 - **Validation**: Zod for request/response schemas and environment variables.
 - **Real-Time Delivery**: `@fastify/websocket` (`/api/v1/events/ws`) for live ledger, attendance & notification updates.
@@ -115,11 +115,11 @@ The **Employee Attendance, Shift Management & Salary Ledger System** (`presence`
 - **Android Build**: `./gradlew assembleDebug`
 - **Android Unit Tests**: `./gradlew test`
 - **Android Lint**: `./gradlew lint`
-- **Backend Install**: `cd server && pnpm install`
-- **Backend Typecheck**: `cd server && pnpm run typecheck`
-- **Backend Build**: `cd server && pnpm run build`
-- **Backend Tests**: `cd server && pnpm run test`
-- **Drizzle DB Migration**: `cd server && pnpm run db:migrate`
+- **Backend Install**: `cd server && npm install`
+- **Backend Typecheck**: `cd server && npm run typecheck`
+- **Backend Build**: `cd server && npm run build`
+- **Backend Tests**: `cd server && npm run test`
+- **Drizzle DB Migration**: `cd server && npm run db:migrate`
 
 ---
 

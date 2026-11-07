@@ -61,6 +61,7 @@ data class CreateEmployeeRequest(
 
 @Serializable
 data class UpdateEmployeeRequest(
+    val email: String? = null,
     val fullName: String? = null,
     val department: String? = null,
     val designation: String? = null,

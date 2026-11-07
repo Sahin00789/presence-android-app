@@ -285,6 +285,7 @@ fun EmployeesManagementScreen(
                 viewModel.updateStaff(
                     employeeId = target.employeeId,
                     fullName = name,
+                    email = email,
                     department = department,
                     designation = null,
                     address = address,
@@ -326,16 +327,13 @@ fun EmployeesManagementScreen(
             initialStaffId = target.employeeId,
             initialPremisesId = target.premisesId ?: premises.firstOrNull()?.id,
             onDismiss = { shiftTarget = null },
-            onAssignWithRules = { employeeId, assignments, startDate, _, _, _ ->
-                val firstAssignment = assignments.firstOrNull()
-                if (firstAssignment != null) {
-                    viewModel.assignShiftWithRules(
-                        staffProfileId = employeeId,
-                        shiftId = firstAssignment.shiftId,
-                        startDate = startDate,
-                        endDate = "",
-                        paymentRules = emptyMap(),
-                        daysOfWeek = firstAssignment.daysOfWeek
+            onAssignWithRules = { employeeId, assignments, startDate, targetPremisesId, _, _ ->
+                assignments.forEach { req ->
+                    viewModel.assignShiftWithRequest(
+                        req.copy(
+                            employeeId = employeeId,
+                            premisesId = targetPremisesId ?: req.premisesId
+                        )
                     )
                 }
                 shiftTarget = null

@@ -573,8 +573,8 @@ fun OwnerRegistrationWizard(
                                                 )
 
                                                 Button(
-                                                    onClick = { onRequestOtp(email.trim()) },
-                                                    enabled = !loading && email.contains("@") && email.contains("."),
+                                                    onClick = { onRequestOtp(email.replace(Regex("[\\s\\u00A0]+"), "").lowercase()) },
+                                                    enabled = !loading && email.replace(Regex("[\\s\\u00A0]+"), "").contains("@") && email.replace(Regex("[\\s\\u00A0]+"), "").contains("."),
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .height(48.dp),
@@ -594,98 +594,130 @@ fun OwnerRegistrationWizard(
                                                 }
                                             }
                                         } else {
-                                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                                Surface(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    color = Color(0xFFECFDF5),
-                                                    shape = RoundedCornerShape(12.dp),
-                                                    border = BorderStroke(1.dp, Color(0xFFA7F3D0))
-                                                ) {
-                                                    Row(
-                                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = Icons.Default.CheckCircle,
-                                                            contentDescription = null,
-                                                            tint = Color(0xFF059669),
-                                                            modifier = Modifier.size(16.dp)
-                                                        )
-                                                        Spacer(modifier = Modifier.width(8.dp))
-                                                        Text(
-                                                            text = "Verification code sent successfully!",
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            fontWeight = FontWeight.Medium,
-                                                            color = Color(0xFF065F46)
-                                                        )
-                                                    }
-                                                }
-
+                                            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                                                 Card(
                                                     modifier = Modifier.fillMaxWidth(),
-                                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF2FF)),
-                                                    shape = RoundedCornerShape(14.dp),
-                                                    border = BorderStroke(1.dp, Color(0xFFDCE2FF))
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
+                                                    border = BorderStroke(1.dp, Color(0xFFBBF7D0))
                                                 ) {
-                                                    Row(
+                                                    Column(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                            .padding(14.dp)
                                                     ) {
                                                         Row(
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            modifier = Modifier.weight(1f)
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            Icon(
-                                                                imageVector = Icons.Default.Email,
-                                                                contentDescription = null,
-                                                                tint = Color(0xFF5265D8),
-                                                                modifier = Modifier.size(18.dp)
-                                                            )
-                                                            Spacer(modifier = Modifier.width(8.dp))
-                                                            Column {
-                                                                Text("Verification sent to:", style = MaterialTheme.typography.labelSmall, color = Color(0xFF74798D))
-                                                                Text(otpResponse?.email ?: email, fontWeight = FontWeight.Bold, color = Color(0xFF20243A), style = MaterialTheme.typography.bodyMedium)
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(36.dp)
+                                                                    .clip(CircleShape)
+                                                                    .background(Color(0xFFDCFCE7)),
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.Email,
+                                                                    contentDescription = null,
+                                                                    tint = Color(0xFF15803D),
+                                                                    modifier = Modifier.size(20.dp)
+                                                                )
+                                                            }
+
+                                                            Spacer(modifier = Modifier.width(12.dp))
+
+                                                            Column(modifier = Modifier.weight(1f)) {
+                                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                    Text(
+                                                                        text = "OTP Sent to Mail",
+                                                                        style = MaterialTheme.typography.titleSmall,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        color = Color(0xFF14532D)
+                                                                    )
+                                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                                    Icon(
+                                                                        imageVector = Icons.Default.CheckCircle,
+                                                                        contentDescription = null,
+                                                                        tint = Color(0xFF16A34A),
+                                                                        modifier = Modifier.size(15.dp)
+                                                                    )
+                                                                }
+                                                                Text(
+                                                                    text = otpResponse?.email ?: email,
+                                                                    style = MaterialTheme.typography.bodyMedium,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = Color(0xFF0F172A)
+                                                                )
+                                                            }
+
+                                                            TextButton(
+                                                                onClick = {
+                                                                    otp = ""
+                                                                    onResetOtp()
+                                                                },
+                                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.Edit,
+                                                                    contentDescription = "Change Email",
+                                                                    modifier = Modifier.size(14.dp),
+                                                                    tint = Color(0xFF5265D8)
+                                                                )
+                                                                Spacer(modifier = Modifier.width(4.dp))
+                                                                Text(
+                                                                    text = "Change",
+                                                                    style = MaterialTheme.typography.labelMedium,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = Color(0xFF5265D8)
+                                                                )
                                                             }
                                                         }
 
-                                                        TextButton(
-                                                            onClick = {
-                                                                otp = ""
-                                                                onResetOtp()
-                                                            },
-                                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                                                        ) {
-                                                            Icon(
-                                                                imageVector = Icons.Default.Edit,
-                                                                contentDescription = null,
-                                                                modifier = Modifier.size(14.dp),
-                                                                tint = Color(0xFF5265D8)
-                                                            )
-                                                            Spacer(modifier = Modifier.width(4.dp))
-                                                            Text("Change Email", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFF5265D8))
-                                                        }
-                                                    }
-                                                }
+                                                        Spacer(modifier = Modifier.height(8.dp))
 
-                                                if (com.als.presence.BuildConfig.DEBUG && !otpResponse?.devOtp.isNullOrEmpty()) {
-                                                    otpResponse?.devOtp?.let { devCode ->
-                                                        Surface(
-                                                            color = Color(0xFFE8F5E9),
-                                                            shape = RoundedCornerShape(12.dp),
-                                                            border = BorderStroke(1.dp, Color(0xFFC8E6C9))
+                                                        Text(
+                                                            text = "We sent a 6-digit verification code to your email. Please check your inbox and spam folder.",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = Color(0xFF475569)
+                                                        )
+
+                                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                                        HorizontalDivider(color = Color(0xFFDCFCE7))
+
+                                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            Row(
-                                                                modifier = Modifier
-                                                                    .fillMaxWidth()
-                                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                                                verticalAlignment = Alignment.CenterVertically,
-                                                                horizontalArrangement = Arrangement.SpaceBetween
+                                                            Text(
+                                                                text = "Didn't receive the email?",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = Color(0xFF64748B)
+                                                            )
+
+                                                            TextButton(
+                                                                onClick = { onRequestOtp(email.trim()) },
+                                                                enabled = !loading,
+                                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                                                             ) {
-                                                                Text("Development OTP Code:", style = MaterialTheme.typography.labelMedium, color = Color(0xFF2E7D32))
-                                                                Text(devCode, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = Color(0xFF1B5E20), letterSpacing = 2.sp)
+                                                                if (loading) {
+                                                                    CircularProgressIndicator(
+                                                                        modifier = Modifier.size(12.dp),
+                                                                        color = Color(0xFF5265D8),
+                                                                        strokeWidth = 1.5.dp
+                                                                    )
+                                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                                }
+                                                                Text(
+                                                                    text = "Resend Code",
+                                                                    style = MaterialTheme.typography.labelMedium,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = if (loading) Color(0xFF94A3B8) else Color(0xFF5265D8)
+                                                                )
                                                             }
                                                         }
                                                     }
@@ -701,20 +733,6 @@ fun OwnerRegistrationWizard(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     shape = RoundedCornerShape(16.dp)
                                                 )
-
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text("Didn't receive code?", style = MaterialTheme.typography.labelMedium, color = Color(0xFF74798D))
-                                                    TextButton(
-                                                        onClick = { onRequestOtp(email.trim()) },
-                                                        enabled = !loading
-                                                    ) {
-                                                        Text("Resend Code", fontWeight = FontWeight.Bold, color = Color(0xFF5265D8))
-                                                    }
-                                                }
                                             }
                                         }
                                     }

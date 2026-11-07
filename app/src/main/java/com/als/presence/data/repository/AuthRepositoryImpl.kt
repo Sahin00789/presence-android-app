@@ -141,9 +141,14 @@ class AuthRepositoryImpl @Inject constructor(
         isSessionCheckingFlow.value = false
     }
 
+    private fun cleanEmail(email: String): String {
+        return email.replace(Regex("[\\s\\u00A0]+"), "").lowercase()
+    }
+
     override suspend fun requestOtp(email: String, role: String, isRegistration: Boolean): Resource<OtpResponse> {
+        val sanitized = cleanEmail(email)
         return safeApiCall("Failed to request OTP") {
-            authApiService.requestOtp(OtpRequest(email = email, role = role, isRegistration = isRegistration))
+            authApiService.requestOtp(OtpRequest(email = sanitized, role = role, isRegistration = isRegistration))
         }
     }
 
@@ -161,10 +166,11 @@ class AuthRepositoryImpl @Inject constructor(
         longitude: String?,
         radiusMeters: Int?
     ): Resource<User> {
+        val sanitized = cleanEmail(email)
         val result = safeApiCall("Failed to verify OTP") {
             authApiService.verifyOtp(
                 OtpVerifyRequest(
-                    email = email,
+                    email = sanitized,
                     code = otp,
                     role = role,
                     fullName = fullName,

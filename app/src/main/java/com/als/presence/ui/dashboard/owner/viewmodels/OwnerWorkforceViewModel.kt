@@ -383,6 +383,7 @@ class OwnerWorkforceViewModel @Inject constructor(
     fun updateStaff(
         employeeId: String,
         fullName: String,
+        email: String? = null,
         department: String?,
         designation: String? = null,
         address: String? = null,
@@ -396,6 +397,7 @@ class OwnerWorkforceViewModel @Inject constructor(
                 val result = repository.updateEmployee(
                     employeeId = employeeId,
                     request = UpdateEmployeeRequest(
+                        email = email?.trim()?.ifBlank { null },
                         fullName = fullName.trim(),
                         department = department?.trim()?.ifBlank { null },
                         designation = designation?.trim()?.ifBlank { null },
@@ -518,6 +520,21 @@ class OwnerWorkforceViewModel @Inject constructor(
             ) {
                 is Resource.Success -> {
                     _message.value = "Shift assigned successfully."
+                }
+                is Resource.Error -> _message.value = result.message
+                Resource.Loading -> Unit
+            }
+            _isSubmitting.value = false
+        }
+    }
+
+    fun assignShiftWithRequest(request: CreateShiftAssignmentRequest) {
+        viewModelScope.launch {
+            _isSubmitting.value = true
+            when (val result = repository.createShiftAssignment(request)) {
+                is Resource.Success -> {
+                    _message.value = "Shift assigned successfully."
+                    loadShiftsData()
                 }
                 is Resource.Error -> _message.value = result.message
                 Resource.Loading -> Unit

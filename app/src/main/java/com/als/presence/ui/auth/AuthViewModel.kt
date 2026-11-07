@@ -181,7 +181,12 @@ class AuthViewModel @Inject constructor(
     private val _reverseGeocodeState = MutableStateFlow<com.als.presence.core.location.ReverseGeocodedAddress?>(null)
     val reverseGeocodeState: StateFlow<com.als.presence.core.location.ReverseGeocodedAddress?> = _reverseGeocodeState.asStateFlow()
 
+    private fun cleanEmail(email: String): String {
+        return email.replace(Regex("[\\s\\u00A0]+"), "").lowercase()
+    }
+
     fun requestOtp(email: String, role: Role = Role.EMPLOYEE, isRegistration: Boolean = false) {
+        val sanitized = cleanEmail(email)
         viewModelScope.launch {
             if (!isOnline.value) {
                 _uiState.value = UiState.Error(
@@ -190,7 +195,7 @@ class AuthViewModel @Inject constructor(
                 return@launch
             }
             _uiState.value = UiState.Loading
-            when (val result = requestOtpUseCase(email, role.name, isRegistration)) {
+            when (val result = requestOtpUseCase(sanitized, role.name, isRegistration)) {
                 is Resource.Success -> {
                     _otpState.value = result.data
                     _uiState.value = UiState.Idle
@@ -221,6 +226,7 @@ class AuthViewModel @Inject constructor(
         longitude: String? = null,
         radiusMeters: Int? = null
     ) {
+        val sanitized = cleanEmail(email)
         viewModelScope.launch {
             if (!isOnline.value) {
                 _uiState.value = UiState.Error(
@@ -230,7 +236,7 @@ class AuthViewModel @Inject constructor(
             }
             _uiState.value = UiState.Loading
             when (val result = verifyOtpUseCase(
-                email = email,
+                email = sanitized,
                 otp = code,
                 role = role.name,
                 fullName = fullName,

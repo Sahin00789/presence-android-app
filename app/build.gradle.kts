@@ -44,9 +44,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            buildConfigField("String", "BASE_URL", "\"https://presenceapi.armanlogicalsystems.in/\"")
         }
         debug {
             isMinifyEnabled = false
+            buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000/\"")
         }
     }
 
