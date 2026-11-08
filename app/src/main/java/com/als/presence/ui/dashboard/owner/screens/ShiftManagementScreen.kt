@@ -2,7 +2,6 @@ package com.als.presence.ui.dashboard.owner.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -29,8 +27,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -134,7 +130,6 @@ fun ShiftManagementScreen(
         }
     }
 
-    var selectedPremisesId by remember { mutableStateOf<String?>(null) }
     var createForDayOfWeek by remember { mutableStateOf<Int?>(null) }
     var showCreateTemplate by remember { mutableStateOf(false) }
     var editingShiftState by remember { mutableStateOf<EditingShiftState?>(null) }
@@ -142,12 +137,6 @@ fun ShiftManagementScreen(
     val templates = (templatesState as? UiState.Success)?.data.orEmpty()
     val staff = (staffState as? UiState.Success)?.data.orEmpty()
     val premises = (premisesState as? UiState.Success)?.data.orEmpty()
-
-    val filteredTemplates = if (selectedPremisesId.isNullOrBlank()) {
-        templates
-    } else {
-        templates.filter { it.premisesId == selectedPremisesId }
-    }
 
     Box {
         PresenceSecondaryScaffold(
@@ -169,49 +158,9 @@ fun ShiftManagementScreen(
                 )
             )
 
-            if (premises.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = "Premises Filter",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        FilterChip(
-                            selected = selectedPremisesId == null,
-                            onClick = { selectedPremisesId = null },
-                            label = { Text("All Premises") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        )
-                        premises.forEach { prem ->
-                            FilterChip(
-                                selected = selectedPremisesId == prem.id,
-                                onClick = { selectedPremisesId = prem.id },
-                                label = { Text(Dates.cleanPremisesName(prem.name)) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-
             PresenceSectionTitle(
                 title = "Weekly Shift Schedule",
-                description = if (selectedPremisesId == null) "7-day view of shifts for all premises."
-                else "7-day view of shifts for selected premises."
+                description = "7-day view of shifts across the week."
             )
 
             when (val state = templatesState) {
@@ -219,7 +168,7 @@ fun ShiftManagementScreen(
                 is UiState.Error -> PresenceErrorState(message = state.message, onRetry = viewModel::refresh)
                 is UiState.Success -> {
                     WeekDaysList.forEach { dayInfo ->
-                        val dayShifts = filteredTemplates.filter { template ->
+                        val dayShifts = templates.filter { template ->
                             val days = template.daysOfWeek
                             days.isNullOrEmpty() || days.contains(dayInfo.dayOfWeek)
                         }
@@ -247,7 +196,7 @@ fun ShiftManagementScreen(
 
     if (showCreateTemplate) {
         val targetDay = WeekDaysList.find { it.dayOfWeek == (createForDayOfWeek ?: 1) } ?: WeekDaysList.first()
-        val targetPremises = premises.find { it.id == selectedPremisesId } ?: premises.firstOrNull()
+        val targetPremises = premises.firstOrNull()
 
         CreateShiftModal(
             selectedPremises = targetPremises,

@@ -146,13 +146,42 @@ class EmployeeClockInViewModel @Inject constructor(
                 .filter { a -> myEmployeeIds.isEmpty() || myEmployeeIds.contains(a.employeeId) || myEmployeeIds.contains(a.staffId) }
                 .distinctBy { it.shiftId.ifBlank { it.id } }
 
-            val finalNextSession = presenceNextSession ?: buildFallbackNextSession(
-                overtimeEntries = myOvertime,
-                assignments = myAssignments,
-                templates = templates,
-                presenceData = presenceData,
-                userId = userId
-            )
+            val todayIso = Dates.todayIso()
+            val todayHoliday = holidays.firstOrNull { it.holidayDate == todayIso || it.date == todayIso }
+            val isTodayHoliday = todayHoliday != null
+
+            val hasMatchingShiftToday = myAssignments.any { a ->
+                val template = templates.firstOrNull { it.id == a.shiftId }
+                template != null && Dates.isShiftMatchingDay(template.dayName, todayIso, template.daysOfWeek)
+            }
+            val isTodayOffDay = !isTodayHoliday && !hasMatchingShiftToday
+            val isNonWorkingDay = isTodayHoliday || isTodayOffDay
+            val todayOvertime = myOvertime.firstOrNull { Dates.isToday(it.workDate) && (it.status == "APPROVED" || it.status == "IN_PROGRESS") }
+
+            val finalNextSession = when {
+                todayOvertime != null -> NextSessionUi(
+                    kind = SessionKind.OVERTIME,
+                    badge = if (Dates.isWithinTimeWindow(todayOvertime.startTime, todayOvertime.endTime)) "RUNNING OVERTIME" else "UPCOMING OVERTIME",
+                    title = todayOvertime.reason?.takeIf { it.isNotBlank() } ?: "Overtime",
+                    window = Dates.formatWindow(todayOvertime.startTime, todayOvertime.endTime),
+                    day = Dates.formatDate(todayOvertime.workDate),
+                    isActive = Dates.isWithinTimeWindow(todayOvertime.startTime, todayOvertime.endTime),
+                    startTime = todayOvertime.startTime,
+                    endTime = todayOvertime.endTime,
+                    overtimeId = todayOvertime.id,
+                    premisesLatitude = presenceData?.latitude,
+                    premisesLongitude = presenceData?.longitude,
+                    radiusMeters = presenceData?.radiusMeters ?: 50
+                )
+                isNonWorkingDay -> null
+                else -> presenceNextSession ?: buildFallbackNextSession(
+                    overtimeEntries = myOvertime,
+                    assignments = myAssignments,
+                    templates = templates,
+                    presenceData = presenceData,
+                    userId = userId
+                )
+            }
 
             val failure = when {
                 today is Resource.Error -> today.errorText()
@@ -230,57 +259,84 @@ class EmployeeClockInViewModel @Inject constructor(
         presenceData: LocationTodayPresenceResponseDto?,
         userId: String?
     ): NextSessionUi? {
-        val firstOvertime = overtimeEntries.firstOrNull()
-        if (firstOvertime != null) {
-            val isSameDay = Dates.isToday(firstOvertime.workDate)
-            val isWithinWindow = Dates.isWithinTimeWindow(firstOvertime.startTime, firstOvertime.endTime)
-            val isRunning = isSameDay && isWithinWindow
+        val todayIso = Dates.todayIso()
+
+        val todayOvertime = overtimeEntries.firstOrNull {
+            Dates.isToday(it.workDate) && (it.status == "APPROVED" || it.status == "IN_PROGRESS")
+        }
+        if (todayOvertime != null) {
+            val isWithinWindow = Dates.isWithinTimeWindow(todayOvertime.startTime, todayOvertime.endTime)
+            val otTitle = todayOvertime.reason?.takeIf { it.isNotBlank() } ?: "Overtime"
             return NextSessionUi(
                 kind = SessionKind.OVERTIME,
-                badge = if (isRunning) "RUNNING OVERTIME" else "UPCOMING OVERTIME",
-                title = "Overtime (${firstOvertime.workDate})",
-                window = Dates.formatWindow(firstOvertime.startTime, firstOvertime.endTime),
-                day = Dates.formatDate(firstOvertime.workDate),
-                isActive = isRunning,
-                startTime = firstOvertime.startTime,
-                endTime = firstOvertime.endTime,
-                overtimeId = firstOvertime.id,
+                badge = if (isWithinWindow) "RUNNING OVERTIME" else "UPCOMING OVERTIME",
+                title = otTitle,
+                window = Dates.formatWindow(todayOvertime.startTime, todayOvertime.endTime),
+                day = Dates.formatDate(todayOvertime.workDate),
+                isActive = isWithinWindow,
+                startTime = todayOvertime.startTime,
+                endTime = todayOvertime.endTime,
+                overtimeId = todayOvertime.id,
                 premisesLatitude = presenceData?.latitude,
                 premisesLongitude = presenceData?.longitude,
                 radiusMeters = presenceData?.radiusMeters ?: 50
             )
         }
 
-        if (assignments.isNotEmpty()) {
-            val myAssignment = assignments.firstOrNull()
-
-            if (myAssignment != null) {
-                val template = templates.firstOrNull { it.id == myAssignment.shiftId }
-                val shiftName = myAssignment.shiftName ?: template?.shiftName ?: "Assigned Shift"
-                val startTime = template?.startTime?.ifBlank { null } ?: "09:00:00"
-                val endTime = template?.endTime?.ifBlank { null } ?: "18:00:00"
-                val dayName = template?.dayName ?: "Scheduled Shift"
-
-                val isSameDay = Dates.isShiftMatchingDay(dayName, Dates.todayIso(), template?.daysOfWeek)
-                val isWithinWindow = Dates.isWithinTimeWindow(startTime, endTime)
-                val isRunning = isSameDay && isWithinWindow
-
-                return NextSessionUi(
-                    kind = SessionKind.SHIFT,
-                    badge = if (isRunning) "RUNNING SHIFT" else "UPCOMING SHIFT",
-                    title = shiftName,
-                    window = Dates.formatWindow(startTime, endTime),
-                    day = dayName,
-                    isActive = isRunning,
-                    startTime = startTime,
-                    endTime = endTime,
-                    halfDayThreshold = template?.halfDayThreshold,
-                    premisesLatitude = presenceData?.latitude,
-                    premisesLongitude = presenceData?.longitude,
-                    radiusMeters = presenceData?.radiusMeters ?: 50
-                )
-            }
+        val todayAssignment = assignments.firstOrNull { a ->
+            val template = templates.firstOrNull { it.id == a.shiftId }
+            template != null && Dates.isShiftMatchingDay(template.dayName, todayIso, template.daysOfWeek)
         }
+
+        if (todayAssignment != null) {
+            val template = templates.firstOrNull { it.id == todayAssignment.shiftId }
+            val shiftName = todayAssignment.shiftName ?: template?.shiftName ?: "Assigned Shift"
+            val startTime = template?.startTime?.ifBlank { null } ?: "09:00:00"
+            val endTime = template?.endTime?.ifBlank { null } ?: "18:00:00"
+            val dayName = template?.dayName ?: "Scheduled Shift"
+
+            val isWithinWindow = Dates.isWithinTimeWindow(startTime, endTime)
+
+            return NextSessionUi(
+                kind = SessionKind.SHIFT,
+                badge = if (isWithinWindow) "RUNNING SHIFT" else "UPCOMING SHIFT",
+                title = shiftName,
+                window = Dates.formatWindow(startTime, endTime),
+                day = dayName,
+                isActive = isWithinWindow,
+                startTime = startTime,
+                endTime = endTime,
+                halfDayThreshold = template?.halfDayThreshold,
+                premisesLatitude = presenceData?.latitude,
+                premisesLongitude = presenceData?.longitude,
+                radiusMeters = presenceData?.radiusMeters ?: 50
+            )
+        }
+
+        val futureOvertime = overtimeEntries.firstOrNull { entry ->
+            entry.workDate >= todayIso && (entry.status == "APPROVED" || entry.status == "IN_PROGRESS")
+        }
+        if (futureOvertime != null) {
+            val isSameDay = Dates.isToday(futureOvertime.workDate)
+            val isWithinWindow = Dates.isWithinTimeWindow(futureOvertime.startTime, futureOvertime.endTime)
+            val isRunning = isSameDay && isWithinWindow
+            val otTitle = futureOvertime.reason?.takeIf { it.isNotBlank() } ?: "Overtime"
+            return NextSessionUi(
+                kind = SessionKind.OVERTIME,
+                badge = if (isRunning) "RUNNING OVERTIME" else "UPCOMING OVERTIME",
+                title = "$otTitle (${futureOvertime.workDate})",
+                window = Dates.formatWindow(futureOvertime.startTime, futureOvertime.endTime),
+                day = Dates.formatDate(futureOvertime.workDate),
+                isActive = isRunning,
+                startTime = futureOvertime.startTime,
+                endTime = futureOvertime.endTime,
+                overtimeId = futureOvertime.id,
+                premisesLatitude = presenceData?.latitude,
+                premisesLongitude = presenceData?.longitude,
+                radiusMeters = presenceData?.radiusMeters ?: 50
+            )
+        }
+
         return null
     }
 

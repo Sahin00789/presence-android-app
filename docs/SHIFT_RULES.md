@@ -11,7 +11,7 @@ Organizations define reusable shifts in `shifts`:
 ---
 
 ## 2. Shift Assignments & Weekday Filters (`employee_shift_assignments`)
-- **Premises Selection at Top**: Shifts management UI provides a top premises filter bar to view shift roster assignments and templates by premises.
+- **Single Premises Roster**: Shifts management UI manages shift definitions and roster assignments for the single premises workspace without requiring premises filtering.
 - **Independent Weekday Assignments**: Day-of-week assignments support specific days and rates (`present_pay`, `absent_pay`, `leave_pay`, `half_day_pay`).
 - **Direct Assignment from Employee Cards**: Owners can assign shifts directly from any Employee card in the dashboard.
 

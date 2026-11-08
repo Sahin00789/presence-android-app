@@ -12,4 +12,7 @@ interface ShiftApiService {
 
     @POST("api/v1/shifts/assignments")
     suspend fun createAssignment(@Body request: CreateShiftAssignmentRequest): Response<ShiftAssignmentDto>
+
+    @DELETE("api/v1/shifts/assignments/{id}")
+    suspend fun deleteAssignment(@Path("id") id: String): Response<Unit>
 }

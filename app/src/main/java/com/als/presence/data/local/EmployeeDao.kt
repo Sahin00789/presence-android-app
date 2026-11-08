@@ -11,6 +11,9 @@ interface EmployeeDao {
     @Query("SELECT * FROM employees WHERE isDeleted = 0 ORDER BY fullName ASC")
     fun observeAll(): Flow<List<EmployeeEntity>>
 
+    @Query("SELECT * FROM employees WHERE isDeleted = 0 ORDER BY fullName ASC")
+    suspend fun getAll(): List<EmployeeEntity>
+
     @Query("SELECT * FROM employees WHERE organizationId = :orgId AND isDeleted = 0 ORDER BY fullName ASC")
     fun observeByOrganization(orgId: String): Flow<List<EmployeeEntity>>
 

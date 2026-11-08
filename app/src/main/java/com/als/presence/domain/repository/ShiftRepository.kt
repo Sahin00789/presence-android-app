@@ -10,4 +10,5 @@ interface ShiftRepository {
     suspend fun updateShift(id: String, request: UpdateShiftRequest): Resource<ShiftDto>
     suspend fun deleteShift(id: String): Resource<Unit>
     suspend fun createShiftAssignment(request: CreateShiftAssignmentRequest): Resource<ShiftAssignmentDto>
+    suspend fun deleteShiftAssignment(id: String): Resource<Unit>
 }

@@ -12,9 +12,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,9 +37,9 @@ import com.als.presence.core.designsystem.PresenceDesign
 import com.als.presence.data.model.ShiftAssignmentDto
 import com.als.presence.data.model.ShiftDto
 import com.als.presence.domain.model.User
+import com.als.presence.ui.dashboard.employee.viewmodels.EmployeeAttendanceViewModel
 import com.als.presence.ui.dashboard.owner.screens.DayInfo
 import com.als.presence.ui.dashboard.owner.screens.WeekDaysList
-import com.als.presence.ui.dashboard.employee.viewmodels.EmployeeAttendanceViewModel
 
 private data class AssignedShiftInfo(
     val assignment: ShiftAssignmentDto,
@@ -48,7 +47,7 @@ private data class AssignedShiftInfo(
 )
 
 /**
- * "My Shifts & Schedule" screen for Staff, Managers, and Owners.
+ * "My Shifts & Schedule" screen for Employees, Managers, and Owners.
  * Cleanly presents the 7-day weekly assigned shift schedule, working hours,
  * and per-shift payment rates breakdown.
  */
@@ -58,7 +57,6 @@ fun MyShiftsScreen(
     onBack: () -> Unit,
     viewModel: EmployeeAttendanceViewModel = hiltViewModel()
 ) {
-    val nextSession by viewModel.nextSession.collectAsStateWithLifecycle()
     val assignmentsState by viewModel.assignments.collectAsStateWithLifecycle()
     val templatesState by viewModel.templates.collectAsStateWithLifecycle()
     val currentUserId = viewModel.currentUserId
@@ -67,114 +65,83 @@ fun MyShiftsScreen(
         viewModel.refresh()
     }
 
+    val assignments = (assignmentsState as? UiState.Success)?.data.orEmpty()
+    val templates = (templatesState as? UiState.Success)?.data.orEmpty()
+
+    val myAssignments = remember(assignments, currentUserId) {
+        if (currentUserId.isNullOrBlank()) {
+            assignments
+        } else {
+            val filtered = assignments.filter {
+                it.employeeId == currentUserId || it.staffId == currentUserId
+            }
+            filtered.ifEmpty { assignments }
+        }
+    }
+
+    val hasPersonalAssignments = myAssignments.isNotEmpty()
+
+    // 1. My Personal Schedule Stats
+    val myAssignedDaysCount = remember(myAssignments, templates) {
+        WeekDaysList.count { dayInfo ->
+            myAssignments.any { assignment ->
+                val template = templates.find { it.id == assignment.shiftId }
+                val days = template?.daysOfWeek
+                days.isNullOrEmpty() || days.contains(dayInfo.dayOfWeek)
+            }
+        }
+    }
+    val myWeeklyOffsCount = 7 - myAssignedDaysCount
+
+    // 2. Premises Schedule Stats
+    val premisesWorkingDaysCount = remember(templates) {
+        WeekDaysList.count { dayInfo ->
+            templates.any { template ->
+                val days = template.daysOfWeek
+                days.isNullOrEmpty() || days.contains(dayInfo.dayOfWeek)
+            }
+        }
+    }
+    val premisesWeeklyOffsCount = 7 - premisesWorkingDaysCount
+    val assignedShiftsCount = myAssignments.size
+
     PresenceSecondaryScaffold(
         crumb = "MY WORKSPACE",
         title = "My Shifts & Schedule",
         onBack = onBack,
         onRefresh = viewModel::refresh
     ) {
-        // 1. Shift Schedule Overview Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-            ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Schedule,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Column {
-                            Text(
-                                text = "Current Schedule Window",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            val rawTitle = nextSession?.title ?: "Standard Shift Schedule"
-                            val displayTitle = remember(rawTitle) {
-                                formatTitle(rawTitle)
-                            }
-                            Text(
-                                text = displayTitle,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
+        PresencePageIntro(
+            eyebrow = "ROSTER",
+            title = "My Weekly Schedule",
+            description = "Your 7-day shift timetable, working hours, and per-shift earning rates."
+        )
 
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-                    ) {
-                        Text(
-                            text = user.role.name,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val sessionTime = nextSession?.window ?: "Regular Working Hours"
-                    val premisesName = remember(user) {
-                        user.premisesName?.let { Dates.cleanPremisesName(it) }
-                            ?.takeIf { it.isNotBlank() }
-                            ?: user.organizationName.orEmpty().ifBlank { "Assigned Premises" }
-                    }
-
-                    OverviewStatBox(
-                        label = "Shift Window",
-                        value = sessionTime,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OverviewStatBox(
-                        label = "Premises",
-                        value = premisesName,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+        PresenceMetaStrip(
+            items = if (hasPersonalAssignments) {
+                listOf(
+                    "My Assigned Shifts" to "$assignedShiftsCount ${if (assignedShiftsCount == 1) "Shift" else "Shifts"}",
+                    "My Working Days" to "$myAssignedDaysCount Days",
+                    "My Weekly Offs" to "$myWeeklyOffsCount Days",
+                    "Premises Work Days" to "$premisesWorkingDaysCount Days"
+                )
+            } else {
+                listOf(
+                    "Assigned Shifts" to "None (Default Premises)",
+                    "Premises Work Days" to "$premisesWorkingDaysCount Days",
+                    "Premises Weekly Offs" to "$premisesWeeklyOffsCount Days"
+                )
             }
-        }
+        )
 
-        // 2. 7-Day Weekly Shift Schedule & Payments Cards
+        // 7-Day Weekly Shift Schedule Cards
         Personal7DayScheduleSection(
             assignmentsState = assignmentsState,
             templatesState = templatesState,
-            currentUserId = currentUserId
+            myAssignments = myAssignments,
+            assignedShiftsCount = assignedShiftsCount,
+            assignedDaysCount = myAssignedDaysCount,
+            hasPersonalAssignments = hasPersonalAssignments
         )
     }
 }
@@ -183,15 +150,22 @@ fun MyShiftsScreen(
 private fun Personal7DayScheduleSection(
     assignmentsState: UiState<List<ShiftAssignmentDto>>,
     templatesState: UiState<List<ShiftDto>>,
-    currentUserId: String?
+    myAssignments: List<ShiftAssignmentDto>,
+    assignedShiftsCount: Int,
+    assignedDaysCount: Int,
+    hasPersonalAssignments: Boolean
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         PresenceSectionTitle(
-            title = "Weekly 7-Day Shift Schedule & Payments",
-            description = "Your assigned shift schedule and earned payment rates for each day of the week."
+            title = "Weekly 7-Day Timetable",
+            description = if (hasPersonalAssignments) {
+                "Detailed day-by-day timetable ($assignedShiftsCount assigned shift${if (assignedShiftsCount != 1) "s" else ""} across $assignedDaysCount assigned day${if (assignedDaysCount != 1) "s" else ""})."
+            } else {
+                "Detailed day-by-day timetable using default premises shift schedule."
+            }
         )
 
         when {
@@ -202,19 +176,7 @@ private fun Personal7DayScheduleSection(
                 PresenceErrorState(message = assignmentsState.message, onRetry = { })
             }
             else -> {
-                val assignments = (assignmentsState as? UiState.Success)?.data.orEmpty()
                 val templates = (templatesState as? UiState.Success)?.data.orEmpty()
-
-                val myAssignments = remember(assignments, currentUserId) {
-                    if (currentUserId.isNullOrBlank()) {
-                        assignments
-                    } else {
-                        val filtered = assignments.filter {
-                            it.employeeId == currentUserId || it.staffId == currentUserId
-                        }
-                        filtered.ifEmpty { assignments }
-                    }
-                }
 
                 WeekDaysList.forEach { dayInfo ->
                     val dayAssignedShifts = myAssignments.mapNotNull { assignment ->
@@ -224,7 +186,7 @@ private fun Personal7DayScheduleSection(
                         if (applies) AssignedShiftInfo(assignment, template) else null
                     }
 
-                    val dayFallbackTemplates = if (dayAssignedShifts.isEmpty()) {
+                    val dayFallbackTemplates = if (dayAssignedShifts.isEmpty() && !hasPersonalAssignments) {
                         templates.filter { template ->
                             val days = template.daysOfWeek
                             days.isNullOrEmpty() || days.contains(dayInfo.dayOfWeek)
@@ -234,7 +196,8 @@ private fun Personal7DayScheduleSection(
                     DayScheduleAndPaymentCard(
                         dayInfo = dayInfo,
                         assignedShifts = dayAssignedShifts,
-                        fallbackTemplates = dayFallbackTemplates
+                        fallbackTemplates = dayFallbackTemplates,
+                        hasPersonalAssignments = hasPersonalAssignments
                     )
                 }
             }
@@ -246,9 +209,17 @@ private fun Personal7DayScheduleSection(
 private fun DayScheduleAndPaymentCard(
     dayInfo: DayInfo,
     assignedShifts: List<AssignedShiftInfo>,
-    fallbackTemplates: List<ShiftDto>
+    fallbackTemplates: List<ShiftDto>,
+    hasPersonalAssignments: Boolean
 ) {
-    PresenceCard(modifier = Modifier.fillMaxWidth()) {
+    val isAssigned = assignedShifts.isNotEmpty()
+    val isFallback = !isAssigned && fallbackTemplates.isNotEmpty()
+    val isMyWeeklyOff = !isAssigned && hasPersonalAssignments
+    val isPremisesWeeklyOff = !isAssigned && !hasPersonalAssignments && fallbackTemplates.isEmpty()
+
+    PresenceCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -260,6 +231,7 @@ private fun DayScheduleAndPaymentCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -267,68 +239,72 @@ private fun DayScheduleAndPaymentCard(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
+                            .background(
+                                when {
+                                    isAssigned -> MaterialTheme.colorScheme.primaryContainer
+                                    isFallback -> MaterialTheme.colorScheme.secondaryContainer
+                                    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                }
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = dayInfo.shortName,
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = when {
+                                isAssigned -> MaterialTheme.colorScheme.onPrimaryContainer
+                                isFallback -> MaterialTheme.colorScheme.onSecondaryContainer
+                                else -> PresenceDesign.LabelText
+                            }
                         )
                     }
 
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = dayInfo.fullName,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = PresenceDesign.Ink
+                            color = if (isMyWeeklyOff || isPremisesWeeklyOff) PresenceDesign.LabelText else PresenceDesign.Ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = when {
-                                assignedShifts.isNotEmpty() -> "${assignedShifts.size} Assigned Shift${if (assignedShifts.size > 1) "s" else ""}"
-                                fallbackTemplates.isNotEmpty() -> "Premises Shift Available"
-                                else -> "Weekly Off / Rest Day"
+                                isAssigned -> "${assignedShifts.size} Assigned Shift${if (assignedShifts.size > 1) "s" else ""}"
+                                isFallback -> "Default Premises Shift"
+                                isMyWeeklyOff -> "My Scheduled Rest Day"
+                                else -> "Premises Weekly Off"
                             },
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (assignedShifts.isNotEmpty()) MaterialTheme.colorScheme.primary
-                            else PresenceDesign.LabelText
+                            color = if (isAssigned) MaterialTheme.colorScheme.primary
+                            else PresenceDesign.LabelText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                if (assignedShifts.isNotEmpty()) {
-                    PresenceBadge(
-                        label = "Active Schedule",
-                        tone = PresenceTone.Success,
-                        dot = true
-                    )
-                } else if (fallbackTemplates.isNotEmpty()) {
-                    PresenceBadge(
-                        label = "Premises Shift",
-                        tone = PresenceTone.Info
-                    )
-                } else {
-                    PresenceBadge(
-                        label = "Weekly Off",
-                        tone = PresenceTone.Neutral
-                    )
+                when {
+                    isAssigned -> PresenceBadge(label = "My Shift", tone = PresenceTone.Success, dot = true)
+                    isFallback -> PresenceBadge(label = "Premises Shift", tone = PresenceTone.Info)
+                    isMyWeeklyOff -> PresenceBadge(label = "My Weekly Off", tone = PresenceTone.Neutral)
+                    else -> PresenceBadge(label = "Premises Off", tone = PresenceTone.Neutral)
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-            // Card Body Content
+            // Body Content
             when {
-                assignedShifts.isNotEmpty() -> {
+                isAssigned -> {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         assignedShifts.forEach { shiftInfo ->
                             AssignedShiftPaymentDetailRow(shiftInfo = shiftInfo)
                         }
                     }
                 }
-                fallbackTemplates.isNotEmpty() -> {
+                isFallback -> {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         fallbackTemplates.forEach { template ->
                             TemplateShiftDetailRow(template = template)
@@ -336,35 +312,42 @@ private fun DayScheduleAndPaymentCard(
                     }
                 }
                 else -> {
-                    // Weekly Off / No Shift Assigned
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                                RoundedCornerShape(10.dp)
-                            )
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    // Weekly Off Body
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
                     ) {
-                        Column {
-                            Text(
-                                text = "Scheduled Weekly Off",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = PresenceDesign.Ink
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = "Rest Day",
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(20.dp)
                             )
-                            Text(
-                                text = "Rest day • No active attendance required",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = PresenceDesign.LabelText
-                            )
+                            Column {
+                                Text(
+                                    text = if (isMyWeeklyOff) "My Weekly Off" else "Premises Weekly Off",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = PresenceDesign.Ink
+                                )
+                                Text(
+                                    text = if (isMyWeeklyOff) {
+                                        "Scheduled rest day for your assigned working schedule"
+                                    } else {
+                                        "No premises shift scheduled for today"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = PresenceDesign.LabelText
+                                )
+                            }
                         }
-                        PresenceBadge(
-                            label = "Weekly Off",
-                            tone = PresenceTone.Info
-                        )
                     }
                 }
             }
@@ -405,12 +388,23 @@ private fun AssignedShiftPaymentDetailRow(shiftInfo: AssignedShiftInfo) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = "⏰ $windowText",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = windowText,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
                 PresenceBadge(
                     label = "Assigned",
@@ -495,12 +489,23 @@ private fun TemplateShiftDetailRow(template: ShiftDto) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = "⏰ ${Dates.formatWindow(template.startTime, template.endTime)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Schedule,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = Dates.formatWindow(template.startTime, template.endTime),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
             PresenceBadge(
                 label = "Premises Shift",
@@ -567,38 +572,3 @@ private fun formatTitle(title: String): String {
         word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
 }
-
-@Composable
-private fun OverviewStatBox(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-

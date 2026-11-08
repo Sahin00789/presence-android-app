@@ -44,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -532,20 +533,24 @@ private fun AttendanceDayCard(group: DayAttendanceGroup) {
                                 Text(
                                     text = "${Dates.formatTime(ot.startTime)} – ${Dates.formatTime(ot.endTime)}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                             Text(
                                 text = "Worked: ${ot.workedMinutes} mins / Planned: ${ot.plannedMinutes} mins",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             StatusPill(ot.status)
                             if (ot.paymentInr > 0) {
                                 Text(
-                                    text = "+₹${ot.paymentInr}",
+                                    text = "+${Money.format(ot.paymentInr)}",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = SecondaryEmerald

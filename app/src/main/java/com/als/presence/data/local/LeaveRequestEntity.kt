@@ -78,6 +78,9 @@ interface LeaveRequestDao {
     @Query("SELECT * FROM leave_requests WHERE isDeleted = 0 ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<LeaveRequestEntity>>
 
+    @Query("SELECT * FROM leave_requests WHERE isDeleted = 0 ORDER BY createdAt DESC")
+    suspend fun getAll(): List<LeaveRequestEntity>
+
     @Query("SELECT * FROM leave_requests WHERE staffProfileId = :staffProfileId AND isDeleted = 0 ORDER BY createdAt DESC")
     fun observeByStaff(staffProfileId: String): Flow<List<LeaveRequestEntity>>
 

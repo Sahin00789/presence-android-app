@@ -11,6 +11,9 @@ interface ShiftDao {
     @Query("SELECT * FROM shifts WHERE isDeleted = 0 ORDER BY shiftName ASC")
     fun observeAll(): Flow<List<ShiftEntity>>
 
+    @Query("SELECT * FROM shifts WHERE isDeleted = 0 ORDER BY shiftName ASC")
+    suspend fun getAll(): List<ShiftEntity>
+
     @Query("SELECT * FROM shifts WHERE premisesId = :premisesId AND isDeleted = 0 ORDER BY shiftName ASC")
     fun observeByPremises(premisesId: String): Flow<List<ShiftEntity>>
 

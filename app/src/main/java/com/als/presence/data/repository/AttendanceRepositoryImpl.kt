@@ -28,11 +28,27 @@ class AttendanceRepositoryImpl @Inject constructor(
         val result = safeApiCall("Error loading attendance") {
             attendanceApiService.list(from = from, to = to, staffProfileId = staffProfileId)
         }
-        if (result is Resource.Success && result.data != null) {
-            val entities = result.data.map { AttendanceEntity.fromDto(it) }
-            attendanceDao.upsertAll(entities)
+        return when (result) {
+            is Resource.Success -> {
+                if (result.data != null) {
+                    val entities = result.data.map { AttendanceEntity.fromDto(it) }
+                    attendanceDao.upsertAll(entities)
+                }
+                result
+            }
+            is Resource.Error -> {
+                val cached = attendanceDao.getAll()
+                val filtered = if (!staffProfileId.isNullOrBlank()) {
+                    cached.filter { it.employeeId == staffProfileId }
+                } else cached
+                if (filtered.isNotEmpty()) {
+                    Resource.Success(filtered.map { it.toDto() })
+                } else {
+                    result
+                }
+            }
+            Resource.Loading -> Resource.Loading
         }
-        return result
     }
 
     override suspend fun getFaceStatus(): Resource<FaceStatusDto> {

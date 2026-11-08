@@ -12,6 +12,7 @@ import com.als.presence.data.local.OvertimeEntity
 import com.als.presence.data.local.PremisesEntity
 import com.als.presence.data.local.PresenceDatabase
 import com.als.presence.data.local.SessionManager
+import com.als.presence.data.local.ShiftAssignmentEntity
 import com.als.presence.data.local.ShiftEntity
 import com.als.presence.data.local.SyncMetadataEntity
 import com.als.presence.data.model.DomainWebSocketEvent
@@ -136,6 +137,21 @@ class SyncCoordinator @Inject constructor(
                 }.onFailure {
                     overallSuccess = false
                     Log.e(TAG, "Error syncing shifts to Room DB", it)
+                }
+
+                runCatching {
+                    val resp = shiftApi.listAssignments()
+                    if (resp.isSuccessful) {
+                        resp.body()?.let { dtos ->
+                            val entities = dtos.map { ShiftAssignmentEntity.fromDto(it) }
+                            db.shiftAssignmentDao().upsertAll(entities)
+                        }
+                    } else {
+                        overallSuccess = false
+                    }
+                }.onFailure {
+                    overallSuccess = false
+                    Log.e(TAG, "Error syncing shift assignments to Room DB", it)
                 }
 
                 // Fetch & store attendance records
@@ -307,6 +323,16 @@ class SyncCoordinator @Inject constructor(
                                 resp.body()?.let { dtos ->
                                     val entities = dtos.map { ShiftEntity.fromDto(it) }
                                     db.shiftDao().upsertAll(entities)
+                                }
+                            } else success = false
+                        }.onFailure { success = false }
+
+                        runCatching {
+                            val resp = shiftApi.listAssignments()
+                            if (resp.isSuccessful) {
+                                resp.body()?.let { dtos ->
+                                    val entities = dtos.map { ShiftAssignmentEntity.fromDto(it) }
+                                    db.shiftAssignmentDao().upsertAll(entities)
                                 }
                             } else success = false
                         }.onFailure { success = false }

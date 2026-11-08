@@ -36,7 +36,9 @@ data class NextSessionUi(
 /** Finds the caller's own card and turns it into the next-session summary. */
 fun LocationTodayPresenceResponseDto.nextSessionFor(userId: String?): NextSessionUi? {
     if (userId.isNullOrBlank()) return null
-    val card = staffList.firstOrNull { it.userId == userId } ?: return null
+    val card = staffList.firstOrNull {
+        it.userId == userId || it.staffProfileId == userId || it.employeeId == userId
+    } ?: return null
     return card.toNextSession(
         premisesLatitude = latitude,
         premisesLongitude = longitude,

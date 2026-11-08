@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SupervisorAccount
+import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
@@ -675,9 +676,6 @@ fun DashboardScreen(
                                 onNotificationClick = {
                                     showNotificationsDrawer = true
                                 },
-                                onOrgClick = {
-                                    openSecondary(SecondaryDestination.ORGANIZATION_SETTINGS)
-                                },
                                 unreadCount = unreadNotifications,
                                 isOnline = isOnline,
                                 isServerConnected = isServerConnected,
@@ -1028,7 +1026,6 @@ private fun getRoleIcon(role: Role): ImageVector = when (role) {
     Role.EMPLOYEE -> Icons.Default.Badge
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DashboardTopAppBar(
     user: User,
@@ -1037,7 +1034,6 @@ private fun DashboardTopAppBar(
     onNotificationClick: () -> Unit,
     unreadCount: Int,
     modifier: Modifier = Modifier,
-    onOrgClick: () -> Unit = {},
     isOnline: Boolean = true,
     isServerConnected: Boolean = true,
     onServerIconClick: () -> Unit = {}
@@ -1048,136 +1044,146 @@ private fun DashboardTopAppBar(
         modifier = modifier.fillMaxWidth()
     ) {
         Column {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Navigation (Hamburger) Menu Button
+                IconButton(
+                    onClick = onNavigationClick,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Open Navigation Menu",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // Organization / Workspace Header (Non-clickable)
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Organization Logo / Monogram Box
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(roleColor.copy(alpha = 0.14f)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            shape = CircleShape,
-                            modifier = Modifier
-                                .weight(1f, fill = false)
-                                .clickable(onClick = onOrgClick)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                            ) {
-                                OrganizationMark(
-                                    name = user.organizationName.orEmpty(),
-                                    logoUrl = user.organizationLogoUrl,
-                                    accent = roleColor
-                                )
-                                Text(
-                                    text = user.organizationName.orEmpty().ifBlank { "Organization" },
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontSize = 14.sp
-                                    ),
-                                    fontWeight = FontWeight.ExtraBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f, fill = false)
-                                )
-                            }
-                        }
+                        OrganizationMark(
+                            name = user.organizationName.orEmpty(),
+                            accent = roleColor,
+                            logoUrl = user.organizationLogoUrl
+                        )
+                    }
+
+                    // Organization Name & Role Badge
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = user.organizationName.orEmpty().ifBlank { "Organization" },
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 14.sp
+                            ),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
 
                         Surface(
                             color = roleColor.copy(alpha = 0.15f),
-                            shape = CircleShape
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier.padding(top = 1.dp)
                         ) {
                             Text(
                                 text = user.role.name,
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.sp,
+                                    fontSize = 9.sp,
                                     letterSpacing = 0.5.sp
                                 ),
                                 fontWeight = FontWeight.ExtraBold,
                                 color = roleColor,
                                 maxLines = 1,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
                             )
                         }
                     }
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = onNavigationClick,
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = "Open Navigation Menu",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                },
-                actions = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        TopBarServerIcon(
-                            isOnline = isOnline,
-                            isServerConnected = isServerConnected,
-                            onClick = onServerIconClick
-                        )
+                }
 
-                        Box(
-                            modifier = Modifier.size(40.dp),
-                            contentAlignment = Alignment.Center
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // Action Buttons (Server Status & Notifications)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    TopBarServerIcon(
+                        isOnline = isOnline,
+                        isServerConnected = isServerConnected,
+                        onClick = onServerIconClick
+                    )
+
+                    Box(
+                        modifier = Modifier.size(40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        IconButton(
+                            onClick = onNotificationClick,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
                         ) {
-                            IconButton(
-                                onClick = onNotificationClick,
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Notifications",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        if (unreadCount > 0) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.error,
+                                shape = CircleShape,
+                                border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.surface),
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    .align(Alignment.TopEnd)
+                                    .padding(top = 1.dp, end = 1.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Notifications,
-                                    contentDescription = "Notifications",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
+                                Text(
+                                    text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                                    color = MaterialTheme.colorScheme.onError,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                 )
-                            }
-                            if (unreadCount > 0) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(top = 2.dp, end = 2.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.error)
-                                        .padding(horizontal = 5.dp, vertical = 1.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = if (unreadCount > 99) "99+" else unreadCount.toString(),
-                                        color = MaterialTheme.colorScheme.onError,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        lineHeight = 9.sp
-                                    )
-                                }
                             }
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
-                ),
-                windowInsets = TopAppBarDefaults.windowInsets
-            )
+                }
+            }
+
             HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
                 thickness = 1.dp
             )
         }
@@ -1193,48 +1199,26 @@ private fun DashboardTopAppBar(
 @Composable
 private fun OrganizationMark(
     name: String,
-    logoUrl: String? = null,
     accent: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    logoUrl: String? = null
 ) {
-    val markShape = RoundedCornerShape(8.dp)
     if (!logoUrl.isNullOrBlank()) {
         AsyncImage(
             model = logoUrl,
             contentDescription = "$name logo",
             modifier = modifier
-                .size(28.dp)
-                .clip(markShape)
-                .border(
-                    width = 1.dp,
-                    color = accent.copy(alpha = 0.32f),
-                    shape = markShape
-                ),
+                .fillMaxSize()
+                .clip(RoundedCornerShape(8.dp)),
             contentScale = ContentScale.Crop
         )
     } else {
         val initial = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "O"
-        Box(
-            modifier = modifier
-                .size(28.dp)
-                .clip(markShape)
-                .background(accent.copy(alpha = 0.14f))
-                .border(
-                    width = 1.dp,
-                    color = accent.copy(alpha = 0.32f),
-                    shape = markShape
-                )
-                .semantics { contentDescription = "$name logo" },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = initial,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontSize = 13.sp
-                ),
-                fontWeight = FontWeight.ExtraBold,
-                color = accent
-            )
-        }
+        Text(
+            text = initial,
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp),
+            fontWeight = FontWeight.ExtraBold,
+            color = accent
+        )
     }
 }

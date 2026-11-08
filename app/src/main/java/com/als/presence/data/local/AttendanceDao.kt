@@ -11,6 +11,9 @@ interface AttendanceDao {
     @Query("SELECT * FROM attendance WHERE isDeleted = 0 ORDER BY workDate DESC")
     fun observeAll(): Flow<List<AttendanceEntity>>
 
+    @Query("SELECT * FROM attendance WHERE isDeleted = 0 ORDER BY workDate DESC")
+    suspend fun getAll(): List<AttendanceEntity>
+
     @Query("SELECT * FROM attendance WHERE employeeId = :employeeId AND isDeleted = 0 ORDER BY workDate DESC")
     fun observeByEmployee(employeeId: String): Flow<List<AttendanceEntity>>
 

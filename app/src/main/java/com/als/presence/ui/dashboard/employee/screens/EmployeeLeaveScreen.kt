@@ -1,6 +1,7 @@
 package com.als.presence.ui.dashboard.employee.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -8,21 +9,36 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -222,7 +239,7 @@ fun EmployeeLeaveScreen(
     }
 
     if (showRequestDialog) {
-        LeaveRequestDialog(
+        LeaveRequestSheet(
             upcomingShiftsState = upcomingShiftsState,
             isSubmitting = isSubmitting,
             onDismiss = { showRequestDialog = false },
@@ -299,28 +316,117 @@ private fun EmployeeLeaveCard(leave: LeaveDto) {
     }
 }
 
+private data class DateTimelineItem(
+    val isoDate: String,
+    val dayNameShort: String,
+    val dateDisplayShort: String,
+    val fullDisplay: String
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LeaveRequestDialog(
+private fun LeaveRequestSheet(
     upcomingShiftsState: UiState<List<UpcomingShiftDto>>,
     isSubmitting: Boolean,
     onDismiss: () -> Unit,
     onSubmit: (selectedShifts: List<UpcomingShiftDto>, reason: String) -> Unit
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedKeys by remember { mutableStateOf(setOf<String>()) }
     var reason by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var showConfirmSubmodal by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    // Next 14 days (up to 2 weeks)
+    val dateItems = remember {
+        val today = LocalDate.now()
+        val dayOfWeekFormatter = DateTimeFormatter.ofPattern("EEE")
+        val dateShortFormatter = DateTimeFormatter.ofPattern("dd MMM")
+        val fullDateFormatter = DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy")
+
+        (0..13).map { offset ->
+            val date = today.plusDays(offset.toLong())
+            val iso = date.toString()
+            val dayName = when (offset) {
+                0 -> "Today"
+                1 -> "Tomorrow"
+                else -> date.format(dayOfWeekFormatter)
+            }
+            DateTimelineItem(
+                isoDate = iso,
+                dayNameShort = dayName,
+                dateDisplayShort = date.format(dateShortFormatter),
+                fullDisplay = date.format(fullDateFormatter)
+            )
+        }
+    }
+
+    var selectedIsoDate by remember { mutableStateOf<String?>("ALL") }
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text("Request Shift Leave", fontWeight = FontWeight.Bold) },
-        text = {
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
+        ) {
+            // Header Row with Title & Close Button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "LEAVE REQUEST",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        letterSpacing = 0.8.sp
+                    )
+                    Text(
+                        text = "Request Shift Leave",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Text(
-                    text = "Toggle the upcoming shifts you wish to request leave for.",
-                    fontSize = 11.5.sp,
+                    text = "Scroll dates across the next 2 weeks to view and enable assigned shifts for leave.",
+                    fontSize = 12.sp,
                     color = PresenceDesign.LabelText
                 )
 
@@ -332,15 +438,169 @@ private fun LeaveRequestDialog(
                     )
                     is UiState.Success -> {
                         val upcomingShifts = upcomingShiftsState.data
-                        if (upcomingShifts.isEmpty()) {
-                            Text(
-                                text = "No upcoming assigned shifts found for leave request.",
-                                fontSize = 11.5.sp,
-                                color = PresenceDesign.LabelText
-                            )
+
+                        // 14-Day Date Timeline Scroll Row
+                        val dateScrollState = rememberScrollState()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(dateScrollState),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // "All 14 Days" chip
+                            val isAllSelected = selectedIsoDate == "ALL"
+
+                            Surface(
+                                onClick = { selectedIsoDate = "ALL" },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isAllSelected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                },
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isAllSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                ),
+                                modifier = Modifier.height(52.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = "All 14 Days",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isAllSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "${upcomingShifts.size} Shifts",
+                                        fontSize = 9.5.sp,
+                                        color = if (isAllSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f) else PresenceDesign.LabelText
+                                    )
+                                }
+                            }
+
+                            // 14 Date Chips
+                            dateItems.forEach { item ->
+                                val isSelected = selectedIsoDate == item.isoDate
+                                val shiftsOnDate = upcomingShifts.filter { it.workDate == item.isoDate }
+                                val enabledOnDate = shiftsOnDate.count {
+                                    selectedKeys.contains("${it.shiftAssignmentId}_${it.workDate}")
+                                }
+
+                                Surface(
+                                    onClick = { selectedIsoDate = item.isoDate },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = when {
+                                        isSelected -> MaterialTheme.colorScheme.primary
+                                        enabledOnDate > 0 -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                        shiftsOnDate.isNotEmpty() -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+                                        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                    },
+                                    border = BorderStroke(
+                                        1.dp,
+                                        when {
+                                            isSelected -> MaterialTheme.colorScheme.primary
+                                            enabledOnDate > 0 -> MaterialTheme.colorScheme.primary
+                                            shiftsOnDate.isNotEmpty() -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)
+                                            else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                                        }
+                                    ),
+                                    modifier = Modifier.height(52.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Text(
+                                                text = item.dayNameShort,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                            )
+                                            if (enabledOnDate > 0) {
+                                                Text(
+                                                    text = "✓",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
+                                        Text(
+                                            text = item.dateDisplayShort,
+                                            fontSize = 9.5.sp,
+                                            color = when {
+                                                isSelected -> MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
+                                                shiftsOnDate.isNotEmpty() -> MaterialTheme.colorScheme.primary
+                                                else -> PresenceDesign.LabelText
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Selected Date Header Label
+                        val currentSelectedDateItem = dateItems.find { it.isoDate == selectedIsoDate }
+                        val headerLabel = if (selectedIsoDate == "ALL") {
+                            "Showing All Shifts (Next 14 Days)"
+                        } else {
+                            "Shifts for ${currentSelectedDateItem?.fullDisplay ?: selectedIsoDate}"
+                        }
+
+                        Text(
+                            text = headerLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        // Visible Shifts List
+                        val visibleShifts = if (selectedIsoDate == "ALL") {
+                            upcomingShifts
+                        } else {
+                            upcomingShifts.filter { it.workDate == selectedIsoDate }
+                        }
+
+                        if (visibleShifts.isEmpty()) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "No Shift Scheduled Today",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PresenceDesign.Ink
+                                    )
+                                    Text(
+                                        text = "No shift assigned on ${currentSelectedDateItem?.dateDisplayShort ?: "this date"}. Select highlighted dates in the bar above to view & enable shifts for leave.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = PresenceDesign.LabelText,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            }
                         } else {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                upcomingShifts.forEach { shift ->
+                                visibleShifts.forEach { shift ->
                                     val key = "${shift.shiftAssignmentId}_${shift.workDate}"
                                     val isSelected = selectedKeys.contains(key)
 
@@ -349,7 +609,7 @@ private fun LeaveRequestDialog(
                                         shape = RoundedCornerShape(12.dp),
                                         colors = CardDefaults.cardColors(
                                             containerColor = if (isSelected) {
-                                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
                                             } else {
                                                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                                             }
@@ -389,7 +649,7 @@ private fun LeaveRequestDialog(
 
                                             if (shift.alreadyRequested) {
                                                 PresenceBadge(
-                                                    label = "Already Requested",
+                                                    label = "Already Applied",
                                                     tone = PresenceTone.Neutral
                                                 )
                                             } else {
@@ -426,27 +686,68 @@ private fun LeaveRequestDialog(
                 if (error != null) {
                     Text(error!!, color = PresenceDesign.Danger, fontSize = 11.sp)
                 }
-            }
-        },
-        confirmButton = {
-            val shiftsList = (upcomingShiftsState as? UiState.Success)?.data.orEmpty()
-            val selectedShifts = shiftsList.filter { selectedKeys.contains("${it.shiftAssignmentId}_${it.workDate}") }
 
-            Button(
-                enabled = !isSubmitting && selectedShifts.isNotEmpty() && reason.isNotBlank(),
-                onClick = {
-                    if (selectedShifts.isEmpty()) {
-                        error = "Please toggle at least one shift."
-                    } else if (reason.isBlank()) {
-                        error = "Please enter a reason for the leave."
-                    } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val shiftsList = (upcomingShiftsState as? UiState.Success)?.data.orEmpty()
+                    val selectedShifts = shiftsList.filter { selectedKeys.contains("${it.shiftAssignmentId}_${it.workDate}") }
+
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        enabled = !isSubmitting && selectedShifts.isNotEmpty() && reason.isNotBlank(),
+                        onClick = {
+                            if (selectedShifts.isEmpty()) {
+                                error = "Please toggle at least one shift to enable."
+                            } else if (reason.isBlank()) {
+                                error = "Please enter a reason for the leave."
+                            } else {
+                                showConfirmSubmodal = true
+                            }
+                        }
+                    ) { Text(if (isSubmitting) "Submitting…" else "Review & Submit (${selectedShifts.size})") }
+                }
+            }
+        }
+    }
+
+    // Minor Pop Confirmation Submodal over Bottom Sheet
+    if (showConfirmSubmodal) {
+        val shiftsList = (upcomingShiftsState as? UiState.Success)?.data.orEmpty()
+        val selectedShifts = shiftsList.filter { selectedKeys.contains("${it.shiftAssignmentId}_${it.workDate}") }
+
+        AlertDialog(
+            onDismissRequest = { showConfirmSubmodal = false },
+            title = { Text("Confirm Leave Request", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Are you sure you want to submit a leave request for ${selectedShifts.size} shift(s)?",
+                        fontSize = 12.5.sp,
+                        color = PresenceDesign.Ink
+                    )
+                    Text(
+                        text = "Reason: ${reason.trim()}",
+                        fontSize = 11.5.sp,
+                        color = PresenceDesign.LabelText,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showConfirmSubmodal = false
                         onSubmit(selectedShifts, reason)
                     }
-                }
-            ) { Text(if (isSubmitting) "Submitting…" else "Submit request (${selectedShifts.size})") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
+                ) { Text("Confirm & Submit") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmSubmodal = false }) { Text("Back") }
+            }
+        )
+    }
 }

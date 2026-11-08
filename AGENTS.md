@@ -50,7 +50,7 @@ The **Employee Attendance, Shift Management & Salary Ledger System** (`presence`
 5. **No Direct Retrofit in UI**: Compose screens and ViewModels must never invoke Retrofit or Room directly; always go through a clean Repository interface.
 
 ### Shifts UI & Staff Card Conventions
-1. **Top Premises Selection**: Shifts UI features a Premises Selector at the top ("All Premises" + list of premises chips) to filter roster assignments and templates by premises.
+1. **Single Premises Roster**: Shifts UI manages shift definitions and roster assignments for the organization's single premises without requiring premises filtering.
 2. **Weekday Assignments & Separation**: Shift definitions (`shifts`) contain `dayName` (`day_name`) specifying the weekday name, alongside start time, end time, and half-day thresholds.
 3. **Employee Card Actions**: Each Employee card features an **"Assign shift"** action chip that launches `AssignShiftModal` pre-filled for that employee.
 

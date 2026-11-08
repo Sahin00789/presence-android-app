@@ -543,6 +543,21 @@ class OwnerWorkforceViewModel @Inject constructor(
         }
     }
 
+    fun deleteShiftAssignment(assignmentId: String) {
+        viewModelScope.launch {
+            _isSubmitting.value = true
+            when (val result = repository.deleteShiftAssignment(assignmentId)) {
+                is Resource.Success -> {
+                    _message.value = "Shift assignment updated."
+                    loadShiftsData()
+                }
+                is Resource.Error -> _message.value = result.message
+                Resource.Loading -> Unit
+            }
+            _isSubmitting.value = false
+        }
+    }
+
     fun assignShiftWithRules(
         staffProfileId: String,
         shiftId: String,

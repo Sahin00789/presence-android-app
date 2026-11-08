@@ -2,6 +2,12 @@ package com.als.presence.data.repository
 
 import com.als.presence.core.common.Resource
 import com.als.presence.core.network.safeApiCall
+import com.als.presence.data.local.HolidayDao
+import com.als.presence.data.local.HolidayEntity
+import com.als.presence.data.local.ShiftAssignmentDao
+import com.als.presence.data.local.ShiftAssignmentEntity
+import com.als.presence.data.local.ShiftDao
+import com.als.presence.data.local.ShiftEntity
 import com.als.presence.data.model.*
 import com.als.presence.data.remote.FaceApiService
 import com.als.presence.data.remote.HolidayApiService
@@ -23,7 +29,10 @@ class OperationsRepositoryImpl @Inject constructor(
     private val locationRepository: LocationRepository,
     private val payrollRepository: PayrollRepository,
     private val leaveRepository: LeaveRepository,
-    private val attendanceRepository: AttendanceRepository
+    private val attendanceRepository: AttendanceRepository,
+    private val shiftDao: ShiftDao,
+    private val shiftAssignmentDao: ShiftAssignmentDao,
+    private val holidayDao: HolidayDao
 ) : OperationsRepository,
     OvertimeRepository by overtimeRepository,
     EmployeeRepository by employeeRepository,
@@ -71,13 +80,29 @@ class OperationsRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getShiftAssignments(): Resource<List<ShiftAssignmentDto>> {
-        return safeApiCall("Error loading shift assignments") {
+        val networkResult = safeApiCall("Error loading shift assignments") {
             shiftApiService.listAssignments()
+        }
+        return when (networkResult) {
+            is Resource.Success -> {
+                val assignments = networkResult.data
+                shiftAssignmentDao.upsertAll(assignments.map { ShiftAssignmentEntity.fromDto(it) })
+                networkResult
+            }
+            is Resource.Error -> {
+                val cached = shiftAssignmentDao.getAll()
+                if (cached.isNotEmpty()) {
+                    Resource.Success(cached.map { it.toDto() })
+                } else {
+                    networkResult
+                }
+            }
+            Resource.Loading -> Resource.Loading
         }
     }
 
     override suspend fun getShifts(): Resource<List<ShiftDto>> {
-        return safeApiCall("Error loading shifts") {
+        val networkResult = safeApiCall("Error loading shifts") {
             val response = shiftsApiService.list()
             if (response.isSuccessful) {
                 val templates = response.body().orEmpty()
@@ -97,6 +122,24 @@ class OperationsRepositoryImpl @Inject constructor(
                 retrofit2.Response.success(emptyList())
             }
         }
+        return when (networkResult) {
+            is Resource.Success -> {
+                val shifts = networkResult.data
+                if (shifts.isNotEmpty()) {
+                    shiftDao.upsertAll(shifts.map { ShiftEntity.fromDto(it) })
+                }
+                networkResult
+            }
+            is Resource.Error -> {
+                val cached = shiftDao.getAll()
+                if (cached.isNotEmpty()) {
+                    Resource.Success(cached.map { it.toDto() })
+                } else {
+                    networkResult
+                }
+            }
+            Resource.Loading -> Resource.Loading
+        }
     }
 
     override suspend fun createShift(request: CreateShiftRequest): Resource<ShiftDto> {
@@ -109,44 +152,96 @@ class OperationsRepositoryImpl @Inject constructor(
             halfDayThreshold = request.halfDayThreshold,
             dayName = request.dayName
         )
-        return safeApiCall("Error creating shift") {
+        val result = safeApiCall("Error creating shift") {
             shiftsApiService.create(template)
         }
+        if (result is Resource.Success) {
+            shiftDao.upsert(ShiftEntity.fromDto(result.data))
+        }
+        return result
     }
 
     override suspend fun updateShift(id: String, request: UpdateShiftRequest): Resource<ShiftDto> {
-        return safeApiCall("Error updating shift") {
+        val result = safeApiCall("Error updating shift") {
             shiftsApiService.update(id, request)
         }
+        if (result is Resource.Success) {
+            shiftDao.upsert(ShiftEntity.fromDto(result.data))
+        }
+        return result
     }
 
     override suspend fun deleteShift(id: String): Resource<Unit> {
-        return safeApiCall("Error deleting shift") {
+        val result = safeApiCall("Error deleting shift") {
             shiftsApiService.delete(id)
         }
+        if (result is Resource.Success) {
+            shiftDao.markDeleted(id)
+        }
+        return result
     }
 
     override suspend fun createShiftAssignment(request: CreateShiftAssignmentRequest): Resource<ShiftAssignmentDto> {
-        return safeApiCall("Error assigning shift") {
+        val result = safeApiCall("Error assigning shift") {
             shiftApiService.createAssignment(request)
         }
+        if (result is Resource.Success) {
+            shiftAssignmentDao.upsert(ShiftAssignmentEntity.fromDto(result.data))
+        }
+        return result
+    }
+
+    override suspend fun deleteShiftAssignment(id: String): Resource<Unit> {
+        val result = safeApiCall("Error deleting shift assignment") {
+            shiftApiService.deleteAssignment(id)
+        }
+        if (result is Resource.Success) {
+            shiftAssignmentDao.deleteById(id)
+        }
+        return result
     }
 
     override suspend fun getHolidays(premisesId: String?): Resource<List<HolidayDto>> {
-        return safeApiCall("Error loading holidays") {
+        val result = safeApiCall("Error loading holidays") {
             holidayApiService.list(premisesId = premisesId)
+        }
+        return when (result) {
+            is Resource.Success -> {
+                val entities = result.data.map { HolidayEntity.fromDto(it) }
+                holidayDao.upsertAll(entities)
+                result
+            }
+            is Resource.Error -> {
+                val cached = holidayDao.getAll()
+                val filtered = if (!premisesId.isNullOrBlank()) {
+                    cached.filter { it.premisesId == premisesId || it.premisesId == null }
+                } else cached
+                if (filtered.isNotEmpty()) {
+                    Resource.Success(filtered.map { it.toDto() })
+                } else {
+                    result
+                }
+            }
+            Resource.Loading -> Resource.Loading
         }
     }
 
     override suspend fun createHoliday(request: CreateHolidayRequest): Resource<HolidayDto> {
-        return safeApiCall("Error creating holiday") {
+        val result = safeApiCall("Error creating holiday") {
             holidayApiService.create(request)
         }
+        if (result is Resource.Success) {
+            holidayDao.upsert(HolidayEntity.fromDto(result.data))
+        }
+        return result
     }
 
     override suspend fun deleteHoliday(id: String): Resource<Unit> {
         val result = safeApiCall("Error deleting holiday") {
             holidayApiService.delete(id)
+        }
+        if (result is Resource.Success) {
+            holidayDao.markDeleted(id)
         }
         return when (result) {
             is Resource.Success -> Resource.Success(Unit)

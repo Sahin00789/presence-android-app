@@ -698,26 +698,32 @@ fun DailyStaffPresenceCard(
                                 tint = if (isOtEarlier) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = if (isOtEarlier) "Upcoming Overtime Scheduled" else "Upcoming Shift Scheduled",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isOtEarlier) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+                                    color = if (isOtEarlier) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 if (isOtEarlier) {
                                     Text(
                                         text = "${card.dayOfWeek} • ${card.overtimeName ?: "Overtime"} (${if (card.overtimeStartTime != null && card.overtimeEndTime != null) Dates.formatWindow(card.overtimeStartTime, card.overtimeEndTime) else "Approved"})",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     if (card.regularShiftStartTime != null && card.shiftName != "No shift assigned") {
                                         Text(
                                             text = "Regular Shift: ${card.shiftName} (${Dates.formatWindow(card.regularShiftStartTime, card.regularShiftEndTime)})",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 } else {
@@ -725,14 +731,18 @@ fun DailyStaffPresenceCard(
                                         text = "${card.dayOfWeek} • ${card.shiftName} (${Dates.formatWindow(card.regularShiftStartTime, card.regularShiftEndTime)})",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     if (card.hasOvertimeToday) {
                                         Text(
                                             text = "OT: ${card.overtimeName ?: "Overtime"} (${if (card.overtimeStartTime != null && card.overtimeEndTime != null) Dates.formatWindow(card.overtimeStartTime, card.overtimeEndTime) else "Approved"})",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.tertiary
+                                            color = MaterialTheme.colorScheme.tertiary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
@@ -783,6 +793,7 @@ fun DailyStaffPresenceCard(
                         if (card.hasOvertimeToday) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Row(
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
@@ -798,7 +809,8 @@ fun DailyStaffPresenceCard(
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.tertiary,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
                                 if (card.overtimeClockInTime != null) {
                                     Text(

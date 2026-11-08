@@ -2,6 +2,8 @@ package com.als.presence.data.repository
 
 import com.als.presence.core.common.Resource
 import com.als.presence.core.network.safeApiCall
+import com.als.presence.data.local.LeaveRequestDao
+import com.als.presence.data.local.LeaveRequestEntity
 import com.als.presence.data.model.LeaveDto
 import com.als.presence.data.model.LeaveRequestCreate
 import com.als.presence.data.model.UpcomingShiftDto
@@ -12,12 +14,29 @@ import javax.inject.Singleton
 
 @Singleton
 class LeaveRepositoryImpl @Inject constructor(
-    private val leaveApiService: LeaveApiService
+    private val leaveApiService: LeaveApiService,
+    private val leaveRequestDao: LeaveRequestDao
 ) : LeaveRepository {
 
     override suspend fun getLeaves(): Resource<List<LeaveDto>> {
-        return safeApiCall("Error loading leaves") {
+        val result = safeApiCall("Error loading leaves") {
             leaveApiService.list()
+        }
+        return when (result) {
+            is Resource.Success -> {
+                val entities = result.data.map { LeaveRequestEntity.fromDto(it) }
+                leaveRequestDao.upsertAll(entities)
+                result
+            }
+            is Resource.Error -> {
+                val cached = leaveRequestDao.getAll()
+                if (cached.isNotEmpty()) {
+                    Resource.Success(cached.map { it.toDto() })
+                } else {
+                    result
+                }
+            }
+            Resource.Loading -> Resource.Loading
         }
     }
 
@@ -28,13 +47,18 @@ class LeaveRepositoryImpl @Inject constructor(
     }
 
     override suspend fun requestLeave(request: LeaveRequestCreate): Resource<List<LeaveDto>> {
-        return safeApiCall("Error submitting leave request") {
+        val result = safeApiCall("Error submitting leave request") {
             leaveApiService.create(request)
         }
+        if (result is Resource.Success) {
+            val entities = result.data.map { LeaveRequestEntity.fromDto(it) }
+            leaveRequestDao.upsertAll(entities)
+        }
+        return result
     }
 
     override suspend fun reviewLeave(id: String, decision: String, note: String?): Resource<LeaveDto> {
-        return safeApiCall("Error reviewing leave request") {
+        val result = safeApiCall("Error reviewing leave request") {
             leaveApiService.review(
                 id = id,
                 body = com.als.presence.data.model.ReviewLeaveRequest(
@@ -43,5 +67,9 @@ class LeaveRepositoryImpl @Inject constructor(
                 )
             )
         }
+        if (result is Resource.Success) {
+            leaveRequestDao.upsert(LeaveRequestEntity.fromDto(result.data))
+        }
+        return result
     }
 }

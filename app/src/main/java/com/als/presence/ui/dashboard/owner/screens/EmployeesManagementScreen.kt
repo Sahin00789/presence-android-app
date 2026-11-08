@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreTime
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
@@ -108,7 +109,6 @@ import com.als.presence.ui.dashboard.common.PhotoUploadBox
 import com.als.presence.ui.dashboard.common.processImageUriWithProgress
 import com.als.presence.ui.dashboard.common.uriToBase64
 import com.als.presence.ui.dashboard.owner.modals.AssignShiftWithRulesModal
-import com.als.presence.ui.dashboard.owner.modals.BookOvertimeModal
 import com.als.presence.ui.dashboard.owner.viewmodels.OwnerWorkforceViewModel
 
 private data class UnifiedEmployeeItem(
@@ -148,7 +148,6 @@ fun EmployeesManagementScreen(
     var faceTarget by remember { mutableStateOf<UnifiedEmployeeItem?>(null) }
     var revokeTarget by remember { mutableStateOf<UnifiedEmployeeItem?>(null) }
     var shiftTarget by remember { mutableStateOf<UnifiedEmployeeItem?>(null) }
-    var overtimeTarget by remember { mutableStateOf<UnifiedEmployeeItem?>(null) }
 
     val staff = (staffState as? UiState.Success)?.data.orEmpty()
     val premises = (premisesState as? UiState.Success)?.data.orEmpty()
@@ -246,7 +245,6 @@ fun EmployeesManagementScreen(
                             onEdit = { editTarget = emp },
                             onFaceEnroll = { faceTarget = emp },
                             onShiftAssign = { shiftTarget = emp },
-                            onOvertimeAssign = { overtimeTarget = emp },
                             onRevoke = { revokeTarget = emp }
                         )
                     }
@@ -313,61 +311,25 @@ fun EmployeesManagementScreen(
 
     shiftTarget?.let { target ->
         val staffList = staff.map { s ->
-            StaffDto(
-                id = s.id,
-                fullName = s.fullName,
-                email = s.email,
-                role = "EMPLOYEE",
-                premisesId = s.premisesId
+            s.copy(
+                role = s.role,
+                organizationName = s.organizationName ?: user?.organizationName,
+                staffCode = s.staffCode,
+                premisesName = s.premisesName
             )
         }
         AssignShiftWithRulesModal(
             staff = staffList,
             templates = shiftTemplates,
+            existingAssignments = shiftAssignments,
             initialStaffId = target.employeeId,
             initialPremisesId = target.premisesId ?: premises.firstOrNull()?.id,
             onDismiss = { shiftTarget = null },
-            onAssignWithRules = { employeeId, assignments, startDate, targetPremisesId, _, _ ->
-                assignments.forEach { req ->
-                    viewModel.assignShiftWithRequest(
-                        req.copy(
-                            employeeId = employeeId,
-                            premisesId = targetPremisesId ?: req.premisesId
-                        )
-                    )
-                }
-                shiftTarget = null
-            }
-        )
-    }
-
-    overtimeTarget?.let { target ->
-        val staffList = staff.map { s ->
-            StaffDto(
-                id = s.id,
-                fullName = s.fullName,
-                email = s.email,
-                role = "EMPLOYEE",
-                premisesId = s.premisesId
-            )
-        }
-        BookOvertimeModal(
-            staff = staffList,
-            preselectedEmployeeId = target.employeeId,
-            shiftAssignments = shiftAssignments,
-            shifts = shiftTemplates,
-            onDismiss = { overtimeTarget = null },
-            onBook = { employeeId, workDate, startTime, endTime, paymentAmount, reason ->
-                val rateInr = Money.parseToInr(paymentAmount) ?: 0L
-                viewModel.createOvertime(
-                    employeeId = employeeId,
-                    workDate = workDate,
-                    startTime = startTime,
-                    endTime = endTime,
-                    paymentInr = rateInr,
-                    reason = reason
-                )
-                overtimeTarget = null
+            onSaveAssignment = { request ->
+                viewModel.assignShiftWithRequest(request)
+            },
+            onDeleteAssignment = { assignmentId ->
+                viewModel.deleteShiftAssignment(assignmentId)
             }
         )
     }
@@ -403,14 +365,21 @@ private fun EmployeeItemCard(
     onEdit: () -> Unit,
     onFaceEnroll: () -> Unit,
     onShiftAssign: () -> Unit,
-    onOvertimeAssign: () -> Unit,
     onRevoke: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
-    PresenceCard {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            // Header Row: Avatar + Info + Active Badge + 3-Dots Menu
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Header Row: Avatar + Employee Details + Status Badge & 3-Dots Menu
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -423,7 +392,7 @@ private fun EmployeeItemCard(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(46.dp)
+                            .size(48.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
@@ -446,23 +415,43 @@ private fun EmployeeItemCard(
                             )
                         }
                     }
-                    Column {
-                        Text(
-                            text = employee.fullName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF171A34)
-                        )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = employee.fullName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                            ) {
+                                Text(
+                                    text = if (employee.role.equals("MANAGER", ignoreCase = true)) "Manager" else "Staff",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
                         Text(
                             text = employee.email,
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF747895)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+
                         if (!employee.phone.isNullOrBlank()) {
                             Text(
                                 text = employee.phone,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF2563EB),
+                                color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Medium
                             )
                         }
@@ -471,7 +460,7 @@ private fun EmployeeItemCard(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     PresenceBadge(
                         label = if (employee.isActive) "Active" else "Deactivated",
@@ -480,11 +469,14 @@ private fun EmployeeItemCard(
 
                     if (canManage && employee.isActive) {
                         Box {
-                            IconButton(onClick = { showMenu = true }, modifier = Modifier.size(32.dp)) {
+                            IconButton(
+                                onClick = { showMenu = true },
+                                modifier = Modifier.size(34.dp)
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.MoreVert,
                                     contentDescription = "Options",
-                                    tint = Color(0xFF6B7280),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -493,16 +485,6 @@ private fun EmployeeItemCard(
                                 expanded = showMenu,
                                 onDismissRequest = { showMenu = false }
                             ) {
-                                DropdownMenuItem(
-                                    text = { Text("Book Overtime") },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.MoreTime, contentDescription = null, tint = Color(0xFF8B5CF6))
-                                    },
-                                    onClick = {
-                                        showMenu = false
-                                        onOvertimeAssign()
-                                    }
-                                )
                                 DropdownMenuItem(
                                     text = { Text("Edit Profile") },
                                     leadingIcon = {
@@ -530,64 +512,52 @@ private fun EmployeeItemCard(
             }
 
             if (!employee.address.isNullOrBlank()) {
-                Text(
-                    text = employee.address,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF747895)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = employee.address,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
-            // Sleek Metadata Info Bar (Single Line Non-Wrapping Grid)
+            // Employee Summary Metric Grid (Staff Code, Department, Premises Workspace)
             Surface(
-                color = Color(0xFFF9FAFB),
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, Color(0xFFF3F4F6)),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(0.9f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
                         Text(
-                            text = "Code",
+                            text = "Staff Code",
                             style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            color = Color(0xFF747895)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = employee.staffCode,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontSize = 12.sp,
+                            text = employee.staffCode.ifBlank { "N/A" },
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF171A34),
-                            maxLines = 1
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .height(24.dp)
-                            .width(1.dp)
-                            .background(Color(0xFFE5E7EB))
-                    )
-
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text(
-                            text = "Department",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            color = Color(0xFF747895)
-                        )
-                        Text(
-                            text = employee.department?.ifBlank { "General" } ?: "General",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF171A34),
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -595,24 +565,55 @@ private fun EmployeeItemCard(
 
                     Box(
                         modifier = Modifier
-                            .height(24.dp)
+                            .height(28.dp)
                             .width(1.dp)
-                            .background(Color(0xFFE5E7EB))
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     )
 
-                    Column(modifier = Modifier.weight(1.1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1.1f)
+                            .padding(horizontal = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
                         Text(
-                            text = "Premises",
+                            text = "Department",
                             style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            color = Color(0xFF747895)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = employee.department?.ifBlank { "General" } ?: "General",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .height(28.dp)
+                            .width(1.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    )
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1.2f)
+                            .padding(start = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "Premises Workspace",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             text = employee.premisesName?.ifBlank { "Main Office" } ?: "Main Office",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF171A34),
+                            color = MaterialTheme.colorScheme.primary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -623,7 +624,7 @@ private fun EmployeeItemCard(
             if (canManage && employee.isActive) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     PresenceButton(
                         label = "Assign Shift",

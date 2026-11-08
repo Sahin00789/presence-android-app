@@ -60,6 +60,9 @@ interface HolidayDao {
     @Query("SELECT * FROM holidays WHERE isDeleted = 0 ORDER BY holidayDate ASC")
     fun observeAll(): Flow<List<HolidayEntity>>
 
+    @Query("SELECT * FROM holidays WHERE isDeleted = 0 ORDER BY holidayDate ASC")
+    suspend fun getAll(): List<HolidayEntity>
+
     @Query("SELECT * FROM holidays WHERE (premisesId = :premisesId OR premisesId IS NULL) AND isDeleted = 0 ORDER BY holidayDate ASC")
     fun observeByPremises(premisesId: String): Flow<List<HolidayEntity>>
 

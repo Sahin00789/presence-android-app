@@ -27,11 +27,28 @@ class OvertimeRepositoryImpl @Inject constructor(
         val result = safeApiCall("Error loading overtime") {
             overtimeApiService.list(from, to, staffProfileId, status)
         }
-        if (result is Resource.Success && result.data != null) {
-            val entities = result.data.map { OvertimeEntity.fromDto(it) }
-            overtimeDao.upsertAll(entities)
+        return when (result) {
+            is Resource.Success -> {
+                if (result.data != null) {
+                    val entities = result.data.map { OvertimeEntity.fromDto(it) }
+                    overtimeDao.upsertAll(entities)
+                }
+                result
+            }
+            is Resource.Error -> {
+                val cached = overtimeDao.getAll()
+                val filtered = cached.filter { entry ->
+                    (staffProfileId.isNullOrBlank() || entry.staffProfileId == staffProfileId) &&
+                    (status.isNullOrBlank() || entry.status.equals(status, ignoreCase = true))
+                }
+                if (filtered.isNotEmpty()) {
+                    Resource.Success(filtered.map { it.toDto() })
+                } else {
+                    result
+                }
+            }
+            Resource.Loading -> Resource.Loading
         }
-        return result
     }
 
     override suspend fun createOvertime(request: CreateOvertimeRequest): Resource<OvertimeDto> {

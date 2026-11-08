@@ -11,6 +11,7 @@ import androidx.room.TypeConverters
         PremisesEntity::class,
         EmployeeEntity::class,
         ShiftEntity::class,
+        ShiftAssignmentEntity::class,
         OvertimeEntity::class,
         AttendanceEntity::class,
         LocationPingEntity::class,
@@ -34,7 +35,7 @@ import androidx.room.TypeConverters
         SyncMetadataEntity::class,
         ProcessedEventEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -44,6 +45,7 @@ abstract class PresenceDatabase : RoomDatabase() {
     abstract fun premisesDao(): PremisesDao
     abstract fun employeeDao(): EmployeeDao
     abstract fun shiftDao(): ShiftDao
+    abstract fun shiftAssignmentDao(): ShiftAssignmentDao
     abstract fun overtimeDao(): OvertimeDao
     abstract fun attendanceDao(): AttendanceDao
     abstract fun locationPingDao(): LocationPingDao

@@ -50,6 +50,10 @@ object DatabaseModule {
 
     @Provides
     @Singleton
+    fun provideShiftAssignmentDao(db: PresenceDatabase): ShiftAssignmentDao = db.shiftAssignmentDao()
+
+    @Provides
+    @Singleton
     fun provideOvertimeDao(db: PresenceDatabase): OvertimeDao = db.overtimeDao()
 
     @Provides

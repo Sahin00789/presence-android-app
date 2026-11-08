@@ -93,6 +93,9 @@ interface OvertimeDao {
     @Query("SELECT * FROM overtime WHERE isDeleted = 0 ORDER BY workDate DESC, startTime DESC")
     fun observeAll(): Flow<List<OvertimeEntity>>
 
+    @Query("SELECT * FROM overtime WHERE isDeleted = 0 ORDER BY workDate DESC, startTime DESC")
+    suspend fun getAll(): List<OvertimeEntity>
+
     @Query("SELECT * FROM overtime WHERE staffProfileId = :staffProfileId AND isDeleted = 0 ORDER BY workDate DESC")
     fun observeByStaff(staffProfileId: String): Flow<List<OvertimeEntity>>
 

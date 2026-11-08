@@ -11,6 +11,9 @@ interface PremisesDao {
     @Query("SELECT * FROM premises WHERE isDeleted = 0 ORDER BY premisesName ASC")
     fun observeAll(): Flow<List<PremisesEntity>>
 
+    @Query("SELECT * FROM premises WHERE isDeleted = 0 ORDER BY premisesName ASC")
+    suspend fun getAll(): List<PremisesEntity>
+
     @Query("SELECT * FROM premises WHERE organizationId = :orgId AND isDeleted = 0 ORDER BY premisesName ASC")
     fun observeByOrganization(orgId: String): Flow<List<PremisesEntity>>
 

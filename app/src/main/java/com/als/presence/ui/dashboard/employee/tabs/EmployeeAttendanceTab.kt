@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.als.presence.core.common.UiState
 import com.als.presence.data.model.AttendanceRecordDto
@@ -380,14 +381,19 @@ private fun OvertimeRow(entry: OvertimeDto) {
                 Text(
                     text = "${Dates.formatDate(entry.workDate)} • ${Dates.formatTime(entry.startTime)} – ${Dates.formatTime(entry.endTime)}",
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = "${Dates.formatMinutes(entry.plannedMinutes)} planned • Pay: ${Money.format(entry.paymentInr)}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
+            Spacer(modifier = Modifier.width(8.dp))
             StatusPill(entry.status)
         }
     }

@@ -58,6 +58,7 @@ import com.als.presence.ui.dashboard.common.PresenceBadge
 import com.als.presence.ui.dashboard.common.PresenceCard
 import com.als.presence.ui.dashboard.common.PresenceEmptyState
 import com.als.presence.ui.dashboard.common.PresenceTone
+import com.als.presence.ui.dashboard.common.SessionKind
 import com.als.presence.ui.dashboard.employee.viewmodels.EmployeeClockInViewModel
 
 private data class HistoryItem(
@@ -184,7 +185,7 @@ fun EmployeeClockInTab(
     }
     val isTodayOffDay = !isTodayHoliday && !hasMatchingShiftToday
     val isNonWorkingDay = isTodayHoliday || isTodayOffDay
-    val hasTodayOvertime = isRunningOvertime || todayOvertime != null
+    val hasTodayOvertime = isRunningOvertime || todayOvertime != null || nextSession?.kind == SessionKind.OVERTIME || nextSession?.overtimeId != null
 
     val showOffDayHolidayGreeting = isNonWorkingDay && !hasTodayOvertime && !isClockedIn
 
@@ -193,16 +194,17 @@ fun EmployeeClockInTab(
     val rawTitle = when {
         isRunningOvertime -> "Overtime Session"
         isRunningShift -> active?.shiftName?.ifBlank { "Assigned Shift" } ?: "Assigned Shift"
-        todayOvertime != null -> "Overtime"
+        todayOvertime != null -> todayOvertime.reason?.takeIf { it.isNotBlank() } ?: "Overtime"
+        nextSession != null && nextSession.kind == SessionKind.OVERTIME -> nextSession.title.ifBlank { "Overtime" }
         nextSession != null && !nextSession.title.equals("day", ignoreCase = true) && nextSession.title.isNotBlank() -> nextSession.title
         else -> "No Shift Scheduled"
     }
     val workTitle = if (rawTitle.equals("day", ignoreCase = true) || rawTitle.isBlank()) "Assigned Shift" else rawTitle
 
-    val isOvertimeWork = isRunningOvertime || (!isClockedIn && todayOvertime != null)
+    val isOvertimeWork = isRunningOvertime || (!isClockedIn && (todayOvertime != null || nextSession?.kind == SessionKind.OVERTIME || nextSession?.overtimeId != null))
 
     val startTimeRaw = when {
-        isRunningOvertime -> active?.assignedStartTime ?: todayOvertime?.startTime
+        isRunningOvertime -> active?.assignedStartTime ?: todayOvertime?.startTime ?: nextSession?.startTime
         isRunningShift -> active?.assignedStartTime ?: nextSession?.startTime
         todayOvertime != null -> todayOvertime.startTime
         nextSession != null -> nextSession.startTime
@@ -210,7 +212,7 @@ fun EmployeeClockInTab(
     }
 
     val endTimeRaw = when {
-        isRunningOvertime -> active?.assignedEndTime ?: todayOvertime?.endTime
+        isRunningOvertime -> active?.assignedEndTime ?: todayOvertime?.endTime ?: nextSession?.endTime
         isRunningShift -> active?.assignedEndTime ?: nextSession?.endTime
         todayOvertime != null -> todayOvertime.endTime
         nextSession != null -> nextSession.endTime
@@ -237,7 +239,7 @@ fun EmployeeClockInTab(
     val leavePayInr = leavePayAmount.toLong()
     val absentPayInr = absentPayAmount.toLong()
 
-    val activeOvertime = state.openOvertime.firstOrNull { it.id == active?.overtimeId } ?: todayOvertime
+    val activeOvertime = state.openOvertime.firstOrNull { it.id == active?.overtimeId || it.id == nextSession?.overtimeId } ?: todayOvertime
     val overtimePayInr = activeOvertime?.paymentInr ?: 0L
 
     // Late Minutes & Clock-in Time Calculation
@@ -532,91 +534,189 @@ fun EmployeeClockInTab(
         }
 
         if (showOffDayHolidayGreeting) {
-            PresenceCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+            if (isTodayHoliday) {
+                // Distinct Public Holiday Card
+                PresenceCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isTodayHoliday) Color(0xFFF3E8FF) else Color(0xFFEEF2FF)),
-                                contentAlignment = Alignment.Center
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Icon(
-                                    imageVector = if (isTodayHoliday) Icons.Default.Celebration else Icons.Default.WavingHand,
-                                    contentDescription = null,
-                                    tint = if (isTodayHoliday) Color(0xFF7E22CE) else Color(0xFF4F46E5),
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color(0xFFF3E8FF)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Celebration,
+                                        contentDescription = null,
+                                        tint = Color(0xFF7E22CE),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = todayHoliday?.name?.takeIf { it.isNotBlank() } ?: "Public Holiday",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF171A34)
+                                    )
+                                    Text(
+                                        text = "Official Premises Holiday • Paid Day",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF7E22CE),
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
-                            Column {
+
+                            Surface(
+                                color = Color(0xFFF3E8FF),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color(0xFFE9D5FF))
+                            ) {
                                 Text(
-                                    text = if (isTodayHoliday) "Public Holiday" else "Weekly Off-Day",
-                                    style = MaterialTheme.typography.titleSmall,
+                                    text = "PUBLIC HOLIDAY",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF171A34)
-                                )
-                                Text(
-                                    text = if (isTodayHoliday) (todayHoliday?.name?.ifBlank { "No regular shift scheduled today" } ?: "No regular shift scheduled today") else "Enjoy your scheduled rest day",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 11.sp,
-                                    color = Color(0xFF747895)
+                                    color = Color(0xFF7E22CE),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                 )
                             }
                         }
+
+                        HorizontalDivider(color = Color(0xFFF3E8FF))
 
                         Surface(
-                            color = if (isTodayHoliday) Color(0xFFF3E8FF) else Color(0xFFEEF2FF),
-                            shape = RoundedCornerShape(12.dp)
+                            color = Color(0xFFFAF5FF),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color(0xFFF3E8FF)),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = if (isTodayHoliday) "HOLIDAY" else "WEEKLY OFF",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isTodayHoliday) Color(0xFF7E22CE) else Color(0xFF4338CA),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = Color(0xFF7E22CE),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "Today is an official public holiday. Regular shifts do not run today. If you are requested to work today, ask your Owner to create an overtime session for today.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF581C87)
+                                )
+                            }
                         }
                     }
-
-                    HorizontalDivider(color = Color(0xFFE5E7EB))
-
-                    Surface(
-                        color = Color(0xFFF9FAFB),
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
-                        modifier = Modifier.fillMaxWidth()
+                }
+            } else {
+                // Distinct Weekly Off-Day Card
+                PresenceCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
-                            modifier = Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = Color(0xFF2563EB),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "If you want to work today, ask your Owner to create overtime for today. Regular shifts are not scheduled on off-days or holidays, but overtime can be assigned.",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF374151)
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color(0xFFEEF2FF)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.WavingHand,
+                                        contentDescription = null,
+                                        tint = Color(0xFF4F46E5),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = "Weekly Off-Day",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF171A34)
+                                    )
+                                    Text(
+                                        text = "Scheduled Rest Day • Enjoy your time off",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF4F46E5),
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                color = Color(0xFFEEF2FF),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color(0xFFC7D2FE))
+                            ) {
+                                Text(
+                                    text = "WEEKLY OFF",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF4338CA),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(color = Color(0xFFEEF2FF))
+
+                        Surface(
+                            color = Color(0xFFF8FAFC),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = Color(0xFF2563EB),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "Regular shifts are not scheduled on off-days. If you are working today, ask your Owner to assign overtime for today so you can clock in.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF334155)
+                                )
+                            }
                         }
                     }
                 }
@@ -637,8 +737,13 @@ fun EmployeeClockInTab(
                         text = workTitle,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF171A34)
+                        color = Color(0xFF171A34),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     val isSessionRunning = !isClockedIn && (nextSession?.isActive == true || (hasScheduledWork && isTimeWindowValid))
 

@@ -28,12 +28,25 @@ class EmployeeRepositoryImpl @Inject constructor(
         val result = safeApiCall("Error loading employees") {
             employeeApiService.list()
         }
-        if (result is Resource.Success && result.data != null) {
-            val entities = result.data.map { EmployeeEntity.fromDto(it) }
-            employeeDao.upsertAll(entities)
-            snapshotProjectionEngine.rebuildOwnerEmployeesSnapshot("ALL")
+        return when (result) {
+            is Resource.Success -> {
+                if (result.data != null) {
+                    val entities = result.data.map { EmployeeEntity.fromDto(it) }
+                    employeeDao.upsertAll(entities)
+                    snapshotProjectionEngine.rebuildOwnerEmployeesSnapshot("ALL")
+                }
+                result
+            }
+            is Resource.Error -> {
+                val cached = employeeDao.getAll()
+                if (cached.isNotEmpty()) {
+                    Resource.Success(cached.map { it.toDto() })
+                } else {
+                    result
+                }
+            }
+            Resource.Loading -> Resource.Loading
         }
-        return result
     }
 
     override suspend fun createEmployee(request: CreateEmployeeRequest): Resource<EmployeeDto> {
