@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -271,13 +273,13 @@ fun PresencePanel(
     }
 }
 
-/** The page heading: an eyebrow, the title, a sentence of description, actions. */
+/** The page heading: an eyebrow, the title, an optional sentence of description, actions. */
 @Composable
 fun PresencePageIntro(
     eyebrow: String,
     title: String,
-    description: String,
     modifier: Modifier = Modifier,
+    description: String? = null,
     action: (@Composable () -> Unit)? = null
 ) {
     Row(
@@ -294,12 +296,6 @@ fun PresencePageIntro(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.4).sp,
                 color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(3.dp))
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         if (action != null) {
@@ -329,14 +325,6 @@ fun PresenceSectionTitle(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            if (description != null) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
         if (action != null) {
             Spacer(modifier = Modifier.width(10.dp))
@@ -565,6 +553,58 @@ fun PresenceIconButton(
     }
 }
 
+/**
+ * Modern, unified refresh button component used across all dashboard tabs
+ * (Clock In, Attendance Register, Salary Ledger, Workforce, Live Monitor, etc.).
+ * Features 40dp squircle container, hairline border, brand accent tint, and smooth
+ * rotation animation when syncing or refreshing.
+ */
+@Composable
+fun PresenceRefreshButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isRefreshing: Boolean = false,
+    contentDescription: String = "Refresh"
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "RefreshRotation")
+    val rotationAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "RefreshRotationAngle"
+    )
+
+    IconButton(
+        onClick = onClick,
+        enabled = !isRefreshing,
+        modifier = modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (isRefreshing) PresenceDesign.BrandSoft else PresenceDesign.Workspace
+            )
+            .border(
+                1.dp,
+                if (isRefreshing) PresenceDesign.Brand.copy(alpha = 0.5f) else PresenceDesign.Line,
+                RoundedCornerShape(12.dp)
+            )
+    ) {
+        Icon(
+            imageVector = Icons.Default.Refresh,
+            contentDescription = contentDescription,
+            tint = PresenceDesign.Brand,
+            modifier = Modifier
+                .size(20.dp)
+                .graphicsLayer {
+                    rotationZ = if (isRefreshing) rotationAngle else 0f
+                }
+        )
+    }
+}
+
 /** Filter/Selection Chip for premises, tabs, and status toggles. */
 @Composable
 fun PresenceFilterChip(
@@ -620,8 +660,8 @@ fun PresenceFilterChip(
 fun PresenceEmptyState(
     icon: ImageVector,
     title: String,
-    description: String,
     modifier: Modifier = Modifier,
+    description: String? = null,
     action: (@Composable () -> Unit)? = null
 ) {
     Column(
@@ -654,14 +694,16 @@ fun PresenceEmptyState(
             fontWeight = FontWeight.Bold,
             color = PresenceDesign.Ink
         )
-        Spacer(modifier = Modifier.height(5.dp))
-        Text(
-            text = description,
-            fontSize = 11.sp,
-            lineHeight = 16.sp,
-            color = PresenceDesign.LabelText,
-            textAlign = TextAlign.Center
-        )
+        if (!description.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(5.dp))
+            Text(
+                text = description,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+                color = PresenceDesign.LabelText,
+                textAlign = TextAlign.Center
+            )
+        }
         if (action != null) {
             Spacer(modifier = Modifier.height(16.dp))
             action()

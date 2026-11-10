@@ -181,6 +181,13 @@ class AuthViewModel @Inject constructor(
     private val _reverseGeocodeState = MutableStateFlow<com.als.presence.core.location.ReverseGeocodedAddress?>(null)
     val reverseGeocodeState: StateFlow<com.als.presence.core.location.ReverseGeocodedAddress?> = _reverseGeocodeState.asStateFlow()
 
+    private val _isRegistrationSuccessPending = MutableStateFlow(false)
+    val isRegistrationSuccessPending: StateFlow<Boolean> = _isRegistrationSuccessPending.asStateFlow()
+
+    fun setRegistrationSuccessPending(pending: Boolean) {
+        _isRegistrationSuccessPending.value = pending
+    }
+
     private fun cleanEmail(email: String): String {
         return email.replace(Regex("[\\s\\u00A0]+"), "").lowercase()
     }

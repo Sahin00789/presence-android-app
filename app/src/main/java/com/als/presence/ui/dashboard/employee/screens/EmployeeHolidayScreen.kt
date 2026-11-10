@@ -65,86 +65,11 @@ fun EmployeeHolidayScreen(
 
     PresenceSecondaryScaffold(
         crumb = "PERSONAL WORKSPACE",
-        title = "Published Holiday Calendar",
+        title = "Holiday Calendar",
         onBack = onBack,
         onRefresh = { viewModel.refresh() }
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            // Header Overview Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.CalendarMonth,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = "Holiday Policy",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = "Full Pay Public Holidays",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-
-                        PresenceBadge(
-                            label = "$upcomingCount Upcoming",
-                            tone = PresenceTone.Success
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        PresenceStatTile(
-                            label = "Total Holidays",
-                            value = holidays.size.toString(),
-                            modifier = Modifier.weight(1f)
-                        )
-                        PresenceStatTile(
-                            label = "Upcoming",
-                            value = upcomingCount.toString(),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
 
             if (holidays.isEmpty()) {
                 PresenceEmptyState(

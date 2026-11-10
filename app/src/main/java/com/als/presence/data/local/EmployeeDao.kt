@@ -35,6 +35,9 @@ interface EmployeeDao {
     @Query("UPDATE employees SET isDeleted = 1, updatedAt = :timestamp WHERE id = :id")
     suspend fun markDeleted(id: String, timestamp: Long = System.currentTimeMillis())
 
+    @Query("DELETE FROM employees WHERE id = '' OR id IS NULL")
+    suspend fun deleteInvalidEntries()
+
     @Query("DELETE FROM employees")
     suspend fun clear()
 }

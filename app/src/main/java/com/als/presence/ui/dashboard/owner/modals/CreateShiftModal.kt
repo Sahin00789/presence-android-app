@@ -196,11 +196,6 @@ fun CreateShiftModal(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Text(
-                        text = "Create a timing schedule for $dayName at $premisesName.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = PresenceDesign.LabelText
-                    )
                 }
             }
 

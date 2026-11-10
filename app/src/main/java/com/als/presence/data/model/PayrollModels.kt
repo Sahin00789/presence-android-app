@@ -286,3 +286,24 @@ data class RecordPayrollTransactionRequest(
     val paymentMethod: String = "MANUAL_BANK_TRANSFER",
     val reference: String? = null
 )
+
+@Serializable
+data class UnworkedPaymentRuleDto(
+    val id: String = "",
+    val organizationId: String = "",
+    val premisesId: String? = null,
+    val employeeId: String? = null,
+    val dayType: String = "", // "HOLIDAY", "WEEKLY_OFF"
+    @Serializable(with = FlexibleInrLongSerializer::class)
+    val paymentInr: Long = 0L,
+    val createdAt: String? = null
+)
+
+@Serializable
+data class CreateUnworkedPaymentRuleRequest(
+    val employeeId: String? = null,
+    val premisesId: String? = null,
+    val dayType: String, // "HOLIDAY" or "WEEKLY_OFF"
+    val paymentInr: Long
+)
+

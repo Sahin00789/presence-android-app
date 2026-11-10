@@ -87,27 +87,17 @@ fun OrganizationSettingsScreen(
 
     PresenceSecondaryScaffold(
         crumb = "Account & Settings",
-        title = "Organization & Profile",
+        title = "Organization Settings",
         onBack = onBack
     ) {
         PresencePageIntro(
             eyebrow = "Tenant & User Profile",
-            title = "Organization & Profile Management",
-            description = "Manage your user profile credentials, organization details, time zone, currency, and branding logo."
-        )
-
-        PresenceMetaStrip(
-            items = listOf(
-                "Organization" to (user.organizationName ?: "Organization"),
-                "User Role" to user.role.name,
-                "Currency" to "INR"
-            )
+            title = "Organization Settings"
         )
 
         // 1. Personal Profile Section
         PresenceSectionTitle(
             title = "Personal Profile",
-            description = "Your account details, name, and profile picture.",
             action = {
                 PresenceButton(
                     label = "Edit Profile",

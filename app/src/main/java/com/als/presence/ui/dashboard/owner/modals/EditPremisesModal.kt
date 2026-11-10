@@ -100,12 +100,6 @@ fun EditPremisesModal(
                 color = MaterialTheme.colorScheme.primary
             )
 
-            Text(
-                text = "Modify coordinates, premises name, address, or geofence boundary radius for GPS verification.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
             val requestLocationPermission = com.als.presence.core.location.rememberLocationPermissionState(
                 onPermissionGranted = onFetchGpsAndAddress
             )

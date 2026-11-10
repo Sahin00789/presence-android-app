@@ -74,7 +74,10 @@ class TokenAuthenticator @Inject constructor(
 
         val refreshRequestBody = json.encodeToString(
             RefreshTokenRequest.serializer(),
-            RefreshTokenRequest(refreshToken = currentRefreshToken)
+            RefreshTokenRequest(
+                refreshToken = currentRefreshToken,
+                loggedDeviceId = sessionManager.loggedDeviceId
+            )
         ).toRequestBody("application/json".toMediaType())
 
         val refreshUrl = "${PRESENCE_BASE_URL.trimEnd('/')}/api/v1/auth/refresh"
@@ -119,6 +122,9 @@ class TokenAuthenticator @Inject constructor(
     private fun persistSession(authResponse: AuthResponse) {
         sessionManager.token = authResponse.accessToken
         sessionManager.refreshToken = authResponse.refreshToken
+        if (!authResponse.loggedDeviceId.isNullOrBlank()) {
+            sessionManager.loggedDeviceId = authResponse.loggedDeviceId
+        }
         sessionManager.organizationId = authResponse.user.organizationId
         sessionManager.userId = authResponse.user.id
         sessionManager.role = authResponse.user.role

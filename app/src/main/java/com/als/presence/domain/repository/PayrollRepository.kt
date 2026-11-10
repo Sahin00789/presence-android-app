@@ -11,4 +11,6 @@ interface PayrollRepository {
     suspend fun getMyOverallPayrollSummary(): Resource<MyOverallPayrollSummaryDto>
     suspend fun downloadPayslipPdf(month: Int, year: Int, staffProfileId: String? = null): Resource<ResponseBody>
     suspend fun recordPayrollTransaction(request: RecordPayrollTransactionRequest): Resource<PaymentRecordDto>
+    suspend fun getUnworkedRules(employeeId: String? = null, premisesId: String? = null): Resource<List<UnworkedPaymentRuleDto>>
+    suspend fun saveUnworkedRule(request: CreateUnworkedPaymentRuleRequest): Resource<UnworkedPaymentRuleDto>
 }

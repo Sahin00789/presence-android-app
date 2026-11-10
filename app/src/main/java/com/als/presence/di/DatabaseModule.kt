@@ -30,6 +30,10 @@ object DatabaseModule {
 
     @Provides
     @Singleton
+    fun provideOwnerDao(db: PresenceDatabase): OwnerDao = db.ownerDao()
+
+    @Provides
+    @Singleton
     fun provideOrganizationDao(db: PresenceDatabase): OrganizationDao = db.organizationDao()
 
     @Provides

@@ -94,12 +94,6 @@ fun AddPremisesModal(
                 color = MaterialTheme.colorScheme.primary
             )
 
-            Text(
-                text = "Employee clock-ins and active shift periodic GPS checks are verified against this geofence boundary.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
             val requestLocationPermission = com.als.presence.core.location.rememberLocationPermissionState(
                 onPermissionGranted = onFetchGpsAndAddress
             )

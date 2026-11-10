@@ -60,7 +60,7 @@ class SnapshotProjectionEngine @Inject constructor(
 
     suspend fun rebuildEmployeeAttendanceSnapshot(employeeId: String, month: Int, year: Int) {
         val key = "$employeeId-$month-$year"
-        val records = db.attendanceDao().getById(employeeId)?.let { listOf(it.toDto()) } ?: emptyList()
+        val records = db.attendanceDao().getAll().filter { it.employeeId == employeeId }.map { it.toDto() }
 
         var present = 0
         var absent = 0
@@ -127,10 +127,11 @@ class SnapshotProjectionEngine @Inject constructor(
     }
 
     suspend fun rebuildOwnerEmployeesSnapshot(premisesId: String = "ALL") {
+        val allEmployees = db.employeeDao().getAll().filter { it.id.isNotBlank() }.distinctBy { it.id }
         val employees = if (premisesId == "ALL" || premisesId.isBlank()) {
-            db.employeeDao().getById("")?.let { listOf(it) } ?: emptyList()
+            allEmployees
         } else {
-            emptyList()
+            allEmployees.filter { it.premisesId == premisesId }
         }
 
         val dtoList = employees.map { it.toDto() }

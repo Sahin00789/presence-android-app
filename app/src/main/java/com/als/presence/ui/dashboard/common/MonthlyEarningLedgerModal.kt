@@ -60,7 +60,8 @@ data class EarningLedgerEvent(
     val category: String,
     val timeDisplay: String? = null,
     val amountPaise: Long,
-    val isDeduction: Boolean = false
+    val isDeduction: Boolean = false,
+    val runningBalancePaise: Long = 0L
 )
 
 data class EarningLedgerDayEntry(
@@ -351,12 +352,23 @@ fun MonthlyEarningLedgerModal(
                                                     }
                                                 }
                                             }
-                                            Text(
-                                                text = "+ ${Money.format(ev.amountPaise)}",
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = SecondaryEmerald
-                                            )
+                                            Column(horizontalAlignment = Alignment.End) {
+                                                Text(
+                                                    text = "+ ${Money.format(ev.amountPaise)}",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SecondaryEmerald
+                                                )
+                                                if (ev.runningBalancePaise > 0) {
+                                                    Text(
+                                                        text = "Bal: ${Money.format(ev.runningBalancePaise)}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -468,33 +480,44 @@ private fun computeDateSeparatedEarningLedger(
     val dateDisplayFormatter = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy")
 
     if (rawEntries.isNotEmpty()) {
-        val grouped = rawEntries.groupBy { it.earningDate }
-        val resultList = mutableListOf<EarningLedgerDayEntry>()
+        // Sort chronologically ascending to compute running balance correctly
+        val sortedEntries = rawEntries.sortedBy { it.earningDate }
+        var runningAccumulator = 0L
 
-        for ((dateIso, items) in grouped.entries.sortedByDescending { it.key }) {
-            val localDate = runCatching { LocalDate.parse(dateIso) }.getOrNull()
-            val dateDisplay = localDate?.format(dateDisplayFormatter) ?: dateIso
-
-            val events = items.map { item ->
-                val amt = item.amountInr
-                val label = when (item.type.uppercase()) {
-                    "SHIFT" -> "Shift Clock-in (Present)"
-                    "HOLIDAY" -> "Public Holiday (Paid)"
-                    "OFF_DAY" -> "Scheduled Weekly Off (Paid)"
-                    "OVERTIME" -> "Approved Overtime"
-                    else -> item.type.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
-                }
+        val eventsWithBalance = sortedEntries.map { item ->
+            val amt = item.amountInr
+            runningAccumulator += amt
+            val label = when (item.type.uppercase()) {
+                "SHIFT" -> "Shift Attendance"
+                "HOLIDAY" -> "Public Holiday (Paid)"
+                "OFF_DAY" -> "Scheduled Weekly Off (Paid)"
+                "OVERTIME" -> "Approved Overtime"
+                else -> item.type.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+            }
+            Triple(
+                item.earningDate,
                 EarningLedgerEvent(
-                    id = item.id.ifBlank { "ev-$dateIso-${item.type}" },
+                    id = item.id.ifBlank { "ev-${item.earningDate}-${item.type}" },
                     title = label,
                     category = item.type,
                     timeDisplay = null,
                     amountPaise = amt,
-                    isDeduction = false
-                )
-            }
+                    isDeduction = false,
+                    runningBalancePaise = runningAccumulator
+                ),
+                amt
+            )
+        }
 
-            val dayTotal = events.sumOf { it.amountPaise }
+        val groupedByDate = eventsWithBalance.groupBy { it.first }
+        val resultList = mutableListOf<EarningLedgerDayEntry>()
+
+        for ((dateIso, triples) in groupedByDate.entries.sortedByDescending { it.key }) {
+            val localDate = runCatching { LocalDate.parse(dateIso) }.getOrNull()
+            val dateDisplay = localDate?.format(dateDisplayFormatter) ?: dateIso
+            val events = triples.map { it.second }
+            val dayTotal = triples.sumOf { it.third }
+
             resultList.add(
                 EarningLedgerDayEntry(
                     dateIso = dateIso,
@@ -597,6 +620,24 @@ private fun computeDateSeparatedEarningLedger(
         )
     }
 
+    // 5b. Absent Days
+    if (attendanceSummary.absentDays > 0) {
+        val count = attendanceSummary.absentDays
+        val absentLine = breakdown.earnings.firstOrNull { it.code in listOf("ABSENT", "ABSENT_PAY") }
+        val amount = absentLine?.amountInr ?: 0L
+        if (amount != 0L || absentLine != null) {
+            syntheticEvents.add(
+                EarningLedgerEvent(
+                    id = "synth-absent",
+                    title = "Absent Shift Pay ($count days)",
+                    category = "ABSENT",
+                    timeDisplay = "$count absent days",
+                    amountPaise = amount
+                )
+            )
+        }
+    }
+
     // 6. Overtime
     val otMins = attendanceSummary.totalOvertimeMinutes.toInt()
     val otLine = breakdown.earnings.firstOrNull { it.code in listOf("OVERTIME", "COMPLETED_OVERTIME") }
@@ -618,12 +659,18 @@ private fun computeDateSeparatedEarningLedger(
         return emptyList()
     }
 
-    val total = syntheticEvents.sumOf { it.amountPaise }
+    var synthRunning = 0L
+    val syntheticWithBalance = syntheticEvents.map { ev ->
+        synthRunning += ev.amountPaise
+        ev.copy(runningBalancePaise = synthRunning)
+    }
+
+    val total = syntheticWithBalance.sumOf { it.amountPaise }
     return listOf(
         EarningLedgerDayEntry(
             dateIso = monthLabel,
             dateDisplay = "Monthly Summary ($monthLabel)",
-            events = syntheticEvents,
+            events = syntheticWithBalance,
             dayTotalPaise = total
         )
     )

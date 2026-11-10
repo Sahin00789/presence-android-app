@@ -24,6 +24,8 @@ import com.als.presence.data.model.PremisesDto
 import com.als.presence.data.model.ShiftAssignmentDto
 import com.als.presence.data.model.ShiftTemplateDto
 import com.als.presence.data.model.StaffDto
+import com.als.presence.data.model.UnworkedPaymentRuleDto
+import com.als.presence.data.model.CreateUnworkedPaymentRuleRequest
 import com.als.presence.data.model.UpdatePremisesRequest
 import com.als.presence.domain.repository.OperationsRepository
 import com.als.presence.ui.dashboard.common.toUiState
@@ -122,6 +124,10 @@ class OwnerWorkforceViewModel @Inject constructor(
     private val _overtime = MutableStateFlow<UiState<List<OvertimeDto>>>(UiState.Loading)
     val overtime: StateFlow<UiState<List<OvertimeDto>>> = _overtime.asStateFlow()
     val overtimeState: StateFlow<UiState<List<OvertimeDto>>> get() = overtime
+
+    private val _unworkedRules = MutableStateFlow<UiState<List<UnworkedPaymentRuleDto>>>(UiState.Idle)
+    val unworkedRules: StateFlow<UiState<List<UnworkedPaymentRuleDto>>> = _unworkedRules.asStateFlow()
+    val unworkedRulesState: StateFlow<UiState<List<UnworkedPaymentRuleDto>>> get() = unworkedRules
 
     private val _isSubmitting = MutableStateFlow(false)
     val isSubmitting: StateFlow<Boolean> = _isSubmitting.asStateFlow()
@@ -553,6 +559,52 @@ class OwnerWorkforceViewModel @Inject constructor(
                 }
                 is Resource.Error -> _message.value = result.message
                 Resource.Loading -> Unit
+            }
+            _isSubmitting.value = false
+        }
+    }
+
+    fun loadUnworkedRules(employeeId: String? = null, premisesId: String? = null) {
+        val cleanEmpId = employeeId?.takeIf { it.isNotBlank() }
+        val cleanPremId = premisesId?.takeIf { it.isNotBlank() }
+        viewModelScope.launch {
+            _unworkedRules.value = UiState.Loading
+            _unworkedRules.value = repository.getUnworkedRules(cleanEmpId, cleanPremId).toUiState()
+        }
+    }
+
+    fun saveUnworkedRules(
+        employeeId: String?,
+        premisesId: String?,
+        holidayPay: Long,
+        offDayPay: Long
+    ) {
+        val cleanEmpId = employeeId?.takeIf { it.isNotBlank() }
+        val cleanPremId = premisesId?.takeIf { it.isNotBlank() }
+        viewModelScope.launch {
+            _isSubmitting.value = true
+            val r1 = repository.saveUnworkedRule(
+                CreateUnworkedPaymentRuleRequest(
+                    employeeId = cleanEmpId,
+                    premisesId = cleanPremId,
+                    dayType = "HOLIDAY",
+                    paymentInr = holidayPay
+                )
+            )
+            val r2 = repository.saveUnworkedRule(
+                CreateUnworkedPaymentRuleRequest(
+                    employeeId = cleanEmpId,
+                    premisesId = cleanPremId,
+                    dayType = "WEEKLY_OFF",
+                    paymentInr = offDayPay
+                )
+            )
+            if (r1 is Resource.Success && r2 is Resource.Success) {
+                _message.value = "Unwork payment rules saved."
+                loadUnworkedRules(cleanEmpId, cleanPremId)
+            } else {
+                val err = (r1 as? Resource.Error)?.message ?: (r2 as? Resource.Error)?.message ?: "Failed to save unwork payment rules"
+                _message.value = err
             }
             _isSubmitting.value = false
         }

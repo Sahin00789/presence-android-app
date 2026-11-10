@@ -20,9 +20,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.MoreTime
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -39,14 +42,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.als.presence.core.common.UiState
+import com.als.presence.core.designsystem.SecondaryEmerald
 import com.als.presence.data.model.AttendanceRecordDto
 import com.als.presence.data.model.OvertimeDto
+import com.als.presence.data.model.ShiftAssignmentDto
 import com.als.presence.data.model.StaffEarningLedgerDto
 import com.als.presence.ui.dashboard.common.Dates
 import com.als.presence.ui.dashboard.common.MetricTile
 import com.als.presence.ui.dashboard.common.Money
 import com.als.presence.ui.dashboard.common.MyAttendanceContent
+import com.als.presence.ui.dashboard.common.PresenceRefreshButton
 import com.als.presence.ui.dashboard.common.SectionEmpty
 import com.als.presence.ui.dashboard.common.SectionError
 import com.als.presence.ui.dashboard.common.SectionHeader
@@ -59,20 +66,28 @@ import java.time.format.DateTimeFormatter
 /**
  * Employee "Attendance" tab.
  *
- * The month/year selector chips sit at the very top and the attendance register
- * below is grouped date-by-date. Clock-in lives in its own primary tab.
+ * Displays a unified header with PresenceRefreshButton, followed by month selector
+ * and daily attendance logs.
  */
 @Composable
 fun EmployeeAttendanceTab(
     viewModel: EmployeeAttendanceViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRefresh: () -> Unit = { viewModel.refresh() }
 ) {
     MyAttendanceContent(
         modifier = modifier,
         viewModel = viewModel,
-        isScrollable = true
+        isScrollable = true,
+        showHeader = true,
+        onRefresh = onRefresh
     )
 }
+
+private data class LedgerEntryWithBalance(
+    val entry: StaffEarningLedgerDto,
+    val runningBalanceInr: Long
+)
 
 /* -------------------------------------------------------------------------
  * Personal history (used by "My Shifts & Schedule")
@@ -86,7 +101,8 @@ fun personalAttendanceHistoryTab(
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
     isScrollable: Boolean = true,
-    ledgerState: UiState<List<StaffEarningLedgerDto>> = UiState.Success(emptyList())
+    ledgerState: UiState<List<StaffEarningLedgerDto>> = UiState.Success(emptyList()),
+    assignmentsState: UiState<List<ShiftAssignmentDto>> = UiState.Success(emptyList())
 ) {
     var section by remember { mutableIntStateOf(0) }
     val sections = listOf("Register", "Overtime", "My Earning Ledger")
@@ -106,20 +122,10 @@ fun personalAttendanceHistoryTab(
         SectionHeader(
             title = "Personal Workspace",
             trailing = {
-                IconButton(
+                PresenceRefreshButton(
                     onClick = onRefresh,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Refresh",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                    contentDescription = "Refresh personal workspace"
+                )
             }
         )
 
@@ -179,7 +185,10 @@ fun personalAttendanceHistoryTab(
                 }
             }
 
-            else -> EarningsSection(ledgerState)
+            else -> EarningsSection(
+                ledgerState = ledgerState,
+                assignmentsState = assignmentsState
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -187,59 +196,159 @@ fun personalAttendanceHistoryTab(
 }
 
 @Composable
-private fun EarningsSection(ledgerState: UiState<List<StaffEarningLedgerDto>>) {
+private fun EarningsSection(
+    ledgerState: UiState<List<StaffEarningLedgerDto>>,
+    assignmentsState: UiState<List<ShiftAssignmentDto>> = UiState.Success(emptyList())
+) {
     when (ledgerState) {
         is UiState.Loading, is UiState.Idle -> SectionLoading("Loading earning ledger…")
         is UiState.Error -> SectionError(ledgerState.message)
         is UiState.Success -> {
-            val entries = ledgerState.data
-            if (entries.isEmpty()) {
+            val rawEntries = ledgerState.data
+            val assignments = (assignmentsState as? UiState.Success)?.data.orEmpty()
+            val earliestAssignmentDateIso = remember(assignments) {
+                assignments.mapNotNull { it.createdAt?.take(10) }.minOrNull() ?: Dates.todayIso()
+            }
+
+            val entries = remember(rawEntries, earliestAssignmentDateIso) {
+                rawEntries
+                    .filter { e ->
+                        val dateIso = e.earningDate.take(10)
+                        dateIso >= earliestAssignmentDateIso && dateIso <= Dates.todayIso()
+                    }
+                    .distinctBy { "${it.earningDate.take(10)}::${it.type}" }
+            }
+
+            val entriesWithBalance = remember(entries) {
+                val sorted = entries.sortedBy { it.earningDate }
+                var accum = 0L
+                sorted.map { item ->
+                    accum += item.amountCents
+                    LedgerEntryWithBalance(item, accum)
+                }
+            }
+
+            if (entriesWithBalance.isEmpty()) {
                 SectionEmpty("No earning ledger entries recorded yet.")
             } else {
-                val groupedByMonth = remember(entries) {
-                    entries.sortedByDescending { it.earningDate }
-                        .groupBy { formatMonthHeader(it.earningDate) }
+                val totalOverallBalanceInr = remember(entriesWithBalance) { entriesWithBalance.lastOrNull()?.runningBalanceInr ?: 0L }
+
+                // Calculate Month-wise grouping with running monthly balance
+                val monthGroups = remember(entriesWithBalance) {
+                    val grouped = entriesWithBalance.groupBy { formatMonthYear(it.entry.earningDate) }
+                    var runningSum = 0L
+                    grouped.entries
+                        .sortedBy { (monthKey, _) -> monthKey }
+                        .map { (monthKey, monthEntries) ->
+                            val monthTotal = monthEntries.sumOf { it.entry.amountCents }
+                            runningSum += monthTotal
+                            Triple(monthKey, monthEntries.sortedByDescending { it.entry.earningDate }, runningSum)
+                        }
+                        .sortedByDescending { (monthKey, _, _) -> monthKey }
                 }
-                groupedByMonth.forEach { (monthHeader, monthEntries) ->
-                    val totalMonthPaise = monthEntries.sumOf { it.amountCents }
-                    MonthlySeparatorHeader(
-                        monthTitle = monthHeader,
-                        monthTotalPaise = totalMonthPaise,
-                        entryCount = monthEntries.size
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // 1. Overall Running Balance Summary Card
+                    OverallRunningBalanceCard(
+                        totalBalanceInr = totalOverallBalanceInr,
+                        totalEntriesCount = entriesWithBalance.size
                     )
-                    monthEntries.forEach { entry -> LedgerRow(entry) }
+
+                    monthGroups.forEach { (monthKey, monthEntries, monthlyRunningBalance) ->
+                        val monthTotal = monthEntries.sumOf { it.entry.amountCents }
+                        val monthTitle = formatMonthHeader(monthKey)
+
+                        // 2. Monthly Running Balance Header
+                        MonthlyRunningBalanceHeader(
+                            monthTitle = monthTitle,
+                            monthTotalInr = monthTotal,
+                            monthlyRunningBalanceInr = monthlyRunningBalance,
+                            entryCount = monthEntries.size
+                        )
+
+                        // 3. Group day-by-day within the month
+                        val dayGroups = monthEntries.groupBy { it.entry.earningDate.take(10) }
+                        dayGroups.forEach { (dateIso, dayEntries) ->
+                            DayLedgerCard(
+                                dateIso = dateIso,
+                                dayEntries = dayEntries
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-private fun formatMonthHeader(iso: String?): String {
-    if (iso.isNullOrBlank()) return "Other"
-    return try {
-        val date = LocalDate.parse(iso.take(10))
-        date.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
-    } catch (_: Exception) {
-        "Other"
+@Composable
+private fun OverallRunningBalanceCard(
+    totalBalanceInr: Long,
+    totalEntriesCount: Int
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "OVERALL RUNNING BALANCE",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.0.sp,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                )
+                Text(
+                    text = Money.format(totalBalanceInr),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            ) {
+                Text(
+                    text = "$totalEntriesCount ${if (totalEntriesCount == 1) "Entry" else "Entries"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun MonthlySeparatorHeader(
+private fun MonthlyRunningBalanceHeader(
     monthTitle: String,
-    monthTotalPaise: Long,
+    monthTotalInr: Long,
+    monthlyRunningBalanceInr: Long,
     entryCount: Int
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 2.dp),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-        )
+            .padding(top = 10.dp, bottom = 4.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -256,29 +365,188 @@ private fun MonthlySeparatorHeader(
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp)
                 )
-                Text(
-                    text = monthTitle,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                Column {
+                    Text(
+                        text = monthTitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "$entryCount ${if (entryCount == 1) "entry" else "entries"} • Month Total: ${Money.format(monthTotalInr)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
+
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = Money.format(monthTotalPaise),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    text = "Running Balance",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "$entryCount ${if (entryCount == 1) "entry" else "entries"}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = Money.format(monthlyRunningBalanceInr),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
     }
 }
+
+@Composable
+private fun DayLedgerCard(
+    dateIso: String,
+    dayEntries: List<LedgerEntryWithBalance>
+) {
+    val dayTotalInr = remember(dayEntries) { dayEntries.sumOf { it.entry.amountCents } }
+    val dateDisplay = remember(dateIso) { Dates.formatDate(dateIso) }
+    val dayOfWeek = remember(dateIso) {
+        runCatching {
+            val ld = LocalDate.parse(dateIso.take(10))
+            ld.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }
+        }.getOrDefault("")
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Day Header Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "$dateDisplay • $dayOfWeek",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "+${Money.format(dayTotalInr)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = SecondaryEmerald
+                )
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+
+            // Day Individual Accrual Rows
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                dayEntries.forEach { item ->
+                    val entry = item.entry
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        when (entry.type.uppercase()) {
+                                            "SHIFT" -> MaterialTheme.colorScheme.primaryContainer
+                                            "OVERTIME" -> MaterialTheme.colorScheme.tertiaryContainer
+                                            "HOLIDAY" -> MaterialTheme.colorScheme.secondaryContainer
+                                            else -> MaterialTheme.colorScheme.surfaceVariant
+                                        }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = when (entry.type.uppercase()) {
+                                        "SHIFT" -> Icons.Default.Schedule
+                                        "OVERTIME" -> Icons.Default.MoreTime
+                                        "HOLIDAY" -> Icons.Default.CalendarMonth
+                                        else -> Icons.AutoMirrored.Filled.TrendingUp
+                                    },
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+
+                            Text(
+                                text = when (entry.type.uppercase()) {
+                                    "SHIFT" -> "Shift"
+                                    "OVERTIME" -> "Overtime"
+                                    "HOLIDAY" -> "Holiday Pay"
+                                    "OFF_DAY", "WEEKLY_OFF" -> "Weekly Off Pay"
+                                    else -> entry.type.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "+${Money.format(entry.amountCents)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = SecondaryEmerald
+                            )
+                            if (item.runningBalanceInr > 0) {
+                                Text(
+                                    text = "Bal: ${Money.format(item.runningBalanceInr)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatMonthYear(iso: String?): String {
+    if (iso.isNullOrBlank()) return "0000-00"
+    return try {
+        val date = LocalDate.parse(iso.take(10))
+        "${date.year}-${String.format("%02d", date.monthValue)}"
+    } catch (_: Exception) {
+        "0000-00"
+    }
+}
+
+private fun formatMonthHeader(iso: String?): String {
+    if (iso.isNullOrBlank()) return "Other"
+    return try {
+        val date = if (iso.length == 7) LocalDate.parse("$iso-01") else LocalDate.parse(iso.take(10))
+        date.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
+    } catch (_: Exception) {
+        "Other"
+    }
+}
+
+
 
 @Composable
 private fun RecordRow(record: AttendanceRecordDto) {
@@ -399,56 +667,4 @@ private fun OvertimeRow(entry: OvertimeDto) {
     }
 }
 
-@Composable
-private fun LedgerRow(entry: StaffEarningLedgerDto) {
-    val amountPaise = entry.amountCents
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.TrendingUp,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.size(17.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = entry.type.lowercase().replace('_', ' ')
-                        .replaceFirstChar { it.uppercase() },
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = Dates.formatDate(entry.earningDate),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text(
-                text = "+" + Money.format(amountPaise),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.secondary
-            )
-        }
-    }
-}
+

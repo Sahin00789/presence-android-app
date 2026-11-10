@@ -26,7 +26,6 @@ class OperationsRepositoryImpl @Inject constructor(
     private val overtimeRepository: OvertimeRepository,
     private val employeeRepository: EmployeeRepository,
     private val premisesRepository: PremisesRepository,
-    private val locationRepository: LocationRepository,
     private val payrollRepository: PayrollRepository,
     private val leaveRepository: LeaveRepository,
     private val attendanceRepository: AttendanceRepository,
@@ -37,7 +36,6 @@ class OperationsRepositoryImpl @Inject constructor(
     OvertimeRepository by overtimeRepository,
     EmployeeRepository by employeeRepository,
     PremisesRepository by premisesRepository,
-    LocationRepository by locationRepository,
     PayrollRepository by payrollRepository,
     LeaveRepository by leaveRepository,
     AttendanceRepository by attendanceRepository {
@@ -83,21 +81,19 @@ class OperationsRepositoryImpl @Inject constructor(
         val networkResult = safeApiCall("Error loading shift assignments") {
             shiftApiService.listAssignments()
         }
-        return when (networkResult) {
-            is Resource.Success -> {
-                val assignments = networkResult.data
-                shiftAssignmentDao.upsertAll(assignments.map { ShiftAssignmentEntity.fromDto(it) })
-                networkResult
-            }
-            is Resource.Error -> {
-                val cached = shiftAssignmentDao.getAll()
-                if (cached.isNotEmpty()) {
-                    Resource.Success(cached.map { it.toDto() })
-                } else {
-                    networkResult
-                }
-            }
-            Resource.Loading -> Resource.Loading
+        if (networkResult is Resource.Success) {
+            val assignments = networkResult.data
+            shiftAssignmentDao.clear()
+            shiftAssignmentDao.upsertAll(assignments.map { ShiftAssignmentEntity.fromDto(it) })
+            return Resource.Success(assignments)
+        }
+        val cached = shiftAssignmentDao.getAll()
+        return if (cached.isNotEmpty()) {
+            Resource.Success(cached.map { it.toDto() })
+        } else if (networkResult is Resource.Error) {
+            networkResult
+        } else {
+            Resource.Success(emptyList())
         }
     }
 
@@ -122,23 +118,16 @@ class OperationsRepositoryImpl @Inject constructor(
                 retrofit2.Response.success(emptyList())
             }
         }
-        return when (networkResult) {
-            is Resource.Success -> {
-                val shifts = networkResult.data
-                if (shifts.isNotEmpty()) {
-                    shiftDao.upsertAll(shifts.map { ShiftEntity.fromDto(it) })
-                }
-                networkResult
-            }
-            is Resource.Error -> {
-                val cached = shiftDao.getAll()
-                if (cached.isNotEmpty()) {
-                    Resource.Success(cached.map { it.toDto() })
-                } else {
-                    networkResult
-                }
-            }
-            Resource.Loading -> Resource.Loading
+        if (networkResult is Resource.Success && networkResult.data.isNotEmpty()) {
+            shiftDao.upsertAll(networkResult.data.map { ShiftEntity.fromDto(it) })
+        }
+        val cached = shiftDao.getAll()
+        return if (cached.isNotEmpty()) {
+            Resource.Success(cached.map { it.toDto() })
+        } else if (networkResult is Resource.Error) {
+            networkResult
+        } else {
+            Resource.Success(emptyList())
         }
     }
 

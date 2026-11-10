@@ -22,28 +22,25 @@ class LeaveRepositoryImpl @Inject constructor(
         val result = safeApiCall("Error loading leaves") {
             leaveApiService.list()
         }
-        return when (result) {
-            is Resource.Success -> {
-                val entities = result.data.map { LeaveRequestEntity.fromDto(it) }
-                leaveRequestDao.upsertAll(entities)
-                result
-            }
-            is Resource.Error -> {
-                val cached = leaveRequestDao.getAll()
-                if (cached.isNotEmpty()) {
-                    Resource.Success(cached.map { it.toDto() })
-                } else {
-                    result
-                }
-            }
-            Resource.Loading -> Resource.Loading
+        if (result is Resource.Success) {
+            val entities = result.data.map { LeaveRequestEntity.fromDto(it) }
+            leaveRequestDao.upsertAll(entities)
+        }
+        val cached = leaveRequestDao.getAll()
+        return if (cached.isNotEmpty()) {
+            Resource.Success(cached.map { it.toDto() })
+        } else if (result is Resource.Error) {
+            result
+        } else {
+            Resource.Success(emptyList())
         }
     }
 
     override suspend fun getUpcomingShifts(): Resource<List<UpcomingShiftDto>> {
-        return safeApiCall("Error loading upcoming shifts") {
+        val result = safeApiCall("Error loading upcoming shifts") {
             leaveApiService.getUpcomingShifts()
         }
+        return result
     }
 
     override suspend fun requestLeave(request: LeaveRequestCreate): Resource<List<LeaveDto>> {

@@ -16,14 +16,13 @@ Assigning shift schedules via `AssignShiftWithRulesModal` allows setting indepen
 
 ## 2. Unworked & Special Day Rules (`unworked_payment_rules`)
 
-Configures holiday, weekly off-day, and paid-leave compensation explicitly entered by Owner:
+Configures holiday and weekly off-day compensation explicitly entered by Owner:
 1. **Unworked Paid Holidays (`HOLIDAY`)**: Explicit daily payment rate entered by Owner for scheduled public holidays.
 2. **Weekly Off Days (`WEEKLY_OFF`)**: Explicit daily payment rate entered by Owner for scheduled off-days that are not worked.
-3. **Paid Leave (`PAID_LEAVE`)**: Explicit daily payment rate for approved paid/sick leave.
 
 There are no separate worked-holiday or worked-off-day rules. Clock-ins on holidays or weekly offs are paid as normal present days.
 
-Rules are resolved by precedence (employee-specific > premises-specific > organization default). The engine emits itemized earnings as `HOLIDAY_PAY`, `PAID_LEAVE`, and `WEEKLY_OFF_PAY`.
+Rules are resolved by precedence (employee-specific > premises-specific > organization default). The engine emits itemized earnings as `HOLIDAY_PAY` and `WEEKLY_OFF_PAY`.
 
 ---
 

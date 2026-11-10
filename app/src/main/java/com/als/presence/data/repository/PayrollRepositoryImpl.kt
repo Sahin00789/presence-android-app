@@ -28,7 +28,11 @@ class PayrollRepositoryImpl @Inject constructor(
                     PayrollSnapshotEntity.fromDto(month, year, dto)
                 }
                 payrollSnapshotDao.insertPayrollSnapshots(entities)
-                result
+                val cached = payrollSnapshotDao.getMonthlyPayrollSnapshots(month, year)
+                val filtered = if (premisesId != null) {
+                    cached.filter { it.premisesId == premisesId }
+                } else cached
+                Resource.Success(filtered.map { it.toDto() })
             }
             is Resource.Error -> {
                 val cached = payrollSnapshotDao.getMonthlyPayrollSnapshots(month, year)
@@ -65,7 +69,12 @@ class PayrollRepositoryImpl @Inject constructor(
                 payrollSnapshotDao.insertMonthlyEarningSnapshot(
                     MonthlyEarningSnapshotEntity.fromDto(result.data)
                 )
-                result
+                val cached = payrollSnapshotDao.getMonthlyEarningSnapshotsForMonth(month, year).firstOrNull()
+                if (cached != null) {
+                    Resource.Success(cached.toDto())
+                } else {
+                    result
+                }
             }
             is Resource.Error -> {
                 val cached = payrollSnapshotDao.getMonthlyEarningSnapshotsForMonth(month, year).firstOrNull()
@@ -94,6 +103,18 @@ class PayrollRepositoryImpl @Inject constructor(
     override suspend fun recordPayrollTransaction(request: RecordPayrollTransactionRequest): Resource<PaymentRecordDto> {
         return safeApiCall("Error recording payment transaction") {
             payrollApiService.recordTransaction(request)
+        }
+    }
+
+    override suspend fun getUnworkedRules(employeeId: String?, premisesId: String?): Resource<List<UnworkedPaymentRuleDto>> {
+        return safeApiCall("Error loading unworked rules") {
+            payrollApiService.getUnworkedRules(employeeId, premisesId)
+        }
+    }
+
+    override suspend fun saveUnworkedRule(request: CreateUnworkedPaymentRuleRequest): Resource<UnworkedPaymentRuleDto> {
+        return safeApiCall("Error saving unworked rule") {
+            payrollApiService.saveUnworkedRule(request)
         }
     }
 }

@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import com.als.presence.data.model.UnworkedPaymentRuleDto
+
 /** Employee "Attendance" tab: personal register, next session card, and earning ledger. */
 @HiltViewModel
 class EmployeeAttendanceViewModel @Inject constructor(
@@ -52,6 +54,9 @@ class EmployeeAttendanceViewModel @Inject constructor(
     private val _templates = MutableStateFlow<UiState<List<ShiftDto>>>(UiState.Loading)
     val templates: StateFlow<UiState<List<ShiftDto>>> = _templates.asStateFlow()
 
+    private val _unworkedRules = MutableStateFlow<UiState<List<UnworkedPaymentRuleDto>>>(UiState.Loading)
+    val unworkedRules: StateFlow<UiState<List<UnworkedPaymentRuleDto>>> = _unworkedRules.asStateFlow()
+
     val currentUserId: String? get() = sessionManager.userId
 
     init {
@@ -67,6 +72,7 @@ class EmployeeAttendanceViewModel @Inject constructor(
             loadLedger()
             loadOvertime()
             loadAssignmentsAndTemplates()
+            loadUnworkedRules()
         }
     }
 
@@ -125,6 +131,13 @@ class EmployeeAttendanceViewModel @Inject constructor(
             _templates.value = UiState.Loading
             _assignments.value = repository.getShiftAssignments().toUiState()
             _templates.value = repository.getShifts().toUiState()
+        }
+    }
+
+    fun loadUnworkedRules() {
+        viewModelScope.launch {
+            _unworkedRules.value = UiState.Loading
+            _unworkedRules.value = repository.getUnworkedRules().toUiState()
         }
     }
 

@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import com.als.presence.ui.dashboard.common.PresenceRefreshButton
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -91,31 +92,75 @@ fun OwnerReportsTab(
     
     val currentMonth = YearMonth.now()
     var selectedMonth by remember { mutableStateOf(currentMonth) }
+    var statusFilter by remember { mutableStateOf("ALL") }
 
-    // Filter records based on selected Period and Premises
-    val filteredRecords = records.filter { record ->
-        val matchesPremises = if (selectedPremisesId != null) {
-            record.premisesId == selectedPremisesId
+    fun parseWorkDate(workDate: String?): LocalDate? {
+        if (workDate.isNullOrBlank()) return null
+        return runCatching { LocalDate.parse(workDate.take(10)) }.getOrNull()
+    }
+
+    fun isPremisesMatch(recordPremisesId: String?, pId: String?): Boolean {
+        return if (pId != null) {
+            recordPremisesId == pId
         } else if (user?.role == Role.EMPLOYEE || initialPremisesId != null || premisesList.size == 1) {
             val allowedIds = premisesList.map { it.id }.toSet()
-            allowedIds.isEmpty() || allowedIds.contains(record.premisesId)
+            allowedIds.isEmpty() || allowedIds.contains(recordPremisesId)
         } else {
             true
         }
-        
-        val matchesDate = if (record.workDate.isNullOrBlank()) {
-            false
-        } else {
-            val dateStr = record.workDate.take(10)
-            val recordDate = runCatching { LocalDate.parse(dateStr) }.getOrNull()
-            if (reportTab == "DAILY") {
-                recordDate == selectedDate
-            } else {
-                recordDate != null && recordDate.year == selectedMonth.year && recordDate.month == selectedMonth.month
+    }
+
+    val dailyCount = remember(records, selectedPremisesId, selectedDate, premisesList, user, initialPremisesId) {
+        records.count { record ->
+            isPremisesMatch(record.premisesId, selectedPremisesId) && parseWorkDate(record.workDate) == selectedDate
+        }
+    }
+
+    val monthlyCount = remember(records, selectedPremisesId, selectedMonth, premisesList, user, initialPremisesId) {
+        records.count { record ->
+            val date = parseWorkDate(record.workDate)
+            isPremisesMatch(record.premisesId, selectedPremisesId) && date != null && date.year == selectedMonth.year && date.month == selectedMonth.month
+        }
+    }
+
+    val allPremisesCount = remember(records, reportTab, selectedDate, selectedMonth) {
+        records.count { record ->
+            val date = parseWorkDate(record.workDate)
+            if (reportTab == "DAILY") date == selectedDate else date != null && date.year == selectedMonth.year && date.month == selectedMonth.month
+        }
+    }
+
+    val premisesCounts = remember(records, reportTab, selectedDate, selectedMonth, premisesList) {
+        premisesList.associate { p ->
+            p.id to records.count { record ->
+                val date = parseWorkDate(record.workDate)
+                val matchesDate = if (reportTab == "DAILY") date == selectedDate else date != null && date.year == selectedMonth.year && date.month == selectedMonth.month
+                record.premisesId == p.id && matchesDate
             }
+        }
+    }
+
+    // Filter records based on selected Period and Premises
+    val filteredRecords = records.filter { record ->
+        val matchesPremises = isPremisesMatch(record.premisesId, selectedPremisesId)
+        val recordDate = parseWorkDate(record.workDate)
+        val matchesDate = if (reportTab == "DAILY") {
+            recordDate == selectedDate
+        } else {
+            recordDate != null && recordDate.year == selectedMonth.year && recordDate.month == selectedMonth.month
         }
         
         matchesPremises && matchesDate
+    }
+
+    val displayedRecords = remember(filteredRecords, statusFilter) {
+        when (statusFilter) {
+            "PRESENT" -> filteredRecords.filter { it.status == "PRESENT" || it.status == "COMPLETED" }
+            "ABSENT" -> filteredRecords.filter { it.status == "ABSENT" }
+            "HALF_DAY" -> filteredRecords.filter { it.status == "HALF_DAY" }
+            "LEAVE" -> filteredRecords.filter { it.status == "LEAVE" }
+            else -> filteredRecords
+        }
     }
 
     val totalRecords = filteredRecords.size
@@ -144,26 +189,12 @@ fun OwnerReportsTab(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    text = "Attendance metrics & premises analytics",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
-            IconButton(
+            PresenceRefreshButton(
                 onClick = onRefresh,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = "Refresh reports",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+                isRefreshing = recordsState is UiState.Loading || premisesState is UiState.Loading,
+                contentDescription = "Refresh reports"
+            )
         }
         // Assigned Premises Info Card for Manager or Premises Filter Chips for Owner
         if (user?.role == Role.EMPLOYEE) {
@@ -241,14 +272,15 @@ fun OwnerReportsTab(
                 FilterChip(
                     selected = selectedPremisesId == null,
                     onClick = { selectedPremisesId = null },
-                    label = { Text("All Premises") }
+                    label = { Text("All Premises ($allPremisesCount)") }
                 )
                 premisesList.forEach { premises ->
                     val shortName = Dates.cleanPremisesName(premises.name)
+                    val pCount = premisesCounts[premises.id] ?: 0
                     FilterChip(
                         selected = selectedPremisesId == premises.id,
                         onClick = { selectedPremisesId = premises.id },
-                        label = { Text(shortName) }
+                        label = { Text("$shortName ($pCount)") }
                     )
                 }
             }
@@ -270,12 +302,12 @@ fun OwnerReportsTab(
                 FilterChip(
                     selected = reportTab == "DAILY",
                     onClick = { reportTab = "DAILY" },
-                    label = { Text("Daily") }
+                    label = { Text("Daily ($dailyCount)") }
                 )
                 FilterChip(
                     selected = reportTab == "MONTHLY",
                     onClick = { reportTab = "MONTHLY" },
-                    label = { Text("Monthly") }
+                    label = { Text("Monthly ($monthlyCount)") }
                 )
             }
             IconButton(
@@ -372,56 +404,42 @@ fun OwnerReportsTab(
             }
         }
 
-        // Summary Metric Cards Grid
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            MetricCard(
-                title = "Attendance Rate",
-                value = "$attendanceRate%",
-                icon = Icons.Default.CheckCircle,
-                accentColor = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f)
-            )
-            MetricCard(
-                title = "Total Sessions",
-                value = "$totalRecords",
-                icon = Icons.Default.BarChart,
-                accentColor = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        // Attendance Status Breakdown
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 1.dp
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = "Attendance Breakdown",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    StatusCountItem(label = "Present", count = presentCount, color = MaterialTheme.colorScheme.primary)
-                    StatusCountItem(label = "Half-Day", count = halfDayCount, color = MaterialTheme.colorScheme.secondary)
-                    StatusCountItem(label = "Leave", count = leaveCount, color = Color(0xFF0284C7))
-                    StatusCountItem(label = "Absent", count = absentCount, color = MaterialTheme.colorScheme.error)
-                }
-            }
-        }
-
         SectionHeader(title = "Filtered Activity Log")
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilterChip(
+                selected = statusFilter == "ALL",
+                onClick = { statusFilter = "ALL" },
+                label = { Text("All ($totalRecords)") }
+            )
+            FilterChip(
+                selected = statusFilter == "PRESENT",
+                onClick = { statusFilter = "PRESENT" },
+                label = { Text("Present ($presentCount)") }
+            )
+            FilterChip(
+                selected = statusFilter == "ABSENT",
+                onClick = { statusFilter = "ABSENT" },
+                label = { Text("Absent ($absentCount)") }
+            )
+            FilterChip(
+                selected = statusFilter == "HALF_DAY",
+                onClick = { statusFilter = "HALF_DAY" },
+                label = { Text("Half-Day ($halfDayCount)") }
+            )
+            FilterChip(
+                selected = statusFilter == "LEAVE",
+                onClick = { statusFilter = "LEAVE" },
+                label = { Text("Leave ($leaveCount)") }
+            )
+        }
+
         when (recordsState) {
             is UiState.Loading, is UiState.Idle -> SectionLoading("Loading attendance reports…")
             is UiState.Error -> PresenceErrorState(
@@ -429,14 +447,14 @@ fun OwnerReportsTab(
                 onRetry = onRefresh
             )
             is UiState.Success -> {
-                if (filteredRecords.isEmpty()) {
+                if (displayedRecords.isEmpty()) {
                     Text(
                         text = "No records found matching the selected filters.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
-                    filteredRecords.take(15).forEach { record ->
+                    displayedRecords.take(15).forEach { record ->
                         val lateText = Dates.formatLateText(record.clockIn, record.assignedStartTime, record.lateMinutes)
                         Surface(
                             modifier = Modifier.fillMaxWidth(),

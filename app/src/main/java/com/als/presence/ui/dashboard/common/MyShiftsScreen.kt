@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -36,6 +37,7 @@ import com.als.presence.core.common.UiState
 import com.als.presence.core.designsystem.PresenceDesign
 import com.als.presence.data.model.ShiftAssignmentDto
 import com.als.presence.data.model.ShiftDto
+import com.als.presence.data.model.UnworkedPaymentRuleDto
 import com.als.presence.domain.model.User
 import com.als.presence.ui.dashboard.employee.viewmodels.EmployeeAttendanceViewModel
 import com.als.presence.ui.dashboard.owner.screens.DayInfo
@@ -107,31 +109,13 @@ fun MyShiftsScreen(
 
     PresenceSecondaryScaffold(
         crumb = "MY WORKSPACE",
-        title = "My Shifts & Schedule",
+        title = "My Shifts",
         onBack = onBack,
         onRefresh = viewModel::refresh
     ) {
         PresencePageIntro(
             eyebrow = "ROSTER",
-            title = "My Weekly Schedule",
-            description = "Your 7-day shift timetable, working hours, and per-shift earning rates."
-        )
-
-        PresenceMetaStrip(
-            items = if (hasPersonalAssignments) {
-                listOf(
-                    "My Assigned Shifts" to "$assignedShiftsCount ${if (assignedShiftsCount == 1) "Shift" else "Shifts"}",
-                    "My Working Days" to "$myAssignedDaysCount Days",
-                    "My Weekly Offs" to "$myWeeklyOffsCount Days",
-                    "Premises Work Days" to "$premisesWorkingDaysCount Days"
-                )
-            } else {
-                listOf(
-                    "Assigned Shifts" to "None (Default Premises)",
-                    "Premises Work Days" to "$premisesWorkingDaysCount Days",
-                    "Premises Weekly Offs" to "$premisesWeeklyOffsCount Days"
-                )
-            }
+            title = "My Schedule"
         )
 
         // 7-Day Weekly Shift Schedule Cards
@@ -142,6 +126,12 @@ fun MyShiftsScreen(
             assignedShiftsCount = assignedShiftsCount,
             assignedDaysCount = myAssignedDaysCount,
             hasPersonalAssignments = hasPersonalAssignments
+        )
+
+        // Unwork Payments Card Section (at bottom of screen)
+        UnworkPaymentsSection(
+            unworkedRulesState = viewModel.unworkedRules.collectAsStateWithLifecycle().value,
+            primaryAssignment = myAssignments.firstOrNull()
         )
     }
 }
@@ -561,8 +551,8 @@ private fun PaymentChip(
 }
 
 private fun formatRate(amount: Double): String {
-    val integerPart = amount.toInt()
-    return if (amount == integerPart.toDouble()) "₹$integerPart" else "₹${String.format(java.util.Locale.US, "%.2f", amount)}"
+    val integerPart = amount.toLong()
+    return "₹$integerPart"
 }
 
 private fun formatTitle(title: String): String {
@@ -572,3 +562,151 @@ private fun formatTitle(title: String): String {
         word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
 }
+
+@Composable
+private fun UnworkPaymentsSection(
+    unworkedRulesState: UiState<List<UnworkedPaymentRuleDto>>,
+    primaryAssignment: ShiftAssignmentDto?
+) {
+    val unworkedRules = (unworkedRulesState as? UiState.Success)?.data.orEmpty()
+
+    val holidayRule = unworkedRules.find { it.employeeId != null && it.dayType == "HOLIDAY" }
+        ?: unworkedRules.find { it.dayType == "HOLIDAY" }
+    val weeklyOffRule = unworkedRules.find { it.employeeId != null && it.dayType == "WEEKLY_OFF" }
+        ?: unworkedRules.find { it.dayType == "WEEKLY_OFF" }
+
+    val defaultPresentPay = primaryAssignment?.presentPay ?: 0.0
+    val holidayRate = if (holidayRule != null && holidayRule.paymentInr > 0) {
+        "₹${holidayRule.paymentInr}"
+    } else if (defaultPresentPay > 0) {
+        formatRate(defaultPresentPay)
+    } else "₹0"
+
+    val weeklyOffRate = if (weeklyOffRule != null && weeklyOffRule.paymentInr > 0) {
+        "₹${weeklyOffRule.paymentInr}"
+    } else if (defaultPresentPay > 0) {
+        formatRate(defaultPresentPay)
+    } else "₹0"
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        PresenceSectionTitle(
+            title = "Unwork Payments",
+            description = "Compensation rates for public holidays and weekly rest days."
+        )
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp)),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.35f))
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Header Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.tertiaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Payments,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Column {
+                            Text(
+                                text = "Unwork Payments",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Off-day & holiday compensation rates (My Weekly Offs & Premises Weekly Offs)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    PresenceBadge(label = "Active Rules", tone = PresenceTone.Info)
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    UnworkedMetricBadge(
+                        label = "Weekly Off Rate",
+                        value = weeklyOffRate,
+                        modifier = Modifier.weight(1f)
+                    )
+                    UnworkedMetricBadge(
+                        label = "Public Holiday Rate",
+                        value = holidayRate,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UnworkedMetricBadge(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+

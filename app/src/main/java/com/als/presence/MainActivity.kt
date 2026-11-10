@@ -43,6 +43,7 @@ class MainActivity : ComponentActivity() {
                 RequestAppPermissionsOnOpen()
 
                 val currentUser by authViewModel.currentUser.collectAsState()
+                val isRegistrationSuccessPending by authViewModel.isRegistrationSuccessPending.collectAsState()
                 val isOnline by authViewModel.isOnline.collectAsState()
                 val isServerConnected by authViewModel.isServerConnected.collectAsState()
                 val isSessionChecking by authViewModel.isSessionChecking.collectAsState()
@@ -58,7 +59,7 @@ class MainActivity : ComponentActivity() {
                 val showSplash = isSessionChecking || !splashTimeElapsed
 
                 LaunchedEffect(currentUser?.id) {
-                    if (currentUser != null) {
+                    if (currentUser != null && !isRegistrationSuccessPending) {
                         eventsWebSocketService.start(PRESENCE_BASE_URL)
                     } else {
                         eventsWebSocketService.stop()
@@ -77,7 +78,7 @@ class MainActivity : ComponentActivity() {
                             )
                         } else {
                             val user = currentUser
-                            if (user != null) {
+                            if (user != null && !isRegistrationSuccessPending) {
                                 DashboardScreen(
                                     user = user,
                                     onLogout = { authViewModel.logout() },

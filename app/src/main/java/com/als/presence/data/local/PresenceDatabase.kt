@@ -7,6 +7,7 @@ import androidx.room.TypeConverters
 @Database(
     entities = [
         UserEntity::class,
+        OwnerEntity::class,
         OrganizationEntity::class,
         PremisesEntity::class,
         EmployeeEntity::class,
@@ -35,12 +36,13 @@ import androidx.room.TypeConverters
         SyncMetadataEntity::class,
         ProcessedEventEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class PresenceDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
+    abstract fun ownerDao(): OwnerDao
     abstract fun organizationDao(): OrganizationDao
     abstract fun premisesDao(): PremisesDao
     abstract fun employeeDao(): EmployeeDao

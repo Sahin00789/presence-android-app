@@ -28,26 +28,20 @@ class AttendanceRepositoryImpl @Inject constructor(
         val result = safeApiCall("Error loading attendance") {
             attendanceApiService.list(from = from, to = to, staffProfileId = staffProfileId)
         }
-        return when (result) {
-            is Resource.Success -> {
-                if (result.data != null) {
-                    val entities = result.data.map { AttendanceEntity.fromDto(it) }
-                    attendanceDao.upsertAll(entities)
-                }
-                result
-            }
-            is Resource.Error -> {
-                val cached = attendanceDao.getAll()
-                val filtered = if (!staffProfileId.isNullOrBlank()) {
-                    cached.filter { it.employeeId == staffProfileId }
-                } else cached
-                if (filtered.isNotEmpty()) {
-                    Resource.Success(filtered.map { it.toDto() })
-                } else {
-                    result
-                }
-            }
-            Resource.Loading -> Resource.Loading
+        if (result is Resource.Success && result.data != null) {
+            val entities = result.data.map { AttendanceEntity.fromDto(it) }
+            attendanceDao.upsertAll(entities)
+        }
+        val cached = attendanceDao.getAll()
+        val filtered = if (!staffProfileId.isNullOrBlank()) {
+            cached.filter { it.employeeId == staffProfileId }
+        } else cached
+        return if (filtered.isNotEmpty()) {
+            Resource.Success(filtered.map { it.toDto() })
+        } else if (result is Resource.Error) {
+            result
+        } else {
+            Resource.Success(emptyList())
         }
     }
 
@@ -81,4 +75,85 @@ class AttendanceRepositoryImpl @Inject constructor(
             )
         }
     }
+
+    override suspend fun manualMarkShift(request: ManualMarkShiftAttendanceRequest): Resource<Unit> {
+        return safeApiCall("Error marking shift attendance") {
+            attendanceApiService.manualMarkShift(request)
+        }
+    }
+
+    override suspend fun manualMarkOvertime(request: ManualMarkOvertimeAttendanceRequest): Resource<Unit> {
+        return safeApiCall("Error marking overtime attendance") {
+            attendanceApiService.manualMarkOvertime(request)
+        }
+    }
+
+    override suspend fun getTodayPresence(): Resource<LocationTodayPresenceResponseDto> {
+        return safeApiCall("Error loading presence") {
+            attendanceApiService.getTodayLocationPresence()
+        }
+    }
+
+    override suspend fun getTodayLocationPresence(premisesId: String?): Resource<LocationTodayPresenceResponseDto> {
+        return safeApiCall("Error loading presence") {
+            attendanceApiService.getTodayLocationPresence(premisesId = premisesId)
+        }
+    }
+
+    override suspend fun getActiveLocationSession(): Resource<LocationSessionDto> {
+        return safeApiCall("Error loading active location session") {
+            attendanceApiService.getActiveLocationSession()
+        }
+    }
+
+    override suspend fun submitLocationCheck(
+        attendanceEventId: String,
+        latitude: Double,
+        longitude: Double,
+        accuracyMeters: Double,
+        isMock: Boolean,
+        capturedAt: Long
+    ): Resource<LocationCheckResultDto> {
+        return safeApiCall("Error submitting location check") {
+            attendanceApiService.submitShiftLocationPing(
+                LocationCheckRequestDto(
+                    attendanceEventId = attendanceEventId,
+                    shiftAttendanceId = attendanceEventId,
+                    latitude = latitude,
+                    longitude = longitude,
+                    accuracyMeters = accuracyMeters,
+                    isMock = isMock
+                )
+            )
+        }
+    }
+
+    override suspend fun assignStaffPremises(employeeId: String, premisesId: String?): Resource<Unit> {
+        return Resource.Success(Unit)
+    }
+
+    override suspend fun getShiftLocationPings(shiftAttendanceId: String): Resource<List<GpsPingSummaryDto>> {
+        return safeApiCall("Error loading shift location pings") {
+            attendanceApiService.getShiftLocationPings(shiftAttendanceId)
+        }
+    }
+
+    override suspend fun getOvertimeLocationPings(overtimeAttendanceId: String): Resource<List<GpsPingSummaryDto>> {
+        return safeApiCall("Error loading overtime location pings") {
+            attendanceApiService.getOvertimeLocationPings(overtimeAttendanceId)
+        }
+    }
+
+    override suspend fun getUnhandledEvents(): Resource<UnhandledEventsResponseDto> {
+        return safeApiCall("Error loading pending actions") {
+            attendanceApiService.getUnhandledEvents()
+        }
+    }
+
+    override suspend fun claimUnhandledEvent(request: ClaimUnhandledEventRequestDto): Resource<ClaimUnhandledEventResponseDto> {
+        return safeApiCall("Error claiming action") {
+            attendanceApiService.claimUnhandledEvent(request)
+        }
+    }
 }
+

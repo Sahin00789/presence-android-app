@@ -82,50 +82,15 @@ fun AttendanceRegisterTab(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "Last 30 days",
+                    "Attendance Register",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Register and every exception that needs a decision",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
-            IconButton(
+            PresenceRefreshButton(
                 onClick = onRefresh,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = "Refresh attendance",
-                    modifier = Modifier.size(19.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            MetricTile(
-                label = "Records",
-                value = records.size.toString(),
-                modifier = Modifier.weight(1f)
-            )
-            MetricTile(
-                label = "Open exceptions",
-                value = open.size.toString(),
-                modifier = Modifier.weight(1f),
-                accent = MaterialTheme.colorScheme.error
-            )
-            MetricTile(
-                label = "Present",
-                value = records.count { it.status == "PRESENT" || it.status == "COMPLETED" }.toString(),
-                modifier = Modifier.weight(1f),
-                accent = MaterialTheme.colorScheme.secondary
+                isRefreshing = exceptionsState is UiState.Loading,
+                contentDescription = "Refresh attendance"
             )
         }
 

@@ -50,12 +50,6 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
-    abstract fun bindLocationRepository(
-        locationRepositoryImpl: LocationRepositoryImpl
-    ): LocationRepository
-
-    @Binds
-    @Singleton
     abstract fun bindAttendanceRepository(
         attendanceRepositoryImpl: AttendanceRepositoryImpl
     ): AttendanceRepository

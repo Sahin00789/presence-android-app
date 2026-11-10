@@ -82,18 +82,13 @@ fun OwnerLeaveScreen(
     }
 
     PresenceSecondaryScaffold(
-        crumb = "WORKFORCE MANAGEMENT",
-        title = "Leave Requests",
+        crumb = "Workforce",
+        title = "Leave Desk",
         onBack = onBack,
         modifier = modifier,
         onRefresh = viewModel::refresh
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                text = "Review and approve employee shift leave requests for your organization.",
-                fontSize = 11.5.sp,
-                color = PresenceDesign.LabelText
-            )
 
             // Status Filter Chips
             Row(

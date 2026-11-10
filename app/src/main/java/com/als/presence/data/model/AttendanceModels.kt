@@ -58,7 +58,29 @@ data class ManualMarkAttendanceRequest(
     val workDate: String? = null,
     val overtimeId: String? = null,
     val action: String,
-    val reason: String? = null
+    val reason: String? = null,
+    val departureTime: String? = null
+)
+
+@Serializable
+data class ManualMarkShiftAttendanceRequest(
+    val attendanceEventId: String? = null,
+    val employeeId: String? = null,
+    val workDate: String? = null,
+    val action: String,
+    val reason: String? = null,
+    val departureTime: String? = null
+)
+
+@Serializable
+data class ManualMarkOvertimeAttendanceRequest(
+    val overtimeId: String? = null,
+    val attendanceEventId: String? = null,
+    val employeeId: String? = null,
+    val workDate: String? = null,
+    val action: String,
+    val reason: String? = null,
+    val departureTime: String? = null
 )
 
 @Serializable
@@ -108,3 +130,41 @@ data class FaceStatusDto(
     val embeddingDimensions: Int? = null,
     val revokedAt: String? = null
 )
+
+@Serializable
+data class UnhandledEventItemDto(
+    val id: String = "",
+    val type: String = "", // "WEEKLY_OFF", "HOLIDAY", "LEAVE", "ABSENT"
+    val date: String = "",
+    val title: String = "",
+    val subtitle: String = "",
+    val amount: Double = 0.0,
+    val currency: String = "INR",
+    val actionLabel: String = "",
+    val metadata: Map<String, String>? = null
+)
+
+@Serializable
+data class UnhandledEventsResponseDto(
+    val events: List<UnhandledEventItemDto> = emptyList(),
+    val totalPending: Int = 0
+)
+
+@Serializable
+data class ClaimUnhandledEventRequestDto(
+    val eventId: String,
+    val type: String,
+    val date: String,
+    val metadata: Map<String, String>? = null
+)
+
+@Serializable
+data class ClaimUnhandledEventResponseDto(
+    val success: Boolean = false,
+    val claimedEventId: String = "",
+    val type: String = "",
+    val earnedAmount: Double = 0.0,
+    val remainingCount: Int = 0,
+    val message: String? = null
+)
+

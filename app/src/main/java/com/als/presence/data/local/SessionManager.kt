@@ -68,6 +68,12 @@ class SessionManager @Inject constructor(
             prefs.edit().putString(KEY_SAVED_LOGIN_ROLE, value).apply()
         }
 
+    var loggedDeviceId: String?
+        get() = prefs.getString(KEY_LOGGED_DEVICE_ID, null)
+        set(value) {
+            prefs.edit().putString(KEY_LOGGED_DEVICE_ID, value).apply()
+        }
+
     /**
      * Emits whenever the stored session is wiped, regardless of whether it was
      * an explicit logout or a rejected/expired refresh token. Observers use this
@@ -94,5 +100,6 @@ class SessionManager @Inject constructor(
         private const val KEY_ROLE = "user_role"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_SAVED_LOGIN_ROLE = "saved_login_role"
+        private const val KEY_LOGGED_DEVICE_ID = "logged_device_id"
     }
 }

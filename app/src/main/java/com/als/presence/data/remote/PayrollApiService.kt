@@ -42,4 +42,15 @@ interface PayrollApiService {
     suspend fun recordTransaction(
         @Body request: RecordPayrollTransactionRequest
     ): Response<PaymentRecordDto>
+
+    @GET("api/v1/salary/unworked-rules")
+    suspend fun getUnworkedRules(
+        @Query("employeeId") employeeId: String? = null,
+        @Query("premisesId") premisesId: String? = null
+    ): Response<List<UnworkedPaymentRuleDto>>
+
+    @POST("api/v1/salary/unworked-rules")
+    suspend fun saveUnworkedRule(
+        @Body request: CreateUnworkedPaymentRuleRequest
+    ): Response<UnworkedPaymentRuleDto>
 }

@@ -28,23 +28,17 @@ class PremisesRepositoryImpl @Inject constructor(
         val result = safeApiCall("Error loading premises") {
             premisesApiService.list()
         }
-        return when (result) {
-            is Resource.Success -> {
-                if (result.data != null) {
-                    val entities = result.data.map { PremisesEntity.fromDto(it) }
-                    premisesDao.upsertAll(entities)
-                }
-                result
-            }
-            is Resource.Error -> {
-                val cached = premisesDao.getAll()
-                if (cached.isNotEmpty()) {
-                    Resource.Success(cached.map { it.toDto() })
-                } else {
-                    result
-                }
-            }
-            Resource.Loading -> Resource.Loading
+        if (result is Resource.Success && result.data != null) {
+            val entities = result.data.map { PremisesEntity.fromDto(it) }
+            premisesDao.upsertAll(entities)
+        }
+        val cached = premisesDao.getAll()
+        return if (cached.isNotEmpty()) {
+            Resource.Success(cached.map { it.toDto() })
+        } else if (result is Resource.Error) {
+            result
+        } else {
+            Resource.Success(emptyList())
         }
     }
 

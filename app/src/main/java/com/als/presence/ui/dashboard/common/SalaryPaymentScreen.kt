@@ -96,7 +96,7 @@ fun SalaryPaymentScreen(
     Box(modifier = modifier.fillMaxSize()) {
         PresenceSecondaryScaffold(
             crumb = "PAYROLL & FINANCE",
-            title = "Salary Payment Console",
+            title = "Salary Payments",
             onBack = onBack,
             onRefresh = viewModel::refresh
         ) {
@@ -126,7 +126,7 @@ fun SalaryPaymentScreenContent(
     isSubmitting: Boolean,
     onRecordPayment: (itemId: String, amountPaise: Long, paymentMethod: String, reference: String) -> Unit
 ) {
-    val staff = (staffState as? UiState.Success)?.data.orEmpty()
+    val staff = (staffState as? UiState.Success)?.data.orEmpty().filter { it.id.isNotBlank() }.distinctBy { it.id }
     val periods = (payrollPeriodsState as? UiState.Success)?.data.orEmpty()
 
     var searchQuery by remember { mutableStateOf("") }
@@ -177,77 +177,6 @@ fun SalaryPaymentScreenContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Workforce Salary Payment Summary
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-        ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Salary Payment Overview",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    StatusPill("${filteredStaff.size} Employees")
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(
-                            text = "Earned Salary",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = Money.format(totalEarnedPaise),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Disbursed / Paid",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = Money.format(totalPaidPaise),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = SecondaryEmerald
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "Pending Due",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = Money.format(totalDuePaise),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (totalDuePaise > 0) TertiaryAmber else SecondaryEmerald
-                        )
-                    }
-                }
-            }
-        }
 
         // Payments Given This Month / Disbursement Transactions Section
         SectionHeader(

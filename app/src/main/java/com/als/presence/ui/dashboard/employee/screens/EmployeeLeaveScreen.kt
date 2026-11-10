@@ -111,95 +111,51 @@ fun EmployeeLeaveScreen(
         }
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            // Header Overview Card
             val myLeaves = (leavesState as? UiState.Success)?.data.orEmpty()
             val pendingCount = myLeaves.count { it.status == "PENDING" }
             val approvedCount = myLeaves.count { it.status == "APPROVED" }
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = "Leave Request Center",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "${myLeaves.size} Total Submitted",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        PresenceButton(
-                            label = "Request Leave",
-                            icon = Icons.Default.EventAvailable,
-                            onClick = {
-                                viewModel.loadUpcomingShifts()
-                                showRequestDialog = true
-                            },
-                            size = PresenceSize.Sm
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        PresenceStatTile(
-                            label = "Applied Leaves",
-                            value = pendingCount.toString(),
-                            modifier = Modifier.weight(1f)
-                        )
-                        PresenceStatTile(
-                            label = "Approved Leaves",
-                            value = approvedCount.toString(),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            // Status Filter Chips
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                listOf("ALL", "APPLIED", "APPROVED", "REJECTED").forEach { status ->
-                    val isSelected = statusFilter == status
-                    PresenceFilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            statusFilter = if (isSelected && status != "ALL") "ALL" else status
-                        },
-                        label = when (status) {
-                            "ALL" -> "All"
-                            "APPLIED" -> "Applied"
-                            "APPROVED" -> "Approved"
-                            "REJECTED" -> "Rejected"
-                            else -> status
-                        }
-                    )
+                // Status Filter Chips
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf("ALL", "APPLIED", "APPROVED", "REJECTED").forEach { status ->
+                        val isSelected = statusFilter == status
+                        PresenceFilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                statusFilter = if (isSelected && status != "ALL") "ALL" else status
+                            },
+                            label = when (status) {
+                                "ALL" -> "All (${myLeaves.size})"
+                                "APPLIED" -> "Applied ($pendingCount)"
+                                "APPROVED" -> "Approved ($approvedCount)"
+                                "REJECTED" -> "Rejected (${myLeaves.size - pendingCount - approvedCount})"
+                                else -> status
+                            }
+                        )
+                    }
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
+                PresenceButton(
+                    label = "Request",
+                    icon = Icons.Default.EventAvailable,
+                    onClick = {
+                        viewModel.loadUpcomingShifts()
+                        showRequestDialog = true
+                    },
+                    size = PresenceSize.Sm
+                )
             }
 
             when (val state = leavesState) {

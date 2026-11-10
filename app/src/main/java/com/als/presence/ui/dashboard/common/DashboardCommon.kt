@@ -83,10 +83,16 @@ fun TopBarSyncRefreshButton(
         enabled = !isSyncing,
         modifier = modifier
             .size(40.dp)
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(12.dp))
             .background(
-                if (isSyncing) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                if (isSyncing) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            )
+            .border(
+                1.dp,
+                if (isSyncing) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                RoundedCornerShape(12.dp)
             )
     ) {
         Icon(
@@ -103,8 +109,9 @@ fun TopBarSyncRefreshButton(
 }
 
 /**
- * TopBar Server Icon component that indicates server connectivity status.
- * If server connection error occurs, the server icon is displayed with RED tint and background.
+ * Modern TopBar Server Icon component that indicates server connectivity status.
+ * If server connection error occurs, the server icon is displayed with red alert styling and background.
+ * When connected, it displays a healthy emerald status indicator.
  */
 @Composable
 fun TopBarServerIcon(
@@ -115,17 +122,19 @@ fun TopBarServerIcon(
 ) {
     val hasServerErr = !isOnline || !isServerConnected
     val icon = if (hasServerErr) Icons.Default.CloudOff else Icons.Default.Dns
-    val iconColor = if (hasServerErr) Color(0xFFD32F2F) else Color(0xFF2E7D32)
-    val bgColor = if (hasServerErr) Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-    val dotColor = if (hasServerErr) Color(0xFFD32F2F) else Color(0xFF2E7D32)
+    val iconColor = if (hasServerErr) Color(0xFFEF4444) else Color(0xFF10B981)
+    val bgColor = if (hasServerErr) Color(0xFFFEF2F2) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    val borderColor = if (hasServerErr) Color(0xFFFCA5A5) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    val dotColor = if (hasServerErr) Color(0xFFEF4444) else Color(0xFF10B981)
 
     IconButton(
         onClick = onClick,
         enabled = hasServerErr,
         modifier = modifier
             .size(40.dp)
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(12.dp))
             .background(bgColor)
+            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -140,7 +149,7 @@ fun TopBarServerIcon(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 4.dp, end = 4.dp)
+                    .padding(top = 5.dp, end = 5.dp)
                     .size(6.dp)
                     .clip(CircleShape)
                     .background(dotColor)

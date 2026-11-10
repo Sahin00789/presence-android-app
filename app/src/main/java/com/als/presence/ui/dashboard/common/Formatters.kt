@@ -20,15 +20,10 @@ object Money {
         val value = amount ?: return "—"
         val negative = value < 0
         val absolute = if (negative) -value else value
-        val grouped = absolute.toString()
-            .reversed()
-            .chunked(3)
-            .joinToString(",")
-            .reversed()
-        return if (negative) "-₹$grouped" else "₹$grouped"
+        return if (negative) "-₹$absolute" else "₹$absolute"
     }
 
-    /** Parses a human currency string ("12,500") directly into integer INR rupees. */
+    /** Parses a raw number string into integer INR rupees. */
     fun parseToInr(raw: String): Long? {
         val cleaned = raw.replace("₹", "").replace(",", "").trim()
         if (cleaned.isEmpty()) return null
@@ -37,10 +32,7 @@ object Money {
             ?.toLong()
     }
 
-    @Deprecated("Use parseToInr", ReplaceWith("parseToInr(raw)"))
     fun parseToPaise(raw: String): Long? = parseToInr(raw)
-
-    @Deprecated("Use parseToInr", ReplaceWith("parseToInr(raw)"))
     fun parseToCents(raw: String): Long? = parseToInr(raw)
 }
 
@@ -207,6 +199,88 @@ object Dates {
         if (sorted == listOf(0, 6)) return "Sat & Sun"
         val dayLabels = arrayOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
         return sorted.mapNotNull { dayLabels.getOrNull(it) }.joinToString(", ")
+    }
+
+    /**
+     * Checks if current time has passed the half-day threshold for a shift.
+     * If [halfDayThresholdRaw] is provided (e.g. "11:00:00"), compares against that.
+     * Otherwise defaults to 4 hours (240 minutes) after [startTimeRaw].
+     */
+    fun isPastHalfDayThreshold(startTimeRaw: String?, halfDayThresholdRaw: String? = null): Boolean {
+        if (startTimeRaw.isNullOrBlank()) return false
+        return try {
+            val now = LocalTime.now()
+            val parseTime = { raw: String ->
+                if (raw.contains('T')) {
+                    OffsetDateTime.parse(raw).toLocalTime()
+                } else {
+                    LocalTime.parse(raw.take(8))
+                }
+            }
+            val start = parseTime(startTimeRaw)
+            val threshold = if (!halfDayThresholdRaw.isNullOrBlank()) {
+                parseTime(halfDayThresholdRaw)
+            } else {
+                start.plusHours(4)
+            }
+            if (start.isBefore(threshold)) {
+                now.isAfter(threshold)
+            } else {
+                now.isAfter(threshold) || now.isBefore(start)
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Checks if a session (shift or overtime) on [workDateIso] has completed its scheduled time window.
+     * Returns true if the session date is in the past, or if it is today and current time has passed
+     * the session's end time.
+     */
+    fun isSessionOver(
+        workDateIso: String?,
+        endTimeRaw: String?,
+        startTimeRaw: String? = null
+    ): Boolean {
+        if (workDateIso.isNullOrBlank()) return false
+        val today = todayIso()
+        val sessionDate = workDateIso.take(10)
+        if (sessionDate > today) return false
+
+        if (endTimeRaw.isNullOrBlank()) return false
+        return try {
+            val now = LocalTime.now()
+            val parseTime = { raw: String ->
+                if (raw.contains('T')) {
+                    OffsetDateTime.parse(raw).toLocalTime()
+                } else {
+                    LocalTime.parse(raw.take(8))
+                }
+            }
+            val end = parseTime(endTimeRaw)
+            val start = startTimeRaw?.let { runCatching { parseTime(it) }.getOrNull() }
+
+            val isOvernight = start != null && start.isAfter(end)
+            when {
+                sessionDate < today -> {
+                    if (isOvernight && sessionDate == isoDaysAgo(1)) {
+                        now.isAfter(end)
+                    } else {
+                        true
+                    }
+                }
+                else -> { // sessionDate == today
+                    if (isOvernight) {
+                        false // Overnight shift starting today ends tomorrow
+                    } else {
+                        now.isAfter(end)
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /**

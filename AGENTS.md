@@ -87,7 +87,7 @@ The **Employee Attendance, Shift Management & Salary Ledger System** (`presence`
 2. **Financial Precision**: All monetary values must be stored in exact whole integer units in Indian Rupees (INR / ₹). Floating-point types, cents, paise, and decimals are strictly forbidden.
 3. **Employees Table (`employees`)**: Represents workforce employees (`role: EMPLOYEE`) linked to `organizations` and scoped to `premises_id`. Owners are represented by `organizations.owner_user_id` referencing `users.id` and are NOT employees.
 4. **Shifts & Assignments (`shifts`, `employee_shift_assignments`)**: Premises-level shift definitions and assignment records scoped by `premises_id`, containing pay rates (`present_pay`, `absent_pay`, `leave_pay`, `half_day_pay`).
-5. **Unworked Payment Rules (`unworked_payment_rules`)**: Configures holiday, weekly off-day, and paid-leave payment amounts/multipliers (`HOLIDAY`, `WEEKLY_OFF`, `PAID_LEAVE`). Worked holidays and worked off-days are paid as normal present days; no separate worked-day rule types exist.
+5. **Unworked Payment Rules (`unworked_payment_rules`)**: Configures holiday and weekly off-day payment amounts/multipliers (`HOLIDAY`, `WEEKLY_OFF`). Worked holidays and worked off-days are paid as normal present days; no separate worked-day rule types exist.
 6. **Overtime Table (`overtime`)**: Overtime entries are created with individual payment amounts (`payment_inr`), status, dates, and planned/worked minutes.
 7. **Monthly Salary Calculation & Payroll Engine (`monthly_payrolls`)**:
    - Calculates shift earnings, holiday/off-day pay, completed overtime, and payroll disbursements (`payroll_transactions`) for all employees. Owner possesses exclusive rights for payroll locking (`monthly_payrolls`).

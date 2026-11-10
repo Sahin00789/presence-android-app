@@ -121,11 +121,6 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideLocationApiService(retrofit: Retrofit): LocationApiService =
-        retrofit.create(LocationApiService::class.java)
-
-    @Provides
-    @Singleton
     fun provideHolidayApiService(retrofit: Retrofit): HolidayApiService = retrofit.create(HolidayApiService::class.java)
 
     @Provides

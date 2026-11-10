@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.als.presence.core.common.UiState
+import com.als.presence.core.designsystem.PresenceDesign
 import com.als.presence.data.model.MonthlyEarningLedgerResponseDto
 import com.als.presence.data.model.MyOverallPayrollSummaryDto
 import com.als.presence.data.model.PaymentRecordDto
@@ -48,6 +49,7 @@ import com.als.presence.data.model.StaffEarningLedgerDto
 import com.als.presence.ui.dashboard.common.Dates
 import com.als.presence.ui.dashboard.common.MetricTile
 import com.als.presence.ui.dashboard.common.Money
+import com.als.presence.ui.dashboard.common.PresenceRefreshButton
 import com.als.presence.ui.dashboard.common.SectionEmpty
 import com.als.presence.ui.dashboard.common.SectionError
 import com.als.presence.ui.dashboard.common.SectionHeader
@@ -104,33 +106,24 @@ fun EmployeeLedgerTab(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
                 Text(
-                    "Salary Ledger",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    text = "Salary Ledger",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = PresenceDesign.Ink
                 )
                 Text(
                     text = "Monthly earnings, payments & ledger",
                     style = MaterialTheme.typography.bodySmall,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = PresenceDesign.Muted
                 )
             }
-            IconButton(
+            PresenceRefreshButton(
                 onClick = onRefresh,
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = "Refresh ledger",
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+                isRefreshing = ledgerState is UiState.Loading || monthlyLedgerState is UiState.Loading,
+                contentDescription = "Refresh ledger"
+            )
         }
 
         // 1. Overall Summary Card (Top)

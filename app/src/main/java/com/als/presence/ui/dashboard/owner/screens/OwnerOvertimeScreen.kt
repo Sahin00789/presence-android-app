@@ -164,19 +164,6 @@ fun OwnerOvertimeScreen(
             onBack = onBack,
             onRefresh = { viewModel.refresh() }
         ) {
-            PresencePageIntro(
-                eyebrow = "Console",
-                title = "Overtime Management",
-                description = "Book overtime hours, set pay rates, and manage records."
-            )
-
-            PresenceMetaStrip(
-                items = listOf(
-                    "Total Entries" to allOvertimeList.size.toString(),
-                    "Active" to allOvertimeList.count { it.status.equals("IN_PROGRESS", ignoreCase = true) }.toString(),
-                    "Scheduled" to allOvertimeList.count { it.status.equals("APPROVED", ignoreCase = true) }.toString()
-                )
-            )
 
             // Premises Selection Chips (only if multiple premises)
             if (premisesList.size > 1) {
@@ -318,7 +305,7 @@ fun OwnerOvertimeScreen(
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
                 ) {
-                    listOf("ALL", "APPROVED", "IN_PROGRESS", "COMPLETED", "CANCELLED").forEach { st ->
+                    listOf("ALL", "CREATED", "IN_PROGRESS", "COMPLETED", "CANCELLED").forEach { st ->
                         FilterChip(
                             selected = statusFilter == st,
                             onClick = { statusFilter = st },
@@ -326,6 +313,7 @@ fun OwnerOvertimeScreen(
                                 Text(
                                     text = when (st) {
                                         "ALL" -> "All"
+                                        "CREATED" -> "Scheduled"
                                         "APPROVED" -> "Scheduled"
                                         "IN_PROGRESS" -> "Active"
                                         "COMPLETED" -> "Completed"

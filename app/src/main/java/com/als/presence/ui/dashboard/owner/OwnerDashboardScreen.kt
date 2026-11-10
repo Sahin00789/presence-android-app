@@ -12,8 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.als.presence.domain.model.User
-import com.als.presence.ui.dashboard.common.LocationsTab
-import com.als.presence.ui.dashboard.common.LocationsViewModel
+import com.als.presence.ui.dashboard.common.LiveMonitorTab
+import com.als.presence.ui.dashboard.common.LiveMonitorViewModel
 import com.als.presence.ui.dashboard.common.MessageSnackbar
 import com.als.presence.ui.dashboard.owner.tabs.OwnerApprovalsTab
 import com.als.presence.ui.dashboard.owner.tabs.OwnerReportsTab
@@ -21,7 +21,7 @@ import com.als.presence.ui.dashboard.owner.tabs.OwnerWorkforceTab
 import com.als.presence.ui.dashboard.owner.viewmodels.OwnerAttendanceViewModel
 import com.als.presence.ui.dashboard.owner.viewmodels.OwnerWorkforceViewModel
 
-/** Owner dashboard: Employees (0), Locations (1), Reports (2), Approvals (3). */
+/** Owner dashboard: Employees (0), Live Monitor (1), Reports (2), Approvals (3). */
 @Composable
 fun OwnerDashboardScreen(
     user: User,
@@ -29,7 +29,7 @@ fun OwnerDashboardScreen(
     modifier: Modifier = Modifier,
     workforceViewModel: OwnerWorkforceViewModel = hiltViewModel(),
     attendanceViewModel: OwnerAttendanceViewModel = hiltViewModel(),
-    locationsViewModel: LocationsViewModel = hiltViewModel()
+    liveMonitorViewModel: LiveMonitorViewModel = hiltViewModel()
 ) {
     val staffState by workforceViewModel.staff.collectAsStateWithLifecycle()
     val membersState by workforceViewModel.members.collectAsStateWithLifecycle()
@@ -43,10 +43,10 @@ fun OwnerDashboardScreen(
     val attendanceMessage by attendanceViewModel.message.collectAsStateWithLifecycle()
     val attendanceSubmitting by attendanceViewModel.isSubmitting.collectAsStateWithLifecycle()
 
-    val presenceState by locationsViewModel.presence.collectAsStateWithLifecycle()
-    val selectedPremisesId by locationsViewModel.selectedPremisesId.collectAsStateWithLifecycle()
-    val locationsSubmitting by locationsViewModel.isSubmitting.collectAsStateWithLifecycle()
-    val locationsMessage by locationsViewModel.message.collectAsStateWithLifecycle()
+    val presenceState by liveMonitorViewModel.presence.collectAsStateWithLifecycle()
+    val selectedPremisesId by liveMonitorViewModel.selectedPremisesId.collectAsStateWithLifecycle()
+    val locationsSubmitting by liveMonitorViewModel.isSubmitting.collectAsStateWithLifecycle()
+    val locationsMessage by liveMonitorViewModel.message.collectAsStateWithLifecycle()
 
     var activeMessage by remember { mutableStateOf<String?>(null) }
 
@@ -56,7 +56,7 @@ fun OwnerDashboardScreen(
             activeMessage = candidateMessage
             workforceViewModel.consumeMessage()
             attendanceViewModel.consumeMessage()
-            locationsViewModel.consumeMessage()
+            liveMonitorViewModel.consumeMessage()
         }
     }
 
@@ -72,20 +72,20 @@ fun OwnerDashboardScreen(
                 onRetry = workforceViewModel::refresh,
                 onRecordPayment = workforceViewModel::recordPayment
             )
-            1 -> LocationsTab(
+            1 -> LiveMonitorTab(
                 user = user,
                 premisesState = premisesState,
                 presenceState = presenceState,
                 staffState = staffState,
                 selectedPremisesId = selectedPremisesId,
                 isSubmitting = locationsSubmitting,
-                onSelectPremises = locationsViewModel::selectPremises,
+                onSelectPremises = liveMonitorViewModel::selectPremises,
                 onRefresh = {
-                    locationsViewModel.refresh()
+                    liveMonitorViewModel.refresh()
                     workforceViewModel.refresh()
                 },
-                onResolveGpsException = locationsViewModel::resolveGpsException,
-                onCancelOvertime = locationsViewModel::cancelOvertime
+                onResolveGpsException = liveMonitorViewModel::resolveGpsException,
+                onCancelOvertime = liveMonitorViewModel::cancelOvertime
             )
             else -> OwnerReportsTab(
                 user = user,

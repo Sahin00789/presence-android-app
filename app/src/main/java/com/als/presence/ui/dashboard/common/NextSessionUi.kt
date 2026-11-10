@@ -30,7 +30,8 @@ data class NextSessionUi(
     val overtimeId: String? = null,
     val premisesLatitude: Double? = null,
     val premisesLongitude: Double? = null,
-    val radiusMeters: Int = 50
+    val radiusMeters: Int = 50,
+    val workDate: String? = null
 )
 
 /** Finds the caller's own card and turns it into the next-session summary. */
@@ -38,8 +39,8 @@ fun LocationTodayPresenceResponseDto.nextSessionFor(userId: String?): NextSessio
     if (userId.isNullOrBlank()) return null
     val card = staffList.firstOrNull {
         it.userId == userId || it.staffProfileId == userId || it.employeeId == userId
-    } ?: return null
-    return card.toNextSession(
+    } ?: if (staffList.size == 1) staffList.first() else null
+    return card?.toNextSession(
         premisesLatitude = latitude,
         premisesLongitude = longitude,
         radiusMeters = radiusMeters ?: 50
@@ -49,7 +50,8 @@ fun LocationTodayPresenceResponseDto.nextSessionFor(userId: String?): NextSessio
 /**
  * Collapses a presence card into the one session that matters next:
  * an active overtime/shift if one is running, otherwise the earlier of the
- * day's scheduled shift and overtime.
+ * day's scheduled shift and overtime. If today's session has already ended or
+ * completed, returns null so the caller can look ahead to future shifts/overtimes.
  */
 fun LocationStaffCardDto.toNextSession(
     premisesLatitude: Double? = null,
@@ -61,13 +63,25 @@ fun LocationStaffCardDto.toNextSession(
     val hasShift = shiftName.isNotBlank() &&
         !shiftName.equals("No shift assigned", ignoreCase = true)
 
-    val isRunningShift = activeShift || (hasShift && Dates.isWithinTimeWindow(regularShiftStartTime, regularShiftEndTime, bufferMinutesBeforeStart = 120L, bufferMinutesAfterEnd = 120L))
-    val isRunningOvertime = activeOvertime || (hasOvertimeToday && Dates.isWithinTimeWindow(overtimeStartTime, overtimeEndTime, bufferMinutesBeforeStart = 120L, bufferMinutesAfterEnd = 120L))
+    val startShiftTime = regularShiftStartTime ?: assignedStartTime
+    val endShiftTime = regularShiftEndTime ?: assignedEndTime
 
-    val overtimeIsEarlier = hasOvertimeToday && (
-        !hasShift ||
-            regularShiftStartTime == null ||
-            (overtimeStartTime != null && overtimeStartTime < regularShiftStartTime)
+    val shiftCompleted = clockOutTime != null
+    val shiftOver = shiftCompleted || Dates.isSessionOver(Dates.todayIso(), endShiftTime, startShiftTime)
+
+    val overtimeCompleted = overtimeClockOutTime != null
+    val overtimeOver = overtimeCompleted || Dates.isSessionOver(Dates.todayIso(), overtimeEndTime, overtimeStartTime)
+
+    val isEligibleShift = hasShift && !shiftOver
+    val isEligibleOvertime = hasOvertimeToday && !overtimeOver
+
+    val isRunningShift = activeShift || (isEligibleShift && Dates.isWithinTimeWindow(startShiftTime, endShiftTime, bufferMinutesBeforeStart = 120L, bufferMinutesAfterEnd = 120L))
+    val isRunningOvertime = activeOvertime || (isEligibleOvertime && Dates.isWithinTimeWindow(overtimeStartTime, overtimeEndTime, bufferMinutesBeforeStart = 120L, bufferMinutesAfterEnd = 120L))
+
+    val overtimeIsEarlier = isEligibleOvertime && (
+        !isEligibleShift ||
+            startShiftTime == null ||
+            (overtimeStartTime != null && overtimeStartTime < startShiftTime)
         )
 
     return when {
@@ -81,19 +95,21 @@ fun LocationStaffCardDto.toNextSession(
             overtimeId = overtimeId,
             premisesLatitude = premisesLatitude,
             premisesLongitude = premisesLongitude,
-            radiusMeters = radiusMeters
+            radiusMeters = radiusMeters,
+            workDate = Dates.todayIso()
         )
 
         activeShift -> session(
             kind = SessionKind.SHIFT,
             badge = "ON SHIFT",
             title = shiftName,
-            start = regularShiftStartTime,
-            end = regularShiftEndTime,
+            start = startShiftTime,
+            end = endShiftTime,
             isActive = true,
             premisesLatitude = premisesLatitude,
             premisesLongitude = premisesLongitude,
-            radiusMeters = radiusMeters
+            radiusMeters = radiusMeters,
+            workDate = Dates.todayIso()
         )
 
         isRunningOvertime -> session(
@@ -106,19 +122,21 @@ fun LocationStaffCardDto.toNextSession(
             overtimeId = overtimeId,
             premisesLatitude = premisesLatitude,
             premisesLongitude = premisesLongitude,
-            radiusMeters = radiusMeters
+            radiusMeters = radiusMeters,
+            workDate = Dates.todayIso()
         )
 
         isRunningShift -> session(
             kind = SessionKind.SHIFT,
             badge = "RUNNING SHIFT",
             title = shiftName,
-            start = regularShiftStartTime,
-            end = regularShiftEndTime,
+            start = startShiftTime,
+            end = endShiftTime,
             isActive = true,
             premisesLatitude = premisesLatitude,
             premisesLongitude = premisesLongitude,
-            radiusMeters = radiusMeters
+            radiusMeters = radiusMeters,
+            workDate = Dates.todayIso()
         )
 
         overtimeIsEarlier -> session(
@@ -131,19 +149,21 @@ fun LocationStaffCardDto.toNextSession(
             overtimeId = overtimeId,
             premisesLatitude = premisesLatitude,
             premisesLongitude = premisesLongitude,
-            radiusMeters = radiusMeters
+            radiusMeters = radiusMeters,
+            workDate = Dates.todayIso()
         )
 
-        hasShift -> session(
+        isEligibleShift -> session(
             kind = SessionKind.SHIFT,
             badge = "NEXT SHIFT",
             title = shiftName,
-            start = regularShiftStartTime,
-            end = regularShiftEndTime,
+            start = startShiftTime,
+            end = endShiftTime,
             isActive = false,
             premisesLatitude = premisesLatitude,
             premisesLongitude = premisesLongitude,
-            radiusMeters = radiusMeters
+            radiusMeters = radiusMeters,
+            workDate = Dates.todayIso()
         )
 
         else -> null
@@ -160,7 +180,8 @@ private fun LocationStaffCardDto.session(
     overtimeId: String? = null,
     premisesLatitude: Double? = null,
     premisesLongitude: Double? = null,
-    radiusMeters: Int = 50
+    radiusMeters: Int = 50,
+    workDate: String? = Dates.todayIso()
 ) = NextSessionUi(
     kind = kind,
     badge = badge,
@@ -173,7 +194,8 @@ private fun LocationStaffCardDto.session(
     overtimeId = overtimeId,
     premisesLatitude = premisesLatitude,
     premisesLongitude = premisesLongitude,
-    radiusMeters = radiusMeters
+    radiusMeters = radiusMeters,
+    workDate = workDate
 )
 
 /** Great-circle distance in metres between two WGS-84 points. */

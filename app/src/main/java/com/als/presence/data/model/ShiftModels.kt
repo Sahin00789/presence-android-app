@@ -94,7 +94,8 @@ data class ShiftAssignmentDto(
     val halfDayPay: Double = 0.0,
     val isActive: Boolean = true,
     val staffName: String? = null,
-    val shiftName: String? = null
+    val shiftName: String? = null,
+    val createdAt: String? = null
 ) {
     val shiftTemplateId: String get() = shiftId
     val daysOfWeek: List<Int>? get() = null

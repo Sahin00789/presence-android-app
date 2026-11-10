@@ -27,27 +27,25 @@ class OvertimeRepositoryImpl @Inject constructor(
         val result = safeApiCall("Error loading overtime") {
             overtimeApiService.list(from, to, staffProfileId, status)
         }
-        return when (result) {
-            is Resource.Success -> {
-                if (result.data != null) {
-                    val entities = result.data.map { OvertimeEntity.fromDto(it) }
-                    overtimeDao.upsertAll(entities)
-                }
-                result
-            }
-            is Resource.Error -> {
-                val cached = overtimeDao.getAll()
-                val filtered = cached.filter { entry ->
-                    (staffProfileId.isNullOrBlank() || entry.staffProfileId == staffProfileId) &&
-                    (status.isNullOrBlank() || entry.status.equals(status, ignoreCase = true))
-                }
-                if (filtered.isNotEmpty()) {
-                    Resource.Success(filtered.map { it.toDto() })
-                } else {
-                    result
-                }
-            }
-            Resource.Loading -> Resource.Loading
+        if (result is Resource.Success && result.data != null) {
+            val entities = result.data.map { OvertimeEntity.fromDto(it) }
+            overtimeDao.clear()
+            overtimeDao.upsertAll(entities)
+            return Resource.Success(result.data)
+        }
+        val cached = overtimeDao.getAll()
+        val filtered = cached.filter { entry ->
+            (staffProfileId.isNullOrBlank() || entry.staffProfileId == staffProfileId) &&
+            (status.isNullOrBlank() || entry.status.equals(status, ignoreCase = true)) &&
+            (from.isNullOrBlank() || entry.workDate >= from) &&
+            (to.isNullOrBlank() || entry.workDate <= to)
+        }
+        return if (filtered.isNotEmpty()) {
+            Resource.Success(filtered.map { it.toDto() })
+        } else if (result is Resource.Error) {
+            result
+        } else {
+            Resource.Success(emptyList())
         }
     }
 

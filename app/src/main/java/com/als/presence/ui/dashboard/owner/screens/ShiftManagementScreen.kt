@@ -141,26 +141,12 @@ fun ShiftManagementScreen(
     Box {
         PresenceSecondaryScaffold(
             crumb = "Scheduling",
-            title = "Shift Schedule",
+            title = "Roster Schedule",
             onBack = onBack,
             onRefresh = viewModel::refresh
         ) {
-            PresencePageIntro(
-                eyebrow = "Timetable",
-                title = "Shift Management",
-                description = "Define reusable shift templates and timing rules for your workforce across the 7-day week."
-            )
-
-            PresenceMetaStrip(
-                items = listOf(
-                    "Templates" to templates.size.toString(),
-                    "Employees Covered" to staff.size.toString()
-                )
-            )
-
             PresenceSectionTitle(
-                title = "Weekly Shift Schedule",
-                description = "7-day view of shifts across the week."
+                title = "Shift Schedule"
             )
 
             when (val state = templatesState) {

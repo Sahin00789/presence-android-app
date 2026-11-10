@@ -61,11 +61,13 @@ fun EmployeeDashboardScreen(
                 onClockOut = clockInViewModel::clockOut,
                 engine = clockInViewModel.faceEmbeddingEngine,
                 onFaceCaptured = clockInViewModel::setFaceEmbedding,
-                onSilentRefresh = { clockInViewModel.refresh(silent = true) }
+                onSilentRefresh = { clockInViewModel.refresh(silent = true) },
+                onClaimUnhandledEvent = clockInViewModel::claimUnhandledEvent
             )
             1 -> EmployeeAttendanceTab(
                 viewModel = attendanceViewModel,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                onRefresh = attendanceViewModel::refresh
             )
             else -> EmployeeLedgerTab(
                 overallSummaryState = overallSummaryState,

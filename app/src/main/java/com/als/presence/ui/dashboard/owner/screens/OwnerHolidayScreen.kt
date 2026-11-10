@@ -87,27 +87,13 @@ fun OwnerHolidayScreen(
 
     Box {
         PresenceSecondaryScaffold(
-            crumb = "SCHEDULING CONSOLE",
-            title = "Premises Holiday Management",
+            crumb = "Scheduling",
+            title = "Holiday Calendar",
             onBack = onBack,
             onRefresh = { viewModel.refresh() }
         ) {
-            PresencePageIntro(
-                eyebrow = "Calendar Management",
-                title = "Manage Premises Holidays",
-                description = "Add or remove premises public holidays. Configured holidays retain full daily pay in payroll engine."
-            )
-
-            PresenceMetaStrip(
-                items = listOf(
-                    "Holidays" to holidays.size.toString(),
-                    "Upcoming" to holidays.count { it.date >= Dates.todayIso() }.toString()
-                )
-            )
-
             PresenceSectionTitle(
-                title = "Published Premises Holidays",
-                description = "Sorted by calendar date for active premises.",
+                title = "Published Holidays",
                 action = {
                     PresenceButton(
                         label = "Add Holiday",

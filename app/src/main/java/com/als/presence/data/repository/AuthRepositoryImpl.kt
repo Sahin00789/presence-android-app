@@ -190,6 +190,9 @@ class AuthRepositoryImpl @Inject constructor(
                 val authResponse = result.data
                 sessionManager.token = authResponse.accessToken
                 sessionManager.refreshToken = authResponse.refreshToken
+                if (!authResponse.loggedDeviceId.isNullOrBlank()) {
+                    sessionManager.loggedDeviceId = authResponse.loggedDeviceId
+                }
                 val user = authResponse.user.toDomainUser()
                 saveUserToLocalCache(user)
                 Resource.Success(user)
@@ -219,6 +222,9 @@ class AuthRepositoryImpl @Inject constructor(
                 val authResponse = result.data
                 sessionManager.token = authResponse.accessToken
                 sessionManager.refreshToken = authResponse.refreshToken
+                if (!authResponse.loggedDeviceId.isNullOrBlank()) {
+                    sessionManager.loggedDeviceId = authResponse.loggedDeviceId
+                }
                 val user = authResponse.user.toDomainUser()
                 saveUserToLocalCache(user)
                 Resource.Success(user)
@@ -262,6 +268,9 @@ class AuthRepositoryImpl @Inject constructor(
                 val authResponse = result.data
                 sessionManager.token = authResponse.accessToken
                 sessionManager.refreshToken = authResponse.refreshToken
+                if (!authResponse.loggedDeviceId.isNullOrBlank()) {
+                    sessionManager.loggedDeviceId = authResponse.loggedDeviceId
+                }
                 val user = authResponse.user.toDomainUser()
                 saveUserToLocalCache(user)
                 Resource.Success(user)
@@ -301,7 +310,11 @@ class AuthRepositoryImpl @Inject constructor(
         }
         val result = safeApiCall("Failed to refresh session") {
             authApiService.refreshToken(
-                RefreshTokenRequest(refreshToken = currentRefreshToken, deviceName = Build.MODEL)
+                RefreshTokenRequest(
+                    refreshToken = currentRefreshToken,
+                    loggedDeviceId = sessionManager.loggedDeviceId,
+                    deviceName = Build.MODEL
+                )
             )
         }
         return when (result) {
@@ -309,6 +322,9 @@ class AuthRepositoryImpl @Inject constructor(
                 val authResponse = result.data
                 sessionManager.token = authResponse.accessToken
                 sessionManager.refreshToken = authResponse.refreshToken
+                if (!authResponse.loggedDeviceId.isNullOrBlank()) {
+                    sessionManager.loggedDeviceId = authResponse.loggedDeviceId
+                }
                 val user = authResponse.user.toDomainUser()
                 saveUserToLocalCache(user)
                 Resource.Success(user)

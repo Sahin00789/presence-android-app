@@ -17,7 +17,6 @@ import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,19 +38,14 @@ import com.als.presence.core.designsystem.PresenceDesign
 import com.als.presence.data.model.PremisesDto
 import com.als.presence.ui.dashboard.common.MessageSnackbar
 import com.als.presence.ui.dashboard.common.PresenceBadge
-import com.als.presence.ui.dashboard.common.PresenceButton
 import com.als.presence.ui.dashboard.common.PresenceCard
 import com.als.presence.ui.dashboard.common.PresenceEmptyState
 import com.als.presence.ui.dashboard.common.PresenceErrorState
 import com.als.presence.ui.dashboard.common.PresenceIconButton
 import com.als.presence.ui.dashboard.common.PresenceLoading
-import com.als.presence.ui.dashboard.common.PresenceMetaStrip
-import com.als.presence.ui.dashboard.common.PresencePageIntro
 import com.als.presence.ui.dashboard.common.PresenceSectionTitle
 import com.als.presence.ui.dashboard.common.PresenceSecondaryScaffold
-import com.als.presence.ui.dashboard.common.PresenceSize
 import com.als.presence.ui.dashboard.common.PresenceTone
-import com.als.presence.ui.dashboard.common.PresenceVariant
 import com.als.presence.ui.dashboard.owner.OwnerWorkforceViewModel
 import com.als.presence.ui.dashboard.owner.modals.EditPremisesModal
 
@@ -81,38 +75,22 @@ fun PremisesManagementScreen(
     Box {
         PresenceSecondaryScaffold(
             crumb = "Workforce",
-            title = "Manage Premises",
+            title = "Geofence Hub",
             onBack = onBack,
             onRefresh = viewModel::refresh
         ) {
-            PresencePageIntro(
-                eyebrow = "Geofencing",
-                title = "Premises Management",
-                description = "Configure work locations, addresses, and geofence radii for automated GPS clock-in verification."
-            )
-
-            PresenceMetaStrip(
-                items = listOf(
-                    "Premises" to premises.size.toString(),
-                    "Active" to premises.count { it.isActive }.toString(),
-                    "Default Radius" to "50 m"
-                )
-            )
-
             PresenceSectionTitle(
-                title = "Geofenced locations",
-                description = "Active work premises enforced during clock-in."
+                title = "Geofenced Premises (${premises.size})"
             )
 
             when (val state = premisesState) {
-                is UiState.Idle, is UiState.Loading -> PresenceLoading("Loading the geofence centres")
+                is UiState.Idle, is UiState.Loading -> PresenceLoading("Loading geofence locations...")
                 is UiState.Error -> PresenceErrorState(message = state.message, onRetry = viewModel::refresh)
                 is UiState.Success -> {
                     if (premises.isEmpty()) {
                         PresenceEmptyState(
                             icon = Icons.Default.Business,
-                            title = "No premises configured",
-                            description = "Existing work locations will appear here for geofence editing."
+                            title = "No premises configured"
                         )
                     } else {
                         premises.forEach { p ->

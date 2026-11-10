@@ -7,7 +7,6 @@ interface OperationsRepository :
     OvertimeRepository,
     EmployeeRepository,
     PremisesRepository,
-    LocationRepository,
     PayrollRepository,
     LeaveRepository,
     AttendanceRepository,

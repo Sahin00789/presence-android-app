@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.EventAvailable
@@ -149,13 +150,11 @@ import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import com.als.presence.ui.dashboard.common.MyAttendanceScreen
 import com.als.presence.ui.dashboard.common.MySalaryPaymentsScreen
-import com.als.presence.ui.dashboard.common.TopBarServerIcon
-import com.als.presence.ui.dashboard.common.TopBarSyncRefreshButton
 import com.als.presence.ui.dashboard.common.LocalSyncState
 import com.als.presence.ui.dashboard.common.SyncState
 import com.als.presence.ui.dashboard.owner.viewmodels.OwnerWorkforceViewModel
 import com.als.presence.ui.dashboard.owner.viewmodels.OwnerAttendanceViewModel
-import com.als.presence.ui.dashboard.common.LocationsViewModel
+import com.als.presence.ui.dashboard.common.LiveMonitorViewModel
 import com.als.presence.ui.dashboard.employee.viewmodels.EmployeeClockInViewModel
 import com.als.presence.ui.dashboard.employee.viewmodels.EmployeeAttendanceViewModel
 import com.als.presence.ui.dashboard.employee.viewmodels.EmployeeLedgerViewModel
@@ -165,14 +164,14 @@ private enum class SecondaryDestination(val label: String) {
     MY_SHIFTS("My Shifts"),
     MY_SALARY_PAYMENTS("My Salary"),
     MY_ATTENDANCE("My Attendance"),
-    EMPLOYEES_MANAGEMENT("Employees Manager"),
-    PREMISES_MANAGEMENT("Premises & Geofencing"),
-    SHIFT_MANAGEMENT("Working Shifts"),
-    SALARY_PAYMENT("Salary Payment Console"),
+    EMPLOYEES_MANAGEMENT("Workforce Directory"),
+    PREMISES_MANAGEMENT("Geofence Hub"),
+    SHIFT_MANAGEMENT("Roster Schedule"),
+    SALARY_PAYMENT("Payroll Console"),
     HOLIDAY_MANAGEMENT("Holiday Calendar"),
-    LEAVE("Leave Requests"),
+    LEAVE("Leave Desk"),
     OVERTIME("Overtime Console"),
-    ORGANIZATION_SETTINGS("Organization & Profile")
+    ORGANIZATION_SETTINGS("Tenant Studio")
 }
 
 private const val PRIMARY_ROUTE_PREFIX = "dashboard/primary/"
@@ -265,7 +264,7 @@ fun DashboardScreen(
         when (user.role) {
             Role.OWNER -> listOf(
                 PresenceBottomItem("Employees", Icons.Default.People),
-                PresenceBottomItem("Locations", Icons.Default.LocationOn),
+                PresenceBottomItem("Live Monitor", Icons.Default.LocationOn),
                 PresenceBottomItem("Reports", Icons.Default.BarChart)
             )
             Role.EMPLOYEE -> listOf(
@@ -312,6 +311,9 @@ fun DashboardScreen(
     }
 
     val selectTab: (Int) -> Unit = { index ->
+        if (activeSecondary != null) {
+            navController.popBackStack(primaryRoute(0), false)
+        }
         navController.navigate(primaryRoute(index)) {
             // Keep exactly one primary destination under the top of the stack.
             popUpTo(primaryRoute(0)) {
@@ -336,7 +338,7 @@ fun DashboardScreen(
 
     val ownerWorkforceViewModel: OwnerWorkforceViewModel = hiltViewModel()
     val ownerAttendanceViewModel: OwnerAttendanceViewModel = hiltViewModel()
-    val locationsViewModel: LocationsViewModel = hiltViewModel()
+    val liveMonitorViewModel: LiveMonitorViewModel = hiltViewModel()
 
     val employeeClockInViewModel: EmployeeClockInViewModel = hiltViewModel()
     val employeeAttendanceViewModel: EmployeeAttendanceViewModel = hiltViewModel()
@@ -349,7 +351,7 @@ fun DashboardScreen(
                     when (selectedBottomTab) {
                         0 -> ownerWorkforceViewModel.refresh()
                         1 -> {
-                            locationsViewModel.refresh()
+                            liveMonitorViewModel.refresh()
                             ownerWorkforceViewModel.refresh()
                         }
                         2 -> {
@@ -427,12 +429,6 @@ fun DashboardScreen(
                                             fontWeight = FontWeight.ExtraBold,
                                             letterSpacing = (-0.4).sp,
                                             color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = "Staff & Shift Attendance",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
@@ -1021,11 +1017,6 @@ private fun getRoleColor(role: Role): Color = when (role) {
     Role.EMPLOYEE -> RoleStaffPrimary
 }
 
-private fun getRoleIcon(role: Role): ImageVector = when (role) {
-    Role.OWNER -> Icons.Default.AdminPanelSettings
-    Role.EMPLOYEE -> Icons.Default.Badge
-}
-
 @Composable
 private fun DashboardTopAppBar(
     user: User,
@@ -1040,7 +1031,6 @@ private fun DashboardTopAppBar(
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
         modifier = modifier.fillMaxWidth()
     ) {
         Column {
@@ -1051,38 +1041,33 @@ private fun DashboardTopAppBar(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Navigation (Hamburger) Menu Button
+                // Navigation (Drawer) Toggle Button
                 IconButton(
                     onClick = onNavigationClick,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Menu,
                         contentDescription = "Open Navigation Menu",
                         tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
-                // Organization / Workspace Header (Non-clickable)
+                // Organization Brand & Title / Subtitle
                 Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(vertical = 2.dp),
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Organization Logo / Monogram Box
+                    // Clean Organization Monogram / Logo
                     Box(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(roleColor.copy(alpha = 0.14f)),
+                            .background(roleColor.copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
                     ) {
                         OrganizationMark(
@@ -1092,74 +1077,86 @@ private fun DashboardTopAppBar(
                         )
                     }
 
-                    // Organization Name & Role Badge
+                    // Workspace Title and Clean Subtitle
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = user.organizationName.orEmpty().ifBlank { "Organization" },
+                            text = user.organizationName.orEmpty().ifBlank { "Presence" },
                             style = MaterialTheme.typography.titleMedium.copy(
-                                fontSize = 14.sp
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold
                             ),
-                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
 
-                        Surface(
-                            color = roleColor.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(4.dp),
-                            modifier = Modifier.padding(top = 1.dp)
-                        ) {
-                            Text(
-                                text = user.role.name,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 9.sp,
-                                    letterSpacing = 0.5.sp
-                                ),
-                                fontWeight = FontWeight.ExtraBold,
-                                color = roleColor,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
-                            )
+                        val subtitleText = when (user.role) {
+                            Role.OWNER -> "Owner Workspace"
+                            Role.EMPLOYEE -> {
+                                if (!user.premisesName.isNullOrBlank()) {
+                                    "${user.premisesName} • Employee"
+                                } else {
+                                    "Employee"
+                                }
+                            }
                         }
+
+                        Text(
+                            text = subtitleText,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.5.sp
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
-                // Action Buttons (Server Status & Notifications)
+                // Right Actions: Connectivity Warning (only if offline/disconnected) + Notification Bell
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    TopBarServerIcon(
-                        isOnline = isOnline,
-                        isServerConnected = isServerConnected,
-                        onClick = onServerIconClick
-                    )
+                    if (!isOnline || !isServerConnected) {
+                        IconButton(
+                            onClick = onServerIconClick,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFFFEF2F2))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudOff,
+                                contentDescription = "Connection issue. Tap to retry.",
+                                tint = Color(0xFFEF4444),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
 
+                    // Notification Button
                     Box(
                         modifier = Modifier.size(40.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         IconButton(
                             onClick = onNotificationClick,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                            modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Notifications,
                                 contentDescription = "Notifications",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                         }
+
                         if (unreadCount > 0) {
                             Surface(
                                 color = MaterialTheme.colorScheme.error,
@@ -1167,7 +1164,7 @@ private fun DashboardTopAppBar(
                                 border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.surface),
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
-                                    .padding(top = 1.dp, end = 1.dp)
+                                    .padding(top = 4.dp, end = 4.dp)
                             ) {
                                 Text(
                                     text = if (unreadCount > 99) "99+" else unreadCount.toString(),
@@ -1183,8 +1180,8 @@ private fun DashboardTopAppBar(
             }
 
             HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
-                thickness = 1.dp
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f),
+                thickness = 0.75.dp
             )
         }
     }
@@ -1209,15 +1206,17 @@ private fun OrganizationMark(
             contentDescription = "$name logo",
             modifier = modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(8.dp)),
+                .clip(RoundedCornerShape(11.dp)),
             contentScale = ContentScale.Crop
         )
     } else {
-        val initial = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "O"
+        val initial = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "P"
         Text(
             text = initial,
-            style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp),
-            fontWeight = FontWeight.ExtraBold,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Black
+            ),
             color = accent
         )
     }

@@ -21,26 +21,39 @@ class EmployeeRepositoryImpl @Inject constructor(
 ) : EmployeeRepository {
 
     fun observeEmployees(): Flow<List<StaffDto>> {
-        return employeeDao.observeAll().map { list -> list.map { it.toDto() } }
+        return employeeDao.observeAll().map { list ->
+            list.filter { it.id.isNotBlank() }
+                .distinctBy { it.id }
+                .map { it.toDto() }
+        }
     }
 
     override suspend fun getEmployees(): Resource<List<StaffDto>> {
+        employeeDao.deleteInvalidEntries()
         val result = safeApiCall("Error loading employees") {
             employeeApiService.list()
         }
         return when (result) {
             is Resource.Success -> {
                 if (result.data != null) {
-                    val entities = result.data.map { EmployeeEntity.fromDto(it) }
+                    val validDtos = result.data.filter { it.id.isNotBlank() }.distinctBy { it.id }
+                    val entities = validDtos.map { EmployeeEntity.fromDto(it) }
                     employeeDao.upsertAll(entities)
                     snapshotProjectionEngine.rebuildOwnerEmployeesSnapshot("ALL")
                 }
-                result
+                val cached = employeeDao.getAll()
+                    .filter { it.id.isNotBlank() }
+                    .distinctBy { it.id }
+                    .map { it.toDto() }
+                Resource.Success(cached)
             }
             is Resource.Error -> {
                 val cached = employeeDao.getAll()
+                    .filter { it.id.isNotBlank() }
+                    .distinctBy { it.id }
+                    .map { it.toDto() }
                 if (cached.isNotEmpty()) {
-                    Resource.Success(cached.map { it.toDto() })
+                    Resource.Success(cached)
                 } else {
                     result
                 }
@@ -83,8 +96,35 @@ class EmployeeRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getMembers(): Resource<List<OrganizationMemberDto>> {
-        return safeApiCall("Error loading organization members") {
+        val result = safeApiCall("Error loading organization members") {
             employeeApiService.getMembers()
+        }
+        return when (result) {
+            is Resource.Success -> {
+                val members = result.data.orEmpty().distinctBy { it.employeeId.ifBlank { it.userId } }
+                Resource.Success(members)
+            }
+            is Resource.Error -> {
+                val cached = employeeDao.getAll()
+                    .filter { it.id.isNotBlank() }
+                    .distinctBy { it.id }
+                    .map {
+                        OrganizationMemberDto(
+                            id = it.id,
+                            userId = it.userId,
+                            fullName = it.fullName,
+                            email = it.email,
+                            role = it.role,
+                            premisesId = it.premisesId,
+                            premisesName = it.premisesName,
+                            staffProfileId = it.id,
+                            staffCode = it.staffCode,
+                            isActive = it.isActive
+                        )
+                    }
+                if (cached.isNotEmpty()) Resource.Success(cached) else result
+            }
+            Resource.Loading -> Resource.Loading
         }
     }
 }

@@ -55,6 +55,7 @@ data class GoogleExchangeRequest(
 @Serializable
 data class RefreshTokenRequest(
     val refreshToken: String,
+    val loggedDeviceId: String? = null,
     val deviceName: String? = null
 )
 
@@ -111,6 +112,7 @@ data class AuthResponse(
     val accessToken: String,
     val expiresIn: Int = 900,
     val refreshToken: String,
+    val loggedDeviceId: String? = null,
     val user: AuthUserDto
 )
 

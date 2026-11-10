@@ -51,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,6 +63,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.als.presence.core.designsystem.PresenceDesign
@@ -69,7 +71,9 @@ import com.als.presence.data.model.CreateShiftAssignmentRequest
 import com.als.presence.data.model.ShiftAssignmentDto
 import com.als.presence.data.model.ShiftTemplateDto
 import com.als.presence.data.model.StaffDto
+import com.als.presence.data.model.UnworkedPaymentRuleDto
 import com.als.presence.ui.dashboard.common.Dates
+import com.als.presence.ui.dashboard.common.PresenceTone
 import com.als.presence.ui.dashboard.owner.screens.DayInfo
 import com.als.presence.ui.dashboard.owner.screens.WeekDaysList
 
@@ -103,11 +107,14 @@ fun AssignShiftWithRulesModal(
     staff: List<StaffDto>,
     templates: List<ShiftTemplateDto>,
     existingAssignments: List<ShiftAssignmentDto> = emptyList(),
+    unworkedRules: List<UnworkedPaymentRuleDto> = emptyList(),
     initialStaffId: String? = null,
     initialPremisesId: String? = null,
     onDismiss: () -> Unit,
     onSaveAssignment: (CreateShiftAssignmentRequest) -> Unit,
     onDeleteAssignment: (assignmentId: String) -> Unit,
+    onSaveUnworkedRules: ((employeeId: String?, premisesId: String?, holidayPay: Long, offDayPay: Long) -> Unit)? = null,
+    onStaffSelected: ((employeeId: String, premisesId: String?) -> Unit)? = null,
     onAssignWithRules: ((employeeId: String, assignments: List<CreateShiftAssignmentRequest>, startDate: String, premisesId: String?, holidayPay: String, offDayPay: String) -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -165,10 +172,27 @@ fun AssignShiftWithRulesModal(
     // Active shift being configured in sub-modal: Pair(dayIndex, shiftIndex)
     var activeConfigTarget by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
+    LaunchedEffect(selectedStaffId, targetPremisesId) {
+        if (!selectedStaffId.isNullOrBlank()) {
+            onStaffSelected?.invoke(selectedStaffId!!, targetPremisesId)
+        }
+    }
+
     // Unworked payment rules state & sub-modal visibility
+    val employeeUnworkedRules = remember(unworkedRules, selectedStaffId) {
+        unworkedRules.filter { it.employeeId == null || it.employeeId == selectedStaffId }
+    }
     var showUnworkedRulesSubModal by remember { mutableStateOf(false) }
-    var holidayPay by remember { mutableStateOf("0") }
-    var offDayPay by remember { mutableStateOf("0") }
+    var holidayPay by remember(employeeUnworkedRules, selectedStaffId) {
+        val rule = employeeUnworkedRules.find { it.employeeId == selectedStaffId && it.dayType == "HOLIDAY" }
+            ?: employeeUnworkedRules.find { it.employeeId == null && it.dayType == "HOLIDAY" }
+        mutableStateOf(rule?.paymentInr?.toString() ?: "0")
+    }
+    var offDayPay by remember(employeeUnworkedRules, selectedStaffId) {
+        val rule = employeeUnworkedRules.find { it.employeeId == selectedStaffId && it.dayType == "WEEKLY_OFF" }
+            ?: employeeUnworkedRules.find { it.employeeId == null && it.dayType == "WEEKLY_OFF" }
+        mutableStateOf(rule?.paymentInr?.toString() ?: "0")
+    }
 
     fun computeDisabledDays(states: List<DayCardState>): List<Int> {
         return states
@@ -249,6 +273,16 @@ fun AssignShiftWithRulesModal(
                 offDayPay = newOffDayPay
                 holidayPay = newHolidayPay
                 showUnworkedRulesSubModal = false
+
+                val hPay = newHolidayPay.toLongOrNull() ?: 0L
+                val oPay = newOffDayPay.toLongOrNull() ?: 0L
+
+                onSaveUnworkedRules?.invoke(
+                    selectedStaffId,
+                    targetPremisesId,
+                    hPay,
+                    oPay
+                )
 
                 selectedStaffId?.let { empId ->
                     val activeRequests = dayCardStates.flatMap { d ->
@@ -341,11 +375,6 @@ fun AssignShiftWithRulesModal(
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Configure roster schedules & compensation rates",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -789,59 +818,67 @@ private fun DayCardWithShifts(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ShiftPaymentConfigSummaryRow(
     shiftState: ShiftPaymentState,
     onClick: () -> Unit
 ) {
+    val pres = shiftState.presentPay.ifBlank { "0" }
+    val half = shiftState.halfDayPay.ifBlank { "0" }
+    val leave = shiftState.leavePay.ifBlank { "0" }
+    val abs = shiftState.absentPay.ifBlank { "0" }
+    val windowText = Dates.formatWindow(shiftState.startTime, shiftState.endTime)
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
-        color = if (shiftState.isEnabled) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+        color = if (shiftState.isEnabled) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
         border = BorderStroke(
             if (shiftState.isEnabled) 1.5.dp else 1.dp,
-            if (shiftState.isEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+            if (shiftState.isEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Header Row: Shift Name + Time Pill on Left, Edit Button on Right
+            // Header Row: Shift Name & Window on Left, Action Button on Right
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = shiftState.templateName,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        color = if (shiftState.isEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (shiftState.isEnabled) PresenceDesign.Ink else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
                         Text(
-                            text = "${Dates.formatTime(shiftState.startTime)} – ${Dates.formatTime(shiftState.endTime)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            text = windowText,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -871,22 +908,52 @@ private fun ShiftPaymentConfigSummaryRow(
                 }
             }
 
-            // Outcome Badges Row: Full width FlowRow ensuring Present, Half, Leave, and Absent are ALWAYS visible
+            // Payment Rates Grid (2x2 Grid matching MyShiftsScreen day card)
             if (shiftState.isEnabled) {
-                val pres = shiftState.presentPay.ifBlank { "0" }
-                val half = shiftState.halfDayPay.ifBlank { "0" }
-                val leave = shiftState.leavePay.ifBlank { "0" }
-                val abs = shiftState.absentPay.ifBlank { "0" }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    OutcomeBadge(label = "Present", amount = "₹$pres", tone = OutcomeTone.Primary)
-                    OutcomeBadge(label = "Half", amount = "₹$half", tone = OutcomeTone.Warning)
-                    OutcomeBadge(label = "Leave", amount = "₹$leave", tone = OutcomeTone.Info)
-                    OutcomeBadge(label = "Absent", amount = "₹$abs", tone = OutcomeTone.Error)
+                Text(
+                    text = "Per-Shift Payment Rates",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = PresenceDesign.LabelText
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        PaymentRateChip(
+                            label = "Present Rate",
+                            value = "₹$pres",
+                            tone = PresenceTone.Success,
+                            modifier = Modifier.weight(1f)
+                        )
+                        PaymentRateChip(
+                            label = "Half-Day Rate",
+                            value = "₹$half",
+                            tone = PresenceTone.Warning,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        PaymentRateChip(
+                            label = "Leave Pay",
+                            value = "₹$leave",
+                            tone = PresenceTone.Info,
+                            modifier = Modifier.weight(1f)
+                        )
+                        PaymentRateChip(
+                            label = "Absent Pay",
+                            value = "₹$abs",
+                            tone = PresenceTone.Danger,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             } else {
                 Text(
@@ -899,32 +966,48 @@ private fun ShiftPaymentConfigSummaryRow(
     }
 }
 
-private enum class OutcomeTone { Primary, Warning, Info, Error }
-
 @Composable
-private fun OutcomeBadge(
+private fun PaymentRateChip(
     label: String,
-    amount: String,
-    tone: OutcomeTone
+    value: String,
+    tone: PresenceTone,
+    modifier: Modifier = Modifier
 ) {
-    val (bgColor, textColor) = when (tone) {
-        OutcomeTone.Primary -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f) to MaterialTheme.colorScheme.primary
-        OutcomeTone.Warning -> Color(0xFFFEF3C7) to Color(0xFFD97706)
-        OutcomeTone.Info -> Color(0xFFE0F2FE) to Color(0xFF0284C7)
-        OutcomeTone.Error -> Color(0xFFFEE2E2) to Color(0xFFDC2626)
-    }
-
     Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = bgColor
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
     ) {
-        Text(
-            text = "$label: $amount",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = textColor,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = PresenceDesign.LabelText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 12.sp,
+                color = when (tone) {
+                    PresenceTone.Success -> MaterialTheme.colorScheme.primary
+                    PresenceTone.Warning -> MaterialTheme.colorScheme.tertiary
+                    PresenceTone.Info -> MaterialTheme.colorScheme.secondary
+                    PresenceTone.Danger -> MaterialTheme.colorScheme.error
+                    else -> PresenceDesign.Ink
+                },
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -944,7 +1027,7 @@ private fun ConfigureShiftRatesSubModal(
         absentPay: String
     ) -> Unit
 ) {
-    var isEnabled by remember { mutableStateOf(shiftState.isEnabled) }
+    var isEnabled by remember { mutableStateOf(if (shiftState.assignmentId != null) shiftState.isEnabled else true) }
     var presentPay by remember { mutableStateOf(shiftState.presentPay.ifBlank { "0" }) }
     var halfDayPay by remember { mutableStateOf(shiftState.halfDayPay.ifBlank { "0" }) }
     var leavePay by remember { mutableStateOf(shiftState.leavePay.ifBlank { "0" }) }
@@ -1106,8 +1189,8 @@ private fun ConfigureUnworkedRulesSubModal(
     onDismiss: () -> Unit,
     onSave: (offDayPay: String, holidayPay: String) -> Unit
 ) {
-    var offDayPay by remember { mutableStateOf(currentOffDayPay.ifBlank { "0" }) }
-    var holidayPay by remember { mutableStateOf(currentHolidayPay.ifBlank { "0" }) }
+    var offDayPay by remember(currentOffDayPay) { mutableStateOf(currentOffDayPay.ifBlank { "0" }) }
+    var holidayPay by remember(currentHolidayPay) { mutableStateOf(currentHolidayPay.ifBlank { "0" }) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

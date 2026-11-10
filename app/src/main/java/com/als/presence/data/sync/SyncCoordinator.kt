@@ -96,7 +96,9 @@ class SyncCoordinator @Inject constructor(
                     val resp = employeeApi.list()
                     if (resp.isSuccessful) {
                         resp.body()?.let { dtos ->
-                            val entities = dtos.map { EmployeeEntity.fromDto(it) }
+                            val validDtos = dtos.filter { it.id.isNotBlank() }.distinctBy { it.id }
+                            val entities = validDtos.map { EmployeeEntity.fromDto(it) }
+                            db.employeeDao().deleteInvalidEntries()
                             db.employeeDao().upsertAll(entities)
                         }
                     } else {
@@ -284,7 +286,9 @@ class SyncCoordinator @Inject constructor(
                             val resp = employeeApi.list()
                             if (resp.isSuccessful) {
                                 resp.body()?.let { dtos ->
-                                    val entities = dtos.map { EmployeeEntity.fromDto(it) }
+                                    val validDtos = dtos.filter { it.id.isNotBlank() }.distinctBy { it.id }
+                                    val entities = validDtos.map { EmployeeEntity.fromDto(it) }
+                                    db.employeeDao().deleteInvalidEntries()
                                     db.employeeDao().upsertAll(entities)
                                 }
                             } else success = false

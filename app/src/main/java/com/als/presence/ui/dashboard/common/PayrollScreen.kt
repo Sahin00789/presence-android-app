@@ -81,7 +81,7 @@ fun PayrollScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         PresenceSecondaryScaffold(
             crumb = "PAYROLL",
-            title = "Monthly salary run",
+            title = "Monthly Payroll",
             onBack = onBack,
             onRefresh = viewModel::refresh
         ) {
@@ -163,27 +163,12 @@ fun PayrollScreenContent(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Monthly payroll calculations and ledger-backed liabilities",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
-            IconButton(
+            PresenceRefreshButton(
                 onClick = onRefresh,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = "Refresh payroll",
-                    modifier = Modifier.size(19.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+                isRefreshing = isSubmitting || periodsState is UiState.Loading || itemsState is UiState.Loading,
+                contentDescription = "Refresh payroll"
+            )
         }
 
         // Top Premises Selector

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import com.als.presence.ui.dashboard.common.PresenceRefreshButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -98,7 +99,7 @@ fun OwnerWorkforceTab(
     var ledgerTarget by remember { mutableStateOf<WorkforceLedgerTarget?>(null) }
     var searchQuery by remember { mutableStateOf("") }
 
-    val staff = (staffState as? UiState.Success)?.data.orEmpty()
+    val staff = (staffState as? UiState.Success)?.data.orEmpty().filter { it.id.isNotBlank() }.distinctBy { it.id }
     val members = (membersState as? UiState.Success)?.data.orEmpty()
     val premises = (premisesState as? UiState.Success)?.data.orEmpty()
     val periods = (payrollPeriodsState as? UiState.Success)?.data.orEmpty()
@@ -142,29 +143,12 @@ fun OwnerWorkforceTab(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Employee cards, earnings & attendance",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
-            IconButton(
+            PresenceRefreshButton(
                 onClick = onRetry,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = "Refresh workforce",
-                    modifier = Modifier.size(19.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+                isRefreshing = staffState is UiState.Loading || membersState is UiState.Loading,
+                contentDescription = "Refresh workforce"
+            )
         }
 
         // Compact Search Bar

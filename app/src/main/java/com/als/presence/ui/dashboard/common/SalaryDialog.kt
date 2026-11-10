@@ -50,7 +50,7 @@ fun SalaryDialog(
                     shape = RoundedCornerShape(12.dp)
                 )
                 Text(
-                    text = "Shift completion earns this amount. Holiday, weekly-off and paid-leave pay are configured as unworked payment rules.",
+                    text = "Shift completion earns this amount. Holiday and weekly-off pay are configured as unworked payment rules.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
