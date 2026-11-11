@@ -98,9 +98,9 @@ val WeekDaysList = listOf(
  * Converts half-day threshold duration in minutes to HH:MM:SS wall clock time string based on shift startTime.
  */
 private fun convertMinutesToThresholdTime(startTime: String, thresholdMinutes: Int): String {
-    val parts = startTime.split(":")
-    val startH = parts.getOrNull(0)?.toIntOrNull() ?: 9
-    val startM = parts.getOrNull(1)?.toIntOrNull() ?: 0
+    val localStart = Dates.parseLocalTime(startTime) ?: java.time.LocalTime.of(9, 0)
+    val startH = localStart.hour
+    val startM = localStart.minute
     val totalM = (startH * 60 + startM + thresholdMinutes) % (24 * 60)
     val h = totalM / 60
     val m = totalM % 60

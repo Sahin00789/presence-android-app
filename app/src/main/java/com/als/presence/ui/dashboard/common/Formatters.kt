@@ -74,17 +74,61 @@ object Dates {
         return "${local.format(display)} • ${local.format(timeFormat)}"
     }
 
+    /**
+     * Robustly parses any time string format:
+     * - ISO timestamp with 'T' (e.g. "2025-02-27T09:00:00Z")
+     * - 12-hour AM/PM format (e.g. "09:00 AM", "9:00 AM", "06:00 PM", "6:00 PM", "6:00PM", "12:00 AM", "12:30 PM")
+     * - 24-hour format (e.g. "18:00:00", "18:00", "09:00:00", "09:00", "9:00", "0:00")
+     */
+    fun parseLocalTime(raw: String?): LocalTime? {
+        if (raw.isNullOrBlank()) return null
+        val str = raw.trim()
+        if (str.contains('T')) {
+            return try {
+                OffsetDateTime.parse(str).toLocalTime()
+            } catch (_: Exception) {
+                try {
+                    Instant.parse(str).atZone(ZoneId.systemDefault()).toLocalTime()
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+
+        // Match 12-hour format with AM/PM (case insensitive)
+        val amPmRegex = Regex("""(?i)^\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)\s*$""")
+        val amPmMatch = amPmRegex.find(str)
+        if (amPmMatch != null) {
+            val (hStr, mStr, sStr, ap) = amPmMatch.destructured
+            var h = hStr.toIntOrNull() ?: return null
+            val m = mStr.toIntOrNull() ?: return null
+            val s = if (sStr.isNotEmpty()) sStr.toIntOrNull() ?: 0 else 0
+            if (h !in 1..12 || m !in 0..59 || s !in 0..59) return null
+            val isPm = ap.equals("PM", ignoreCase = true)
+            if (isPm && h < 12) h += 12
+            if (!isPm && h == 12) h = 0
+            return LocalTime.of(h, m, s)
+        }
+
+        // Match 24-hour format (e.g., 18:00:00, 18:00, 9:00)
+        val hr24Regex = Regex("""^\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*$""")
+        val match24 = hr24Regex.find(str)
+        if (match24 != null) {
+            val (hStr, mStr, sStr) = match24.destructured
+            val h = hStr.toIntOrNull() ?: return null
+            val m = mStr.toIntOrNull() ?: return null
+            val s = if (sStr.isNotEmpty()) sStr.toIntOrNull() ?: 0 else 0
+            if (h !in 0..23 || m !in 0..59 || s !in 0..59) return null
+            return LocalTime.of(h, m, s)
+        }
+
+        return null
+    }
+
     fun formatTime(raw: String?): String {
         if (raw.isNullOrBlank()) return "—"
-        if (raw.contains('T')) {
-            val parsed = parseInstant(raw) ?: return raw
-            return parsed.atZone(ZoneId.systemDefault()).format(timeFormat)
-        }
-        return try {
-            LocalTime.parse(raw.take(8)).format(timeFormat)
-        } catch (_: Exception) {
-            raw
-        }
+        val parsed = parseLocalTime(raw) ?: return raw
+        return parsed.format(timeFormat)
     }
 
     /** Rolls a `HH:mm[:ss]` shift window into readable text. */
@@ -210,19 +254,8 @@ object Dates {
         if (startTimeRaw.isNullOrBlank()) return false
         return try {
             val now = LocalTime.now()
-            val parseTime = { raw: String ->
-                if (raw.contains('T')) {
-                    OffsetDateTime.parse(raw).toLocalTime()
-                } else {
-                    LocalTime.parse(raw.take(8))
-                }
-            }
-            val start = parseTime(startTimeRaw)
-            val threshold = if (!halfDayThresholdRaw.isNullOrBlank()) {
-                parseTime(halfDayThresholdRaw)
-            } else {
-                start.plusHours(4)
-            }
+            val start = parseLocalTime(startTimeRaw) ?: return false
+            val threshold = parseLocalTime(halfDayThresholdRaw) ?: start.plusHours(4)
             if (start.isBefore(threshold)) {
                 now.isAfter(threshold)
             } else {
@@ -236,12 +269,13 @@ object Dates {
     /**
      * Checks if a session (shift or overtime) on [workDateIso] has completed its scheduled time window.
      * Returns true if the session date is in the past, or if it is today and current time has passed
-     * the session's end time.
+     * the session's end time plus buffer.
      */
     fun isSessionOver(
         workDateIso: String?,
         endTimeRaw: String?,
-        startTimeRaw: String? = null
+        startTimeRaw: String? = null,
+        bufferMinutesAfterEnd: Long = 120L
     ): Boolean {
         if (workDateIso.isNullOrBlank()) return false
         val today = todayIso()
@@ -251,21 +285,15 @@ object Dates {
         if (endTimeRaw.isNullOrBlank()) return false
         return try {
             val now = LocalTime.now()
-            val parseTime = { raw: String ->
-                if (raw.contains('T')) {
-                    OffsetDateTime.parse(raw).toLocalTime()
-                } else {
-                    LocalTime.parse(raw.take(8))
-                }
-            }
-            val end = parseTime(endTimeRaw)
-            val start = startTimeRaw?.let { runCatching { parseTime(it) }.getOrNull() }
+            val end = parseLocalTime(endTimeRaw) ?: return false
+            val start = parseLocalTime(startTimeRaw)
 
+            val bufferedEnd = end.plusMinutes(bufferMinutesAfterEnd)
             val isOvernight = start != null && start.isAfter(end)
             when {
                 sessionDate < today -> {
                     if (isOvernight && sessionDate == isoDaysAgo(1)) {
-                        now.isAfter(end)
+                        now.isAfter(bufferedEnd)
                     } else {
                         true
                     }
@@ -274,7 +302,7 @@ object Dates {
                     if (isOvernight) {
                         false // Overnight shift starting today ends tomorrow
                     } else {
-                        now.isAfter(end)
+                        now.isAfter(bufferedEnd)
                     }
                 }
             }
@@ -291,7 +319,7 @@ object Dates {
         startTimeRaw: String?,
         endTimeRaw: String?,
         bufferMinutesBeforeStart: Long = 120L,
-        bufferMinutesAfterEnd: Long = 720L
+        bufferMinutesAfterEnd: Long = 120L
     ): Boolean {
         if (startTimeRaw.isNullOrBlank() || endTimeRaw.isNullOrBlank()) {
             return true
@@ -299,16 +327,8 @@ object Dates {
         return try {
             val now = LocalTime.now()
 
-            val parseTime = { raw: String ->
-                if (raw.contains('T')) {
-                    OffsetDateTime.parse(raw).toLocalTime()
-                } else {
-                    LocalTime.parse(raw.take(8))
-                }
-            }
-
-            val start = parseTime(startTimeRaw)
-            val end = parseTime(endTimeRaw)
+            val start = parseLocalTime(startTimeRaw) ?: return true
+            val end = parseLocalTime(endTimeRaw) ?: return true
 
             val windowStart = start.minusMinutes(bufferMinutesBeforeStart)
             val windowEnd = end.plusMinutes(bufferMinutesAfterEnd)
@@ -323,17 +343,26 @@ object Dates {
         }
     }
 
+    /**
+     * Returns true if current time is past the scheduled end time of a session.
+     */
+    fun isPastEndTime(endTimeRaw: String?): Boolean {
+        if (endTimeRaw.isNullOrBlank()) return false
+        return try {
+            val now = LocalTime.now()
+            val end = parseLocalTime(endTimeRaw) ?: return false
+            now.isAfter(end)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     /** Calculates late minutes given a clock-in time and assigned shift start time. */
     fun calculateLateMinutes(clockIn: String?, assignedStartTime: String?): Int {
         if (clockIn.isNullOrBlank() || assignedStartTime.isNullOrBlank()) return 0
         return try {
-            val clockInTime = if (clockIn.contains('T')) {
-                val parsed = parseInstant(clockIn) ?: return 0
-                parsed.atZone(ZoneId.systemDefault()).toLocalTime()
-            } else {
-                LocalTime.parse(clockIn.take(8))
-            }
-            val startTime = LocalTime.parse(assignedStartTime.take(8))
+            val clockInTime = parseLocalTime(clockIn) ?: return 0
+            val startTime = parseLocalTime(assignedStartTime) ?: return 0
             val diffSeconds = clockInTime.toSecondOfDay() - startTime.toSecondOfDay()
             if (diffSeconds > 0) diffSeconds / 60 else 0
         } catch (_: Exception) {

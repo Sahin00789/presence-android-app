@@ -162,6 +162,19 @@ fun OwnerOvertimeScreen(
             crumb = "Scheduling",
             title = "Overtime Console",
             onBack = onBack,
+            actions = {
+                PresenceButton(
+                    label = "+ Book OT",
+                    icon = Icons.Default.Add,
+                    size = PresenceSize.Sm,
+                    onClick = {
+                        val defaultStaff = premisesFilteredStaffList.firstOrNull() ?: allStaffList.firstOrNull()
+                        if (defaultStaff != null) {
+                            bookingStaffMember = defaultStaff
+                        }
+                    }
+                )
+            },
             onRefresh = { viewModel.refresh() }
         ) {
 

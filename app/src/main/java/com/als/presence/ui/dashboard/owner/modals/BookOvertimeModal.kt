@@ -103,8 +103,8 @@ fun BookOvertimeModal(
 
             if (matchesDay) {
                 fun toMins(raw: String): Int {
-                    val parts = raw.take(5).split(":")
-                    return (parts.getOrNull(0)?.toIntOrNull() ?: 0) * 60 + (parts.getOrNull(1)?.toIntOrNull() ?: 0)
+                    val local = Dates.parseLocalTime(raw) ?: return 0
+                    return local.hour * 60 + local.minute
                 }
 
                 val s1 = toMins(startTime)

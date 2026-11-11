@@ -83,6 +83,30 @@ class PayrollRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun getStaffMonthlyEarningLedger(staffProfileId: String, month: Int, year: Int): Resource<MonthlyEarningLedgerResponseDto> {
+        val result = safeApiCall("Error loading staff monthly earning ledger") {
+            payrollApiService.getStaffMonthlyEarningLedger(month, year, staffProfileId)
+        }
+        return when (result) {
+            is Resource.Success -> {
+                payrollSnapshotDao.insertMonthlyEarningSnapshot(
+                    MonthlyEarningSnapshotEntity.fromDto(result.data)
+                )
+                result
+            }
+            is Resource.Error -> {
+                val cached = payrollSnapshotDao.getMonthlyEarningSnapshotsForMonth(month, year)
+                    .firstOrNull { it.staffProfileId == staffProfileId }
+                if (cached != null) {
+                    Resource.Success(cached.toDto())
+                } else {
+                    result
+                }
+            }
+            Resource.Loading -> Resource.Loading
+        }
+    }
+
     override suspend fun getMyOverallPayrollSummary(): Resource<MyOverallPayrollSummaryDto> {
         return safeApiCall("Error loading overall payroll summary") {
             payrollApiService.getMyOverallPayrollSummary()

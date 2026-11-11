@@ -68,7 +68,14 @@ class FaceEmbeddingEngine @Inject constructor(
     data class Embedding(
         val vector: List<Double>,
         val modelVersion: String,
-        val qualityScore: Double
+        val qualityScore: Double,
+        val liveness: LivenessResult = LivenessResult(
+            isLive = true,
+            passiveTextureScore = 0.95,
+            passivePassed = true,
+            activeBlinkDetected = true,
+            eyeDistance = 20.0
+        )
     )
 
     class FaceModelUnavailableException(message: String) : IllegalStateException(message)
@@ -162,8 +169,8 @@ class FaceEmbeddingEngine @Inject constructor(
         }
 
         // 4. Liveness Check
-        val isLive = FaceLivenessDetector.isLive(bitmap, detection.landmarks)
-        if (!isLive) {
+        val liveness = FaceLivenessDetector.analyzeLiveness(bitmap, detection.landmarks)
+        if (!liveness.isLive) {
             throw FaceModelUnavailableException("Liveness check failed. Blink naturally.")
         }
 
@@ -176,7 +183,7 @@ class FaceEmbeddingEngine @Inject constructor(
                 throw FaceModelUnavailableException("Face is not clear enough. Hold steady.")
             }
             val vector = runRecognizer(activeModels.recognizer, aligned)
-            Embedding(vector, MODEL_VERSION, quality)
+            Embedding(vector, MODEL_VERSION, quality, liveness)
         } finally {
             if (!aligned.isRecycled) aligned.recycle()
         }
@@ -225,8 +232,8 @@ class FaceEmbeddingEngine @Inject constructor(
         }
             
         // 3. Check for Multi-Pose Liveness
-        val isLive = FaceLivenessDetector.isLive(bitmap, detection.landmarks)
-        if (!isLive) {
+        val liveness = FaceLivenessDetector.analyzeLiveness(bitmap, detection.landmarks)
+        if (!liveness.isLive) {
             throw FaceModelUnavailableException(
                 "Liveness check failed. Please blink naturally and avoid using photos/screens."
             )
@@ -245,7 +252,8 @@ class FaceEmbeddingEngine @Inject constructor(
             Embedding(
                 vector = runRecognizer(activeModels.recognizer, aligned),
                 modelVersion = MODEL_VERSION,
-                qualityScore = quality
+                qualityScore = quality,
+                liveness = liveness
             )
         } finally {
             if (!aligned.isRecycled) aligned.recycle()

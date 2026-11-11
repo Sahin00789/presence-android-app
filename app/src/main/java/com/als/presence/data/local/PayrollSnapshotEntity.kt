@@ -10,8 +10,10 @@ data class PayrollSnapshotEntity(
     @PrimaryKey val id: String,
     val monthlyPayrollId: String = "",
     val staffProfileId: String = "",
+    val employeeId: String = "",
     val employeeName: String? = null,
     val employeeCode: String? = null,
+    val staffEmail: String? = null,
     val role: String? = null,
     val month: Int = 1,
     val year: Int = 2025,
@@ -23,6 +25,9 @@ data class PayrollSnapshotEntity(
     val additionsPaise: Long = 0L,
     val deductionsPaise: Long = 0L,
     val netSalaryPaise: Long = 0L,
+    val earnedAmount: String = "0.00",
+    val paidAmount: String = "0.00",
+    val dueAmount: String = "0.00",
     val presentDays: Int = 0,
     val absentDays: Int = 0,
     val halfDays: Int = 0,
@@ -46,16 +51,28 @@ data class PayrollSnapshotEntity(
     val netSalaryInr: Long get() = netSalaryPaise
 
     fun toDto(): PayrollItemDto {
+        val realPayrollId = monthlyPayrollId.ifBlank { id }
+        val realStaffId = staffProfileId.ifBlank { employeeId }
         return PayrollItemDto(
-            id = id,
-            monthlyPayrollId = monthlyPayrollId,
-            staffProfileId = staffProfileId,
+            id = realPayrollId,
+            monthlyPayrollId = realPayrollId,
+            staffProfileId = realStaffId,
+            employeeId = realStaffId,
+            staffName = employeeName,
             employeeName = employeeName,
+            staffCode = employeeCode,
             employeeCode = employeeCode,
+            staffEmail = staffEmail,
             role = role,
+            month = month,
+            year = year,
+            premisesId = premisesId,
             periodStartDate = periodStartDate,
             periodEndDate = periodEndDate,
             periodStatus = periodStatus,
+            earnedAmount = earnedAmount,
+            paidAmount = paidAmount,
+            dueAmount = dueAmount,
             grossSalaryPaise = grossSalaryPaise,
             additionsPaise = additionsPaise,
             deductionsPaise = deductionsPaise,
@@ -83,24 +100,32 @@ data class PayrollSnapshotEntity(
 
     companion object {
         fun fromDto(month: Int, year: Int, dto: PayrollItemDto): PayrollSnapshotEntity {
-            val key = "$month-$year-${dto.staffProfileId}"
+            val resolvedPayrollId = dto.monthlyPayrollId.ifBlank { dto.id }
+            val resolvedStaffId = dto.staffProfileId.ifBlank { dto.employeeId.ifBlank { dto.resolvedEmployeeId } }
+            val key = "$month-$year-$resolvedStaffId"
             val att = dto.attendanceSummary
             return PayrollSnapshotEntity(
                 id = key,
-                monthlyPayrollId = dto.monthlyPayrollId,
-                staffProfileId = dto.staffProfileId,
-                employeeName = dto.employeeName,
-                employeeCode = dto.employeeCode,
+                monthlyPayrollId = resolvedPayrollId,
+                staffProfileId = resolvedStaffId,
+                employeeId = resolvedStaffId,
+                employeeName = dto.resolvedStaffName,
+                employeeCode = dto.resolvedStaffCode,
+                staffEmail = dto.staffEmail,
                 role = dto.role,
                 month = month,
                 year = year,
+                premisesId = dto.premisesId,
                 periodStartDate = dto.periodStartDate,
                 periodEndDate = dto.periodEndDate,
                 periodStatus = dto.periodStatus,
-                grossSalaryPaise = dto.grossSalaryPaise,
+                grossSalaryPaise = dto.resolvedGrossSalaryPaise,
                 additionsPaise = dto.additionsPaise,
                 deductionsPaise = dto.deductionsPaise,
-                netSalaryPaise = dto.netSalaryPaise,
+                netSalaryPaise = dto.resolvedNetSalaryPaise,
+                earnedAmount = dto.earnedAmount,
+                paidAmount = dto.paidAmount,
+                dueAmount = dto.dueAmount,
                 presentDays = att.presentDays,
                 absentDays = att.absentDays,
                 halfDays = att.halfDays,

@@ -164,9 +164,27 @@ fun FaceCaptureDialog(
         }
     }
 
-    val targetPoses = listOf("CENTER")
+    val targetPoses = remember(mode) {
+        if (mode == "ENROLL") {
+            listOf("CENTER", "LEFT", "RIGHT", "UP", "DOWN")
+        } else {
+            listOf("CENTER")
+        }
+    }
     var currentPoseIndex by remember { mutableIntStateOf(0) }
-    var feedbackMessage by remember { mutableStateOf("Position your face in the camera.") }
+
+    fun getPosePrompt(pose: String): String = when (pose) {
+        "CENTER" -> "Look straight at the camera"
+        "LEFT" -> "Turn your head slightly LEFT"
+        "RIGHT" -> "Turn your head slightly RIGHT"
+        "UP" -> "Tilt your head slightly UP"
+        "DOWN" -> "Tilt your head slightly DOWN"
+        else -> "Position your face in the camera"
+    }
+
+    var feedbackMessage by remember {
+        mutableStateOf(if (targetPoses.isNotEmpty()) "Step 1/${targetPoses.size}: ${getPosePrompt(targetPoses[0])}" else "Position your face in the camera.")
+    }
     var isSuccess by remember { mutableStateOf(false) }
 
     val accumulatedEmbeddings = remember { mutableMapOf<String, FaceEmbeddingEngine.Embedding>() }
@@ -174,7 +192,7 @@ fun FaceCaptureDialog(
     LaunchedEffect(currentPoseIndex) {
         if (currentPoseIndex >= targetPoses.size) {
             isSuccess = true
-            feedbackMessage = "Clock-In Verified Successfully!"
+            feedbackMessage = if (mode == "ENROLL") "All 5 Poses Captured Successfully!" else "Clock-In Verified Successfully!"
             delay(1000)
             if (mode == "ENROLL") {
                 onCapturedMulti(accumulatedEmbeddings)
@@ -182,6 +200,8 @@ fun FaceCaptureDialog(
                 accumulatedEmbeddings["CENTER"]?.let { onCapturedSingle(it) }
             }
             onDismiss()
+        } else {
+            feedbackMessage = "Step ${currentPoseIndex + 1}/${targetPoses.size}: ${getPosePrompt(targetPoses[currentPoseIndex])}"
         }
     }
 
@@ -301,11 +321,12 @@ fun FaceCaptureDialog(
                             isDone = currentPoseIndex >= targetPoses.size,
                             onSuccess = { embedding, pose ->
                                 accumulatedEmbeddings[pose] = embedding
-                                currentPoseIndex++
-                                if (currentPoseIndex < targetPoses.size) {
-                                    feedbackMessage = "Hold steady... Look ${targetPoses[currentPoseIndex]}"
+                                val nextIndex = currentPoseIndex + 1
+                                currentPoseIndex = nextIndex
+                                if (nextIndex < targetPoses.size) {
+                                    feedbackMessage = "Step ${nextIndex + 1}/${targetPoses.size}: ${getPosePrompt(targetPoses[nextIndex])}"
                                 } else {
-                                    feedbackMessage = "Face Captured!"
+                                    feedbackMessage = "All Poses Captured!"
                                 }
                             },
                             onFeedback = { feedbackMessage = it }

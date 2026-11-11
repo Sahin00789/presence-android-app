@@ -114,7 +114,8 @@ data class ClockInRequest(
     val isMocked: Boolean = false,
     val faceVerified: Boolean = true,
     val overtimeId: String? = null,
-    val embeddingVector: List<Double> = emptyList()
+    val embeddingVector: List<Double> = emptyList(),
+    val liveness: LivenessEvidenceDto = LivenessEvidenceDto()
 )
 
 @Serializable
@@ -135,7 +136,7 @@ data class ClockOutResponseDto(
 data class FaceStatusDto(
     val enrolled: Boolean = false,
     val modelVersion: String? = null,
-    val staffProfileId: String? = null,
+    val employeeProfileId: String? = null,
     val enrolledAt: String? = null,
     val embeddingDimensions: Int? = null,
     val revokedAt: String? = null

@@ -6,6 +6,7 @@ import com.als.presence.data.local.AttendanceDao
 import com.als.presence.data.local.AttendanceEntity
 import com.als.presence.data.model.*
 import com.als.presence.data.remote.AttendanceApiService
+import com.als.presence.data.remote.FaceApiService
 import com.als.presence.data.sync.SnapshotProjectionEngine
 import com.als.presence.domain.repository.AttendanceRepository
 import kotlinx.coroutines.flow.Flow
@@ -16,6 +17,7 @@ import javax.inject.Singleton
 @Singleton
 class AttendanceRepositoryImpl @Inject constructor(
     private val attendanceApiService: AttendanceApiService,
+    private val faceApiService: FaceApiService,
     private val attendanceDao: AttendanceDao,
     private val snapshotProjectionEngine: SnapshotProjectionEngine
 ) : AttendanceRepository {
@@ -47,7 +49,23 @@ class AttendanceRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getFaceStatus(): Resource<FaceStatusDto> {
-        return Resource.Success(FaceStatusDto(enrolled = true, modelVersion = "1.0"))
+        return safeApiCall("Error checking face status") {
+            val response = faceApiService.getStatus()
+            if (response.isSuccessful && response.body() != null) {
+                val status = response.body()!!
+                retrofit2.Response.success(
+                    FaceStatusDto(
+                        enrolled = status.enrolled,
+                        modelVersion = status.modelVersion,
+                        employeeProfileId = status.employeeProfileId,
+                        enrolledAt = status.enrolledAt,
+                        embeddingDimensions = 128
+                    )
+                )
+            } else {
+                retrofit2.Response.success(FaceStatusDto(enrolled = false))
+            }
+        }
     }
 
     override suspend fun clockIn(request: ClockInRequest): Resource<AttendanceRecordDto> {

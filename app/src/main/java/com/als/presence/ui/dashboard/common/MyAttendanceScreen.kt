@@ -454,7 +454,7 @@ private fun AttendanceDayCard(
                             modifier = Modifier.size(if (screenInfo.isVeryCompact) 18.dp else 22.dp)
                         )
                     }
-                    Column(modifier = Modifier.weight(1f, fill = false)) {
+                    Column(modifier = Modifier.weight(1f)) {
                         FlowRow(
                             verticalArrangement = Arrangement.Center,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -497,7 +497,7 @@ private fun AttendanceDayCard(
                             text = summaryText,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
@@ -548,14 +548,15 @@ private fun AttendanceDayCard(
                                 text = primaryAssignment?.shiftName ?: "Assigned Shift",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = "Assigned: ${Dates.formatTime(startTimeRaw)} – ${Dates.formatTime(endTimeRaw)}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 2
                             )
                         }
                         Spacer(modifier = Modifier.width(8.dp))
@@ -648,7 +649,7 @@ private fun ShiftSubCard(
                         text = shift.shiftName ?: if (shift.overtimeId != null) "Overtime Shift" else "Shift",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     if (!shift.assignedStartTime.isNullOrBlank() || !shift.assignedEndTime.isNullOrBlank()) {
@@ -656,7 +657,8 @@ private fun ShiftSubCard(
                             text = "Assigned: ${Dates.formatTime(shift.assignedStartTime)} – ${Dates.formatTime(shift.assignedEndTime)}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2
                         )
                     }
                 }
@@ -813,7 +815,7 @@ private fun OvertimeSubCard(
                         text = ot.reason?.ifBlank { "Overtime Session" } ?: "Overtime Session",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -898,19 +900,19 @@ private fun WeeklyOffSubCard(
                         modifier = Modifier.size(16.dp)
                     )
                 }
-                Column(modifier = Modifier.weight(1f, fill = false)) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Weekly Off",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "Scheduled Weekly Rest Day",
+                        text = "Scheduled Rest Day",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -972,19 +974,19 @@ private fun HolidaySubCard(
                         modifier = Modifier.size(16.dp)
                     )
                 }
-                Column(modifier = Modifier.weight(1f, fill = false)) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Public Holiday",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "Paid Holiday",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -1136,13 +1138,8 @@ private fun AttendanceOutcomeChip(
 private fun calculateEarlyDepartureMinutes(clockOut: String?, assignedEndTime: String?): Int {
     if (clockOut.isNullOrBlank() || assignedEndTime.isNullOrBlank()) return 0
     return try {
-        val clockOutTime = if (clockOut.contains('T')) {
-            val parsed = java.time.OffsetDateTime.parse(clockOut).toInstant()
-            parsed.atZone(java.time.ZoneId.systemDefault()).toLocalTime()
-        } else {
-            java.time.LocalTime.parse(clockOut.take(8))
-        }
-        val endTime = java.time.LocalTime.parse(assignedEndTime.take(8))
+        val clockOutTime = Dates.parseLocalTime(clockOut) ?: return 0
+        val endTime = Dates.parseLocalTime(assignedEndTime) ?: return 0
         val diffSeconds = endTime.toSecondOfDay() - clockOutTime.toSecondOfDay()
         if (diffSeconds > 60) diffSeconds / 60 else 0
     } catch (_: Exception) {

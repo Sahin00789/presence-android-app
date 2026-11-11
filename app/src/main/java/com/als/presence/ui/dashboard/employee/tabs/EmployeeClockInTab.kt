@@ -349,13 +349,17 @@ fun EmployeeClockInTab(
 
     val isShiftWindowValid = if (isShiftEligibleToday) Dates.isWithinTimeWindow(shiftStartTime, shiftEndTime) else false
     val isOvertimeWindowValid = if (hasOvertimeToday) Dates.isWithinTimeWindow(otStartTime, otEndTime) else false
+    val isShiftPastEndTime = Dates.isPastEndTime(shiftEndTime)
 
-    // STRICT CARD PRIORITY: shift > overtime > holiday > offday > empty
+    // STRICT CARD PRIORITY: Active sessions > Open running windows > Upcoming sessions > Holidays/Off-days
     val todayCardType = when {
         isRunningShift -> TodayCardType.CLOCKED_IN_SHIFT
         isRunningOvertime -> TodayCardType.CLOCKED_IN_OVERTIME
-        isShiftEligibleToday -> if (isShiftWindowValid) TodayCardType.RUNNING_SHIFT else TodayCardType.UPCOMING_SHIFT
-        hasOvertimeToday -> if (isOvertimeWindowValid) TodayCardType.RUNNING_OVERTIME else TodayCardType.UPCOMING_OVERTIME
+        isShiftEligibleToday && isShiftWindowValid && !isShiftPastEndTime -> TodayCardType.RUNNING_SHIFT
+        hasOvertimeToday && isOvertimeWindowValid -> TodayCardType.RUNNING_OVERTIME
+        isShiftEligibleToday && isShiftWindowValid -> TodayCardType.RUNNING_SHIFT
+        isShiftEligibleToday -> TodayCardType.UPCOMING_SHIFT
+        hasOvertimeToday -> TodayCardType.UPCOMING_OVERTIME
         isTodayHoliday -> TodayCardType.HOLIDAY
         isWeeklyOffDay -> TodayCardType.OFF_DAY
         else -> TodayCardType.NO_WORK_SCHEDULED
@@ -2461,7 +2465,7 @@ fun EmployeeClockInTab(
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF166534),
-                                                maxLines = 1,
+                                                maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                             Text(

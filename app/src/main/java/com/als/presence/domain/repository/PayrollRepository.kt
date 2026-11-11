@@ -8,6 +8,7 @@ interface PayrollRepository {
     suspend fun getMonthlyPayrollSummary(month: Int, year: Int, premisesId: String? = null): Resource<List<PayrollItemDto>>
     suspend fun getEarningLedger(month: Int? = null, year: Int? = null): Resource<List<StaffEarningLedgerDto>>
     suspend fun getMyMonthlyEarningLedger(month: Int, year: Int): Resource<MonthlyEarningLedgerResponseDto>
+    suspend fun getStaffMonthlyEarningLedger(staffProfileId: String, month: Int, year: Int): Resource<MonthlyEarningLedgerResponseDto>
     suspend fun getMyOverallPayrollSummary(): Resource<MyOverallPayrollSummaryDto>
     suspend fun downloadPayslipPdf(month: Int, year: Int, staffProfileId: String? = null): Resource<ResponseBody>
     suspend fun recordPayrollTransaction(request: RecordPayrollTransactionRequest): Resource<PaymentRecordDto>

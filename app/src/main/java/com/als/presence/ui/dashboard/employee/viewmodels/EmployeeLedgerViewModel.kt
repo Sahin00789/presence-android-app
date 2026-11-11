@@ -43,6 +43,12 @@ class EmployeeLedgerViewModel @Inject constructor(
     private val _ledgerEntries = MutableStateFlow<UiState<List<StaffEarningLedgerDto>>>(UiState.Loading)
     val ledgerEntries: StateFlow<UiState<List<StaffEarningLedgerDto>>> = _ledgerEntries.asStateFlow()
 
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
+    private val _isDownloadingPayslip = MutableStateFlow(false)
+    val isDownloadingPayslip: StateFlow<Boolean> = _isDownloadingPayslip.asStateFlow()
+
     init {
         refresh()
         observeWebSocketEvents()
@@ -109,6 +115,67 @@ class EmployeeLedgerViewModel @Inject constructor(
             } else if (res is Resource.Error) {
                 _ledgerEntries.value = UiState.Error(res.message ?: "Could not load ledger entries")
             }
+        }
+    }
+
+    fun consumeMessage() {
+        _message.value = null
+    }
+
+    fun downloadPayslip(context: android.content.Context, month: Int, year: Int, staffProfileId: String? = null) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _isDownloadingPayslip.value = true
+            when (val res = repository.downloadPayslipPdf(month, year, staffProfileId)) {
+                is Resource.Success -> {
+                    try {
+                        val body = res.data
+                        val monthNames = arrayOf(
+                            "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+                        )
+                        val mName = monthNames.getOrNull(month - 1) ?: "Month$month"
+                        val fileName = "Payslip_${mName}_${year}.pdf"
+
+                        val targetFile = java.io.File(
+                            context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS),
+                            fileName
+                        )
+                        body.byteStream().use { input ->
+                            targetFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+
+                        val authority = "${context.packageName}.fileprovider"
+                        val contentUri: android.net.Uri = androidx.core.content.FileProvider.getUriForFile(context, authority, targetFile)
+
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            setDataAndType(contentUri, "application/pdf")
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            try {
+                                context.startActivity(android.content.Intent.createChooser(intent, "Open Payslip PDF"))
+                            } catch (_: Exception) {
+                                _message.value = "Payslip saved to downloads: $fileName"
+                            }
+                        }
+                    } catch (e: Exception) {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            _message.value = "Error saving PDF: ${e.message}"
+                        }
+                    }
+                }
+                is Resource.Error -> {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        _message.value = res.message ?: "Failed to download payslip"
+                    }
+                }
+                else -> {}
+            }
+            _isDownloadingPayslip.value = false
         }
     }
 }

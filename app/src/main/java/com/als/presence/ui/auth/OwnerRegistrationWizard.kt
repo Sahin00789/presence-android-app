@@ -86,6 +86,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -664,7 +665,9 @@ fun OwnerRegistrationWizard(
                                                                     text = otpResponse?.email ?: email,
                                                                     style = MaterialTheme.typography.bodyMedium,
                                                                     fontWeight = FontWeight.Bold,
-                                                                    color = Color(0xFF0F172A)
+                                                                    color = Color(0xFF0F172A),
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis
                                                                 )
                                                             }
 

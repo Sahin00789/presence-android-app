@@ -26,12 +26,8 @@ data class ShiftDto(
     val halfDayThresholdMinutes: Int
         get() {
             fun parseTimeToMinutes(timeStr: String?): Int {
-                if (timeStr.isNullOrBlank()) return -1
-                val parts = timeStr.trim().split(":")
-                if (parts.size < 2) return -1
-                val h = parts[0].toIntOrNull() ?: return -1
-                val m = parts[1].toIntOrNull() ?: return -1
-                return h * 60 + m
+                val local = com.als.presence.ui.dashboard.common.Dates.parseLocalTime(timeStr) ?: return -1
+                return local.hour * 60 + local.minute
             }
             val startM = parseTimeToMinutes(startTime)
             val thresholdM = parseTimeToMinutes(halfDayThreshold)

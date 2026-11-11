@@ -232,11 +232,7 @@ fun MySalaryPaymentsScreen(
                             shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.primary,
                             onClick = {
-                                Toast.makeText(
-                                    context,
-                                    "Downloading PDF payslip for $monthYearLabel…",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                viewModel.downloadPayslip(context, selectedMonth.monthValue, selectedMonth.year)
                             }
                         ) {
                             Row(

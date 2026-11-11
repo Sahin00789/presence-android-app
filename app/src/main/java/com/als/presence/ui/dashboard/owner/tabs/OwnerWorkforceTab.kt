@@ -79,6 +79,8 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
+import com.als.presence.data.model.StaffEarningLedgerDto
+
 /**
  * Owner "Workforce" tab — every manager and every staff member of the
  * organization with live salary, wallet summary and monthly cards from joining date.
@@ -92,9 +94,13 @@ fun OwnerWorkforceTab(
     modifier: Modifier = Modifier,
     payrollPeriodsState: UiState<List<PayrollPeriodDto>> = UiState.Success(emptyList()),
     payrollItemsMap: Map<String, List<PayrollItemDto>> = emptyMap(),
+    staffLedgerMap: Map<String, List<StaffEarningLedgerDto>> = emptyMap(),
     isRecordingPayment: Boolean = false,
     onRecordPayment: ((itemId: String, amountPaise: Long, paymentMethod: String, reference: String) -> Unit)? = null,
+    onLoadStaffLedger: ((staffProfileId: String, month: Int, year: Int) -> Unit)? = null,
+    onDownloadPayslip: ((context: android.content.Context, month: Int, year: Int, staffProfileId: String?) -> Unit)? = null,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scrollState = rememberScrollState()
     var ledgerTarget by remember { mutableStateOf<WorkforceLedgerTarget?>(null) }
     var searchQuery by remember { mutableStateOf("") }
@@ -338,18 +344,33 @@ fun OwnerWorkforceTab(
                             payrollPeriods = periods,
                             payrollItemsMap = payrollItemsMap,
                             onOpenLedger = { cardData ->
-                                val itemId = cardData.payrollItemId
+                                val targetPeriodId = "${cardData.year}-${cardData.month.toString().padStart(2, '0')}"
+                                val itemId = cardData.payrollItemId?.ifBlank { null }
+                                    ?: payrollItemsMap[targetPeriodId]?.firstOrNull { item ->
+                                        item.employeeId == member.id || item.staffProfileId == member.id || item.resolvedEmployeeId == member.id ||
+                                        (!member.email.isBlank() && item.staffEmail.equals(member.email, ignoreCase = true)) ||
+                                        (!member.staffCode.isNullOrEmpty() && item.resolvedStaffCode.equals(member.staffCode, ignoreCase = true))
+                                    }?.let { item -> item.monthlyPayrollId.ifBlank { item.id } }
                                     ?: periods.firstNotNullOfOrNull { period ->
                                         payrollItemsMap[period.id]?.firstOrNull { item ->
-                                            item.employeeId == member.id || item.staffProfileId == member.id || item.resolvedEmployeeId == member.id || item.staffEmail.equals(member.email, ignoreCase = true)
+                                            item.employeeId == member.id || item.staffProfileId == member.id || item.resolvedEmployeeId == member.id ||
+                                            (!member.email.isBlank() && item.staffEmail.equals(member.email, ignoreCase = true)) ||
+                                            (!member.staffCode.isNullOrEmpty() && item.resolvedStaffCode.equals(member.staffCode, ignoreCase = true))
                                         }
-                                    }?.let { item -> item.id.ifBlank { item.monthlyPayrollId } }
+                                    }?.let { item -> item.monthlyPayrollId.ifBlank { item.id } }
+
+                                val m = cardData.month
+                                val y = cardData.year
+                                onLoadStaffLedger?.invoke(member.id, m, y)
 
                                 ledgerTarget = WorkforceLedgerTarget(
-                                    payrollItemId = if (!itemId.isNullOrBlank() && itemId.length > 20 && itemId.contains("-")) itemId else null,
+                                    payrollItemId = if (!itemId.isNullOrBlank()) itemId else null,
+                                    staffProfileId = member.id,
                                     staffName = member.fullName,
                                     staffCode = member.staffCode,
                                     monthLabel = cardData.monthYearLabel,
+                                    month = m,
+                                    year = y,
                                     earnedPaise = cardData.earnedPaise,
                                     paidPaise = cardData.paidPaise,
                                     attendanceSummary = cardData.attendanceSummary,
@@ -425,6 +446,9 @@ fun OwnerWorkforceTab(
     }
 
     ledgerTarget?.let { target ->
+        val key = "${target.staffProfileId}-${target.year}-${target.month}"
+        val targetEntries = staffLedgerMap[key].orEmpty()
+
         MonthlyEarningLedgerModal(
             staffName = target.staffName,
             staffCode = target.staffCode,
@@ -433,6 +457,7 @@ fun OwnerWorkforceTab(
             paidPaise = target.paidPaise,
             attendanceSummary = target.attendanceSummary,
             breakdown = target.breakdown,
+            entries = targetEntries,
             isSubmitting = isRecordingPayment,
             onDismiss = { ledgerTarget = null },
             onRecordPayment = if (!target.payrollItemId.isNullOrBlank() && onRecordPayment != null) {
@@ -440,6 +465,9 @@ fun OwnerWorkforceTab(
                     onRecordPayment(target.payrollItemId, amount, method, ref)
                     ledgerTarget = null
                 }
+            } else null,
+            onDownloadPayslip = if (onDownloadPayslip != null) {
+                { onDownloadPayslip(context, target.month, target.year, target.staffProfileId) }
             } else null
         )
     }
@@ -447,9 +475,12 @@ fun OwnerWorkforceTab(
 
 private data class WorkforceLedgerTarget(
     val payrollItemId: String? = null,
+    val staffProfileId: String? = null,
     val staffName: String,
     val staffCode: String?,
     val monthLabel: String,
+    val month: Int = 1,
+    val year: Int = 2025,
     val earnedPaise: Long,
     val paidPaise: Long = 0L,
     val attendanceSummary: AttendanceSummaryDto = AttendanceSummaryDto(),
@@ -1100,6 +1131,8 @@ private fun ManagerCard(
 
 private data class MonthlySalaryCardData(
     val monthYearLabel: String,
+    val month: Int = 1,
+    val year: Int = 2025,
     val earnedPaise: Long,
     val paidPaise: Long,
     val statusLabel: String,
@@ -1177,10 +1210,12 @@ private fun computeMonthlySalaryCards(
             val isPaid = paidAmount > 0 || foundItem.payment != null || periodStatus == "LOCKED"
             MonthlySalaryCardData(
                 monthYearLabel = monthLabel,
+                month = ym.monthValue,
+                year = ym.year,
                 earnedPaise = foundItem.grossSalaryPaise,
                 paidPaise = paidAmount,
                 statusLabel = if (isPaid) "PAID" else "UNPAID",
-                payrollItemId = foundItem.id,
+                payrollItemId = foundItem.monthlyPayrollId.ifBlank { foundItem.id },
                 breakdown = foundItem.breakdown,
                 attendanceSummary = summary,
                 presentShiftsCount = summary.presentShiftsCount,
@@ -1194,6 +1229,8 @@ private fun computeMonthlySalaryCards(
             if (isCurrentMonth) {
                 MonthlySalaryCardData(
                     monthYearLabel = monthLabel,
+                    month = ym.monthValue,
+                    year = ym.year,
                     earnedPaise = earnedBalancePaise,
                     paidPaise = 0L,
                     statusLabel = "UNPAID",
@@ -1207,6 +1244,8 @@ private fun computeMonthlySalaryCards(
             } else {
                 MonthlySalaryCardData(
                     monthYearLabel = monthLabel,
+                    month = ym.monthValue,
+                    year = ym.year,
                     earnedPaise = 0L,
                     paidPaise = 0L,
                     statusLabel = "UNPAID",

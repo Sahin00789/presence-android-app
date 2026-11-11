@@ -87,6 +87,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -96,10 +97,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.als.presence.R
@@ -1572,6 +1577,8 @@ private fun ModernOtpScreen(
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = primaryColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
@@ -1588,22 +1595,27 @@ private fun ModernOtpScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start
+            ) {
                 Text(
-                    text = "We sent a 6-digit code to ",
+                    text = buildAnnotatedString {
+                        withStyle(SpanStyle(color = Color(0xFF64748B))) {
+                            append("We sent a 6-digit code to ")
+                        }
+                        withStyle(SpanStyle(color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)) {
+                            append(email)
+                        }
+                    },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF64748B)
+                    modifier = Modifier.weight(1f, fill = false)
                 )
-                Text(
-                    text = email,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF0F172A)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 IconButton(
                     onClick = onChangeEmail,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Edit,
@@ -1626,7 +1638,7 @@ private fun ModernOtpScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
@@ -1634,7 +1646,8 @@ private fun ModernOtpScreen(
                             text = "⚡ Dev Mode Code: $devOtp (Tap to fill)",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1D4ED8)
+                            color = Color(0xFF1D4ED8),
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -1677,7 +1690,7 @@ private fun ModernOtpScreen(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     for (i in 0 until 6) {
@@ -1687,9 +1700,8 @@ private fun ModernOtpScreen(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(horizontal = 4.dp)
-                                .height(62.dp)
-                                .clip(RoundedCornerShape(14.dp))
+                                .heightIn(min = 48.dp, max = 56.dp)
+                                .clip(RoundedCornerShape(12.dp))
                                 .background(Color.White)
                                 .border(
                                     width = if (isFocused) 2.dp else 1.2.dp,
@@ -1698,15 +1710,17 @@ private fun ModernOtpScreen(
                                         char.isNotEmpty() -> Color(0xFF0F172A)
                                         else -> Color(0xFFCBD5E1)
                                     },
-                                    shape = RoundedCornerShape(14.dp)
+                                    shape = RoundedCornerShape(12.dp)
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = char,
-                                style = MaterialTheme.typography.headlineMedium,
+                                style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0F172A)
+                                color = Color(0xFF0F172A),
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
@@ -1748,7 +1762,8 @@ private fun ModernOtpScreen(
                 Text(
                     text = "Didn't receive code?",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF64748B)
+                    color = Color(0xFF64748B),
+                    modifier = Modifier.weight(1f, fill = false)
                 )
 
                 TextButton(
@@ -2043,6 +2058,8 @@ private fun RegistrationOtpScreen(
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF7E22CE),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
@@ -2059,22 +2076,27 @@ private fun RegistrationOtpScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start
+            ) {
                 Text(
-                    text = "Code sent to ",
+                    text = buildAnnotatedString {
+                        withStyle(SpanStyle(color = Color(0xFF64748B))) {
+                            append("Code sent to ")
+                        }
+                        withStyle(SpanStyle(color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)) {
+                            append(email)
+                        }
+                    },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF64748B)
+                    modifier = Modifier.weight(1f, fill = false)
                 )
-                Text(
-                    text = email,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF0F172A)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 IconButton(
                     onClick = onChangeEmail,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Edit,
@@ -2097,7 +2119,7 @@ private fun RegistrationOtpScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
@@ -2105,7 +2127,8 @@ private fun RegistrationOtpScreen(
                             text = "⚡ Dev Mode Code: $devOtp (Tap to fill)",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1D4ED8)
+                            color = Color(0xFF1D4ED8),
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -2147,7 +2170,7 @@ private fun RegistrationOtpScreen(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     for (i in 0 until 6) {
@@ -2157,9 +2180,8 @@ private fun RegistrationOtpScreen(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(horizontal = 4.dp)
-                                .height(62.dp)
-                                .clip(RoundedCornerShape(14.dp))
+                                .heightIn(min = 48.dp, max = 56.dp)
+                                .clip(RoundedCornerShape(12.dp))
                                 .background(Color.White)
                                 .border(
                                     width = if (isFocused) 2.dp else 1.2.dp,
@@ -2168,15 +2190,17 @@ private fun RegistrationOtpScreen(
                                         char.isNotEmpty() -> Color(0xFF0F172A)
                                         else -> Color(0xFFCBD5E1)
                                     },
-                                    shape = RoundedCornerShape(14.dp)
+                                    shape = RoundedCornerShape(12.dp)
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = char,
-                                style = MaterialTheme.typography.headlineMedium,
+                                style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0F172A)
+                                color = Color(0xFF0F172A),
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
@@ -2214,7 +2238,8 @@ private fun RegistrationOtpScreen(
                 Text(
                     text = "Didn't receive code?",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF64748B)
+                    color = Color(0xFF64748B),
+                    modifier = Modifier.weight(1f, fill = false)
                 )
 
                 TextButton(onClick = onResendOtp) {

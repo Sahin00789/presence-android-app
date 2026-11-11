@@ -51,13 +51,14 @@ import java.util.Locale
  */
 internal fun formatThresholdDisplay(startTime: String, thresholdMinutesInt: Int?): String {
     if (thresholdMinutesInt == null || thresholdMinutesInt <= 0) return ""
-    val parts = startTime.split(":")
-    val startH = parts.getOrNull(0)?.toIntOrNull() ?: 9
-    val startM = parts.getOrNull(1)?.toIntOrNull() ?: 0
+    val localStart = com.als.presence.ui.dashboard.common.Dates.parseLocalTime(startTime) ?: java.time.LocalTime.of(9, 0)
+    val startH = localStart.hour
+    val startM = localStart.minute
     val totalM = (startH * 60 + startM + thresholdMinutesInt) % (24 * 60)
     val cutoffH = totalM / 60
     val cutoffM = totalM % 60
-    val cutoffStr = String.format(Locale.US, "%02d:%02d", cutoffH, cutoffM)
+    val cutoffRaw = String.format(Locale.US, "%02d:%02d:00", cutoffH, cutoffM)
+    val cutoffStr = com.als.presence.ui.dashboard.common.Dates.formatTime(cutoffRaw)
     val hrs = thresholdMinutesInt / 60
     val mins = thresholdMinutesInt % 60
     val durationStr = if (hrs > 0 && mins > 0) "${hrs}h ${mins}m" else if (hrs > 0) "${hrs}h" else "${mins}m"

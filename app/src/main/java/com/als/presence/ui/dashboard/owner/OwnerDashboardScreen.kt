@@ -36,6 +36,7 @@ fun OwnerDashboardScreen(
     val premisesState by workforceViewModel.premises.collectAsStateWithLifecycle()
     val payrollPeriodsState by workforceViewModel.payrollPeriods.collectAsStateWithLifecycle()
     val payrollItemsMap by workforceViewModel.payrollItemsMap.collectAsStateWithLifecycle()
+    val staffLedgerMap by workforceViewModel.staffLedgerEntriesMap.collectAsStateWithLifecycle()
     val workforceMessage by workforceViewModel.message.collectAsStateWithLifecycle()
 
     val recordsState by attendanceViewModel.records.collectAsStateWithLifecycle()
@@ -68,9 +69,12 @@ fun OwnerDashboardScreen(
                 premisesState = premisesState,
                 payrollPeriodsState = payrollPeriodsState,
                 payrollItemsMap = payrollItemsMap,
+                staffLedgerMap = staffLedgerMap,
                 isRecordingPayment = workforceViewModel.isSubmitting.collectAsStateWithLifecycle().value,
                 onRetry = workforceViewModel::refresh,
-                onRecordPayment = workforceViewModel::recordPayment
+                onRecordPayment = workforceViewModel::recordPayment,
+                onLoadStaffLedger = workforceViewModel::loadStaffEarningLedger,
+                onDownloadPayslip = workforceViewModel::downloadPayslip
             )
             1 -> LiveMonitorTab(
                 user = user,

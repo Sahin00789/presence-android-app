@@ -35,6 +35,8 @@ fun EmployeeDashboardScreen(
     val monthlyLedgerState by ledgerViewModel.monthlyLedger.collectAsStateWithLifecycle()
     val ledgerState by ledgerViewModel.ledgerEntries.collectAsStateWithLifecycle()
     val selectedMonth by ledgerViewModel.selectedMonth.collectAsStateWithLifecycle()
+    val ledgerMessage by ledgerViewModel.message.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     var activeMessage by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(clockState.message) {
@@ -43,6 +45,12 @@ fun EmployeeDashboardScreen(
             clockInViewModel.consumeMessage()
             attendanceViewModel.refresh()
             ledgerViewModel.refresh()
+        }
+    }
+    LaunchedEffect(ledgerMessage) {
+        if (ledgerMessage != null) {
+            activeMessage = ledgerMessage
+            ledgerViewModel.consumeMessage()
         }
     }
     LaunchedEffect(clockState.error) {
@@ -85,6 +93,9 @@ fun EmployeeDashboardScreen(
                 ledgerState = ledgerState,
                 selectedMonth = selectedMonth,
                 onMonthSelected = ledgerViewModel::selectMonth,
+                onDownloadPayslip = { ym ->
+                    ledgerViewModel.downloadPayslip(context, ym.monthValue, ym.year)
+                },
                 onRefresh = ledgerViewModel::refresh
             )
         }

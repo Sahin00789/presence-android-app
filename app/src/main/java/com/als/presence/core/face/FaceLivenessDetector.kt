@@ -1,8 +1,15 @@
 package com.als.presence.core.face
 
 import android.graphics.Bitmap
-import kotlin.math.abs
 import kotlin.math.sqrt
+
+data class LivenessResult(
+    val isLive: Boolean,
+    val passiveTextureScore: Double,
+    val passivePassed: Boolean,
+    val activeBlinkDetected: Boolean,
+    val eyeDistance: Double
+)
 
 /**
  * Checks for multi-pose liveness (blink detection + Laplacian texture variance).
@@ -11,10 +18,24 @@ internal object FaceLivenessDetector {
 
     /**
      * Executes both Active (Blink/EAR) and Passive (Laplacian Variance) checks.
-     * Returns true if both checks pass.
+     * Returns a detailed [LivenessResult] containing exact metrics.
      */
+    fun analyzeLiveness(bitmap: Bitmap, landmarks: List<FacePoint>): LivenessResult {
+        val (passiveScore, passivePassed) = checkLaplacianVariance(bitmap)
+        val (eyeDist, activePassed) = checkEyeAspectRatio(landmarks)
+        val isLive = passivePassed && activePassed
+
+        return LivenessResult(
+            isLive = isLive,
+            passiveTextureScore = passiveScore,
+            passivePassed = passivePassed,
+            activeBlinkDetected = activePassed,
+            eyeDistance = eyeDist
+        )
+    }
+
     fun isLive(bitmap: Bitmap, landmarks: List<FacePoint>): Boolean {
-        return checkLaplacianVariance(bitmap) && checkEyeAspectRatio(landmarks)
+        return analyzeLiveness(bitmap, landmarks).isLive
     }
 
     /**
@@ -22,7 +43,7 @@ internal object FaceLivenessDetector {
      * Computes Laplacian variance over a downscaled grayscale image to detect
      * printed photos or screens (which have low variance due to Moire blur/reflections).
      */
-    private fun checkLaplacianVariance(bitmap: Bitmap): Boolean {
+    private fun checkLaplacianVariance(bitmap: Bitmap): Pair<Double, Boolean> {
         // Sample image to 64x64 for fast processing
         val size = 64
         val sample = Bitmap.createScaledBitmap(bitmap, size, size, true)
@@ -69,7 +90,9 @@ internal object FaceLivenessDetector {
         val variance = (sqSum / count) - (mean * mean)
 
         // Variance < 15.0 usually indicates a spoofed/printed image
-        return variance > 15.0
+        val normalizedScore = (variance / 100.0).coerceIn(0.0, 1.0)
+        val passed = variance > 15.0
+        return Pair(normalizedScore, passed)
     }
 
     /**
@@ -77,21 +100,19 @@ internal object FaceLivenessDetector {
      * Since YuNet outputs 5 landmarks, we estimate Eye Aspect Ratio (EAR)
      * based on the distance between the two eyes relative to nose/mouth.
      */
-    private fun checkEyeAspectRatio(landmarks: List<FacePoint>): Boolean {
-        if (landmarks.size < 5) return false
-        
+    private fun checkEyeAspectRatio(landmarks: List<FacePoint>): Pair<Double, Boolean> {
+        if (landmarks.size < 5) return Pair(0.0, false)
+
         // YuNet Landmarks:
         // 0: Right Eye, 1: Left Eye, 2: Nose, 3: Right Mouth, 4: Left Mouth
         val rightEye = landmarks[0]
         val leftEye = landmarks[1]
-        
+
         val eyeDistance = sqrt(
             (leftEye.x - rightEye.x) * (leftEye.x - rightEye.x) +
             (leftEye.y - rightEye.y) * (leftEye.y - rightEye.y)
         )
-        
-        // A simple check: if eyes are too close or too far apart relative to the face bounding box,
-        // it might be a spoof. (A robust EAR would require 6 landmarks per eye).
-        return eyeDistance > 10.0
+
+        return Pair(eyeDistance, eyeDistance > 10.0)
     }
 }

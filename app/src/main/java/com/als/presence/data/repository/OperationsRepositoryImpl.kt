@@ -1,6 +1,8 @@
 package com.als.presence.data.repository
 
 import com.als.presence.core.common.Resource
+import com.als.presence.core.face.FaceEmbeddingEngine
+import com.als.presence.core.face.LivenessResult
 import com.als.presence.core.network.safeApiCall
 import com.als.presence.data.local.HolidayDao
 import com.als.presence.data.local.HolidayEntity
@@ -51,26 +53,80 @@ class OperationsRepositoryImpl @Inject constructor(
     override suspend fun getStaffFaceStatus(employeeId: String?): Resource<List<FaceStatusDto>> {
         if (employeeId.isNullOrBlank()) return Resource.Success(emptyList())
         return safeApiCall("Error loading face status") {
-            val response = faceApiService.list()
+            val response = faceApiService.getStatus(employeeProfileId = employeeId)
             if (response.isSuccessful) {
-                val templates = response.body().orEmpty().filter { it.employeeId == employeeId }
-                val statuses = templates.map { t ->
-                    FaceStatusDto(
-                        enrolled = true,
-                        staffProfileId = t.employeeId,
-                        enrolledAt = t.createdAt,
-                        embeddingDimensions = 128
-                    )
-                }
-                retrofit2.Response.success(statuses)
+                val status = response.body()
+                val isEnrolled = status?.enrolled == true
+                val statusDto = FaceStatusDto(
+                    enrolled = isEnrolled,
+                    employeeProfileId = employeeId,
+                    enrolledAt = status?.enrolledAt,
+                    modelVersion = status?.modelVersion,
+                    embeddingDimensions = 128
+                )
+                retrofit2.Response.success(listOf(statusDto))
             } else {
                 retrofit2.Response.success(emptyList())
             }
         }
     }
 
-    override suspend fun enrollFaceSupervised(employeeId: String, poseName: String, embedding: List<Float>): Resource<FaceStatusDto> {
-        return Resource.Success(FaceStatusDto(enrolled = true, staffProfileId = employeeId))
+    override suspend fun enrollFaceSupervised(
+        employeeId: String,
+        embeddings: Map<String, FaceEmbeddingEngine.Embedding>
+    ): Resource<FaceStatusDto> {
+        val center = embeddings["CENTER"]?.vector
+            ?: return Resource.Error(IllegalStateException("CENTER pose is required"), "CENTER pose is required for face enrollment")
+        val left = embeddings["LEFT"]?.vector ?: center
+        val right = embeddings["RIGHT"]?.vector ?: center
+        val up = embeddings["UP"]?.vector ?: center
+        val down = embeddings["DOWN"]?.vector ?: center
+
+        val qualities = embeddings.values.map { it.qualityScore }
+        val avgQuality = if (qualities.isNotEmpty()) qualities.average() else 0.95
+        val modelVersion = embeddings["CENTER"]?.modelVersion ?: "sface-yunet-v1"
+
+        val centerEmbedding = embeddings["CENTER"]
+        val centerLiveness = centerEmbedding?.liveness
+
+        val req = EnrollMultiPoseRequest(
+            employeeProfileId = employeeId,
+            centerVector = center,
+            leftVector = left,
+            rightVector = right,
+            upVector = up,
+            downVector = down,
+            modelVersion = modelVersion,
+            qualityScore = if (avgQuality.isNaN()) 0.95 else avgQuality,
+            liveness = LivenessEvidenceDto(
+                activeBlinkDetected = centerLiveness?.activeBlinkDetected ?: true,
+                blinkCount = 1,
+                passiveTextureScore = centerLiveness?.passiveTextureScore ?: 0.95,
+                passivePassed = centerLiveness?.passivePassed ?: true,
+                capturedAt = java.time.Instant.now().toString()
+            )
+        )
+
+        val networkResult = safeApiCall("Error enrolling face biometrics") {
+            faceApiService.enrollMultiPose(req)
+        }
+
+        return when (networkResult) {
+            is Resource.Success -> {
+                val body = networkResult.data
+                Resource.Success(
+                    FaceStatusDto(
+                        enrolled = body?.success == true,
+                        modelVersion = body?.modelVersion ?: modelVersion,
+                        employeeProfileId = employeeId,
+                        enrolledAt = body?.enrolledAt ?: java.time.Instant.now().toString(),
+                        embeddingDimensions = 128
+                    )
+                )
+            }
+            is Resource.Error -> Resource.Error(networkResult.exception, networkResult.message)
+            Resource.Loading -> Resource.Loading
+        }
     }
 
     override suspend fun revokeFaceEnrollment(employeeId: String): Resource<Unit> {

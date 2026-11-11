@@ -36,7 +36,7 @@ import androidx.room.TypeConverters
         SyncMetadataEntity::class,
         ProcessedEventEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

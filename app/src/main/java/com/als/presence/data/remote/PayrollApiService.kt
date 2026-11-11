@@ -24,7 +24,15 @@ interface PayrollApiService {
     @GET("api/v1/payroll/my-monthly-earning-ledger")
     suspend fun getMyMonthlyEarningLedger(
         @Query("month") month: Int,
-        @Query("year") year: Int
+        @Query("year") year: Int,
+        @Query("staffProfileId") staffProfileId: String? = null
+    ): Response<MonthlyEarningLedgerResponseDto>
+
+    @GET("api/v1/payroll/staff-monthly-earning-ledger")
+    suspend fun getStaffMonthlyEarningLedger(
+        @Query("month") month: Int,
+        @Query("year") year: Int,
+        @Query("staffProfileId") staffProfileId: String? = null
     ): Response<MonthlyEarningLedgerResponseDto>
 
     @GET("api/v1/payroll/my-overall-summary")
