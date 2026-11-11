@@ -8,12 +8,20 @@ import android.location.Location
 import android.os.Build
 import androidx.core.location.LocationManagerCompat
 import com.als.presence.data.remote.OlaMapsApiService
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult as GmsLocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.Task
 import dagger.hilt.android.qualifiers.ApplicationContext
+import android.os.Looper
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -36,6 +44,20 @@ data class ReverseGeocodedAddress(
     val district: String = "",
     val block: String = ""
 )
+
+fun calculateDistanceMeters(
+    lat1: Double, lon1: Double,
+    lat2: Double, lon2: Double
+): Double {
+    val r = 6371000.0 // Earth radius in meters
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return r * c
+}
 
 @Singleton
 class LocationManager @Inject constructor(
@@ -169,6 +191,111 @@ class LocationManager @Inject constructor(
             is LocationResult.Error -> null
         }
     }
+
+    /**
+     * Continuously emits high-accuracy GPS fixes at the specified interval.
+     * Uses FusedLocationProviderClient with PRIORITY_HIGH_ACCURACY.
+     */
+    @SuppressLint("MissingPermission")
+    fun getLocationUpdates(intervalMs: Long = 1000L): Flow<GpsLocation> = callbackFlow {
+        if (!LocationPermissionUtil.hasLocationPermission(context)) {
+            close(IllegalStateException("Location permission is not granted. Please allow location access in your device settings."))
+            return@callbackFlow
+        }
+
+        val sysLocationManager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+        val isGpsEnabled = sysLocationManager?.let { LocationManagerCompat.isLocationEnabled(it) } ?: false
+        if (!isGpsEnabled) {
+            close(IllegalStateException("Location services (GPS) are turned off. Please enable Location in your device settings."))
+            return@callbackFlow
+        }
+
+        // Emit cached last location if available immediately to bootstrap
+        try {
+            fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+                if (loc != null) {
+                    val isMock = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        loc.isMock
+                    } else {
+                        @Suppress("DEPRECATION")
+                        loc.isFromMockProvider
+                    }
+                    trySend(
+                        GpsLocation(
+                            latitude = loc.latitude,
+                            longitude = loc.longitude,
+                            accuracyMeters = loc.accuracy,
+                            isMocked = isMock
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {}
+
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
+            .setMinUpdateIntervalMillis(intervalMs / 2)
+            .setWaitForAccurateLocation(true)
+            .build()
+
+        val callback = object : LocationCallback() {
+            override fun onLocationResult(result: GmsLocationResult) {
+                val loc = result.lastLocation ?: return
+                val isMock = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    loc.isMock
+                } else {
+                    @Suppress("DEPRECATION")
+                    loc.isFromMockProvider
+                }
+                trySend(
+                    GpsLocation(
+                        latitude = loc.latitude,
+                        longitude = loc.longitude,
+                        accuracyMeters = loc.accuracy,
+                        isMocked = isMock
+                    )
+                )
+            }
+        }
+
+        try {
+            fusedLocationClient.requestLocationUpdates(request, callback, Looper.getMainLooper())
+        } catch (e: Exception) {
+            close(e)
+            return@callbackFlow
+        }
+
+        awaitClose {
+            try {
+                fusedLocationClient.removeLocationUpdates(callback)
+            } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Awaits until a location fix with accuracy <= [targetAccuracyMeters] is acquired,
+     * or returns the best acquired fix before [timeoutMillis].
+     */
+    suspend fun awaitAccurateLocation(
+        targetAccuracyMeters: Float = 10f,
+        timeoutMillis: Long = 15_000L
+    ): GpsLocation? = withTimeoutOrNull(timeoutMillis) {
+        var bestFix: GpsLocation? = null
+        try {
+            getLocationUpdates(intervalMs = 1000L).collect { fix ->
+                if (bestFix == null || fix.accuracyMeters < bestFix!!.accuracyMeters) {
+                    bestFix = fix
+                }
+                if (fix.accuracyMeters <= targetAccuracyMeters) {
+                    throw CancellationException("Target accuracy achieved")
+                }
+            }
+        } catch (e: CancellationException) {
+            if (e.message == "Target accuracy achieved") {
+                return@withTimeoutOrNull bestFix
+            }
+        } catch (_: Exception) {}
+        bestFix
+    } ?: getCurrentLocation()
 
     suspend fun reverseGeocode(
         latitude: Double,

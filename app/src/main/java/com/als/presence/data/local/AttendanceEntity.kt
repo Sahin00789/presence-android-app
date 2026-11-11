@@ -63,7 +63,7 @@ data class AttendanceEntity(
                 id = dto.id,
                 organizationId = dto.organizationId,
                 premisesId = dto.premisesId,
-                employeeId = dto.employeeId,
+                employeeId = dto.employeeId.ifBlank { dto.staffProfileId.orEmpty() },
                 staffName = dto.staffName,
                 staffCode = dto.staffCode,
                 workDate = dto.workDate,

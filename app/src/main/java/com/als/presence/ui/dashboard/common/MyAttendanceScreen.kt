@@ -137,8 +137,11 @@ fun MyAttendanceContent(
     val templates = (templatesState as? UiState.Success)?.data.orEmpty()
     val unworkedRules = (unworkedRulesState as? UiState.Success)?.data.orEmpty()
 
-    val earliestAssignmentDateIso = remember(assignments) {
-        assignments.mapNotNull { it.createdAt?.take(10) }.minOrNull() ?: Dates.todayIso()
+    val earliestAssignmentDateIso = remember(assignments, allRecords, allLedgerEntries) {
+        val assignmentEarliest = assignments.mapNotNull { it.createdAt?.take(10) }.minOrNull()
+        val recordEarliest = allRecords.mapNotNull { it.workDate.take(10) }.minOrNull()
+        val ledgerEarliest = allLedgerEntries.mapNotNull { it.earningDate.take(10) }.minOrNull()
+        listOfNotNull(assignmentEarliest, recordEarliest, ledgerEarliest).minOrNull() ?: Dates.todayIso()
     }
     val earliestYearMonth = remember(earliestAssignmentDateIso) {
         runCatching {
@@ -195,7 +198,13 @@ fun MyAttendanceContent(
         }
 
         dateSet
-            .filter { dateIso -> dateIso >= earliestAssignmentDateIso && dateIso <= Dates.todayIso() }
+            .filter { dateIso ->
+                dateIso <= Dates.todayIso() && (
+                    dateIso >= earliestAssignmentDateIso ||
+                    attendedRecords.any { it.workDate.take(10) == dateIso } ||
+                    allLedgerEntries.any { it.earningDate.take(10) == dateIso }
+                )
+            }
             .mapNotNull { dateIso ->
                 val localDate = runCatching { LocalDate.parse(dateIso) }.getOrNull()
                 if (localDate != null && localDate.year == selectedMonth.year && localDate.month == selectedMonth.month) {

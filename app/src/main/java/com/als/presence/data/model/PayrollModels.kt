@@ -168,7 +168,11 @@ data class PaymentRecordDto(
     val recordedBy: String? = null
 ) {
     val paidAt: String get() = paymentDate
-    val amountInr: Long get() = if (amountPaise != 0L) amountPaise else Money.parseToInr(amount) ?: 0L
+    val amountInr: Long get() {
+        val parsed = amount.replace("₹", "").replace(",", "").trim().substringBefore('.').toLongOrNull()
+        if (parsed != null && parsed != 0L) return parsed
+        return amountPaise
+    }
     val amountCents: Long get() = amountInr
 }
 
@@ -187,7 +191,11 @@ data class PayrollLineItemDto(
     @Serializable(with = FlexiblePaiseLongSerializer::class)
     val amountPaise: Long = 0L
 ) {
-    val amountInr: Long get() = if (amountPaise != 0L) amountPaise else Money.parseToInr(amount) ?: 0L
+    val amountInr: Long get() {
+        val parsed = amount.replace("₹", "").replace(",", "").trim().substringBefore('.').toLongOrNull()
+        if (parsed != null && parsed != 0L) return parsed
+        return amountPaise
+    }
     val amountCents: Long get() = amountInr
 }
 
@@ -205,7 +213,11 @@ data class StaffEarningLedgerDto(
     val earningDate: String = "",
     val createdAt: String = ""
 ) {
-    val amountInr: Long get() = if (amountPaise != 0L) amountPaise else Money.parseToInr(amount) ?: 0L
+    val amountInr: Long get() {
+        val parsed = amount.replace("₹", "").replace(",", "").trim().substringBefore('.').toLongOrNull()
+        if (parsed != null && parsed != 0L) return parsed
+        return amountPaise
+    }
     val amountCents: Long get() = amountInr
 }
 
@@ -243,7 +255,11 @@ data class MonthlyEarningLedgerResponseDto(
     val entries: List<StaffEarningLedgerDto> = emptyList(),
     val payments: List<PaymentRecordDto> = emptyList()
 ) {
-    val earnedInr: Long get() = if (earnedPaise != 0L) earnedPaise else Money.parseToInr(earnedAmount) ?: 0L
+    val earnedInr: Long get() {
+        val parsed = earnedAmount.replace("₹", "").replace(",", "").trim().substringBefore('.').toLongOrNull()
+        if (parsed != null && parsed != 0L) return parsed
+        return earnedPaise
+    }
 }
 
 @Serializable
@@ -271,11 +287,27 @@ data class MyOverallPayrollSummaryDto(
     @Serializable(with = FlexiblePaiseLongSerializer::class)
     val totalBalancePaise: Long = 0L
 ) {
-    val totalEarnedInr: Long get() = if (totalEarnedPaise != 0L) totalEarnedPaise else Money.parseToInr(totalEarnedAmount) ?: 0L
-    val totalPaidInr: Long get() = if (totalPaidPaise != 0L) totalPaidPaise else Money.parseToInr(totalPaidAmount) ?: 0L
-    val totalDeductionInr: Long get() = if (totalDeductionPaise != 0L) totalDeductionPaise else Money.parseToInr(totalDeductionAmount) ?: 0L
-    val totalDueInr: Long get() = if (totalDuePaise != 0L) totalDuePaise else Money.parseToInr(totalDueAmount) ?: 0L
-    val totalBalanceInr: Long get() = totalBalancePaise
+    val totalEarnedInr: Long get() {
+        val parsed = totalEarnedAmount.replace("₹", "").replace(",", "").trim().substringBefore('.').toLongOrNull()
+        if (parsed != null && parsed != 0L) return parsed
+        return totalEarnedPaise
+    }
+    val totalPaidInr: Long get() {
+        val parsed = totalPaidAmount.replace("₹", "").replace(",", "").trim().substringBefore('.').toLongOrNull()
+        if (parsed != null && parsed != 0L) return parsed
+        return totalPaidPaise
+    }
+    val totalDeductionInr: Long get() {
+        val parsed = totalDeductionAmount.replace("₹", "").replace(",", "").trim().substringBefore('.').toLongOrNull()
+        if (parsed != null && parsed != 0L) return parsed
+        return totalDeductionPaise
+    }
+    val totalDueInr: Long get() {
+        val parsed = totalDueAmount.replace("₹", "").replace(",", "").trim().substringBefore('.').toLongOrNull()
+        if (parsed != null && parsed != 0L) return parsed
+        return totalDuePaise
+    }
+    val totalBalanceInr: Long get() = totalDueInr
 }
 
 @Serializable

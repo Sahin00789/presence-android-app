@@ -106,10 +106,12 @@ import com.als.presence.R
 import com.als.presence.core.common.UiState
 import com.als.presence.core.designsystem.RoleOwnerPrimary
 import com.als.presence.core.designsystem.RoleStaffPrimary
+import com.als.presence.core.location.GpsLocation
 import com.als.presence.data.model.GoogleRegistrationIdentity
 import com.als.presence.data.model.GoogleSignInPurpose
 import com.als.presence.domain.model.Role
 import com.als.presence.domain.model.User
+import com.als.presence.ui.dashboard.common.GpsAccuracyDialog
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
@@ -308,6 +310,14 @@ fun LoginScreen(
             val location = (gpsLocationState as UiState.Success).data
             regLatitude = location.latitude.toString()
             regLongitude = location.longitude.toString()
+        }
+    }
+
+    LaunchedEffect(reverseGeocodeAddress) {
+        reverseGeocodeAddress?.let { addr ->
+            if (regStreetAddress.isBlank() && addr.streetAddress.isNotBlank()) {
+                regStreetAddress = addr.streetAddress
+            }
         }
     }
 
@@ -594,6 +604,7 @@ fun LoginScreen(
                         reverseGeocodeAddress = reverseGeocodeAddress,
                         uiState = uiState,
                         onFetchGps = { viewModel.fetchGpsLocation() },
+                        onGpsLocationAcquired = { gps -> viewModel.updateGpsLocation(gps) },
                         onSubmit = {
                             val radiusInt = regRadius.toIntOrNull() ?: 50
                             viewModel.setRegistrationSuccessPending(true)
@@ -2490,10 +2501,28 @@ private fun RegistrationPremisesScreen(
     reverseGeocodeAddress: com.als.presence.core.location.ReverseGeocodedAddress?,
     uiState: UiState<User>,
     onFetchGps: () -> Unit,
+    onGpsLocationAcquired: (GpsLocation) -> Unit = {},
     onSubmit: () -> Unit,
     onBack: () -> Unit
 ) {
     val scrollState = rememberScrollState()
+    var showGpsDialog by remember { mutableStateOf(false) }
+
+    val requestLocationPermission = com.als.presence.core.location.rememberLocationPermissionState(
+        onPermissionGranted = { showGpsDialog = true }
+    )
+
+    if (showGpsDialog) {
+        GpsAccuracyDialog(
+            title = "Calibrating Premises GPS",
+            targetAccuracyMeters = 10f,
+            onDismiss = { showGpsDialog = false },
+            onLocationAcquired = { gps ->
+                showGpsDialog = false
+                onGpsLocationAcquired(gps)
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -2646,7 +2675,7 @@ private fun RegistrationPremisesScreen(
                         }
 
                         OutlinedButton(
-                            onClick = onFetchGps,
+                            onClick = requestLocationPermission,
                             shape = RoundedCornerShape(10.dp),
                             border = BorderStroke(1.dp, Color(0xFF7E22CE))
                         ) {

@@ -205,16 +205,11 @@ private fun EarningsSection(
         is UiState.Error -> SectionError(ledgerState.message)
         is UiState.Success -> {
             val rawEntries = ledgerState.data
-            val assignments = (assignmentsState as? UiState.Success)?.data.orEmpty()
-            val earliestAssignmentDateIso = remember(assignments) {
-                assignments.mapNotNull { it.createdAt?.take(10) }.minOrNull() ?: Dates.todayIso()
-            }
-
-            val entries = remember(rawEntries, earliestAssignmentDateIso) {
+            val entries = remember(rawEntries) {
                 rawEntries
                     .filter { e ->
                         val dateIso = e.earningDate.take(10)
-                        dateIso >= earliestAssignmentDateIso && dateIso <= Dates.todayIso()
+                        dateIso <= Dates.todayIso()
                     }
                     .distinctBy { "${it.earningDate.take(10)}::${it.type}" }
             }

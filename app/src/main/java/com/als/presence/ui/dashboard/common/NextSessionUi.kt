@@ -67,10 +67,10 @@ fun LocationStaffCardDto.toNextSession(
     val endShiftTime = regularShiftEndTime ?: assignedEndTime
 
     val shiftCompleted = clockOutTime != null
-    val shiftOver = shiftCompleted || Dates.isSessionOver(Dates.todayIso(), endShiftTime, startShiftTime)
+    val shiftOver = shiftCompleted
 
     val overtimeCompleted = overtimeClockOutTime != null
-    val overtimeOver = overtimeCompleted || Dates.isSessionOver(Dates.todayIso(), overtimeEndTime, overtimeStartTime)
+    val overtimeOver = overtimeCompleted
 
     val isEligibleShift = hasShift && !shiftOver
     val isEligibleOvertime = hasOvertimeToday && !overtimeOver
@@ -78,27 +78,7 @@ fun LocationStaffCardDto.toNextSession(
     val isRunningShift = activeShift || (isEligibleShift && Dates.isWithinTimeWindow(startShiftTime, endShiftTime, bufferMinutesBeforeStart = 120L, bufferMinutesAfterEnd = 120L))
     val isRunningOvertime = activeOvertime || (isEligibleOvertime && Dates.isWithinTimeWindow(overtimeStartTime, overtimeEndTime, bufferMinutesBeforeStart = 120L, bufferMinutesAfterEnd = 120L))
 
-    val overtimeIsEarlier = isEligibleOvertime && (
-        !isEligibleShift ||
-            startShiftTime == null ||
-            (overtimeStartTime != null && overtimeStartTime < startShiftTime)
-        )
-
     return when {
-        activeOvertime -> session(
-            kind = SessionKind.OVERTIME,
-            badge = "ON OVERTIME",
-            title = overtimeName ?: "Overtime",
-            start = overtimeStartTime,
-            end = overtimeEndTime,
-            isActive = true,
-            overtimeId = overtimeId,
-            premisesLatitude = premisesLatitude,
-            premisesLongitude = premisesLongitude,
-            radiusMeters = radiusMeters,
-            workDate = Dates.todayIso()
-        )
-
         activeShift -> session(
             kind = SessionKind.SHIFT,
             badge = "ON SHIFT",
@@ -112,9 +92,9 @@ fun LocationStaffCardDto.toNextSession(
             workDate = Dates.todayIso()
         )
 
-        isRunningOvertime -> session(
+        activeOvertime -> session(
             kind = SessionKind.OVERTIME,
-            badge = "RUNNING OVERTIME",
+            badge = "ON OVERTIME",
             title = overtimeName ?: "Overtime",
             start = overtimeStartTime,
             end = overtimeEndTime,
@@ -139,13 +119,13 @@ fun LocationStaffCardDto.toNextSession(
             workDate = Dates.todayIso()
         )
 
-        overtimeIsEarlier -> session(
+        isRunningOvertime -> session(
             kind = SessionKind.OVERTIME,
-            badge = "NEXT OVERTIME",
+            badge = "RUNNING OVERTIME",
             title = overtimeName ?: "Overtime",
             start = overtimeStartTime,
             end = overtimeEndTime,
-            isActive = false,
+            isActive = true,
             overtimeId = overtimeId,
             premisesLatitude = premisesLatitude,
             premisesLongitude = premisesLongitude,
@@ -160,6 +140,20 @@ fun LocationStaffCardDto.toNextSession(
             start = startShiftTime,
             end = endShiftTime,
             isActive = false,
+            premisesLatitude = premisesLatitude,
+            premisesLongitude = premisesLongitude,
+            radiusMeters = radiusMeters,
+            workDate = Dates.todayIso()
+        )
+
+        isEligibleOvertime -> session(
+            kind = SessionKind.OVERTIME,
+            badge = "NEXT OVERTIME",
+            title = overtimeName ?: "Overtime",
+            start = overtimeStartTime,
+            end = overtimeEndTime,
+            isActive = false,
+            overtimeId = overtimeId,
             premisesLatitude = premisesLatitude,
             premisesLongitude = premisesLongitude,
             radiusMeters = radiusMeters,

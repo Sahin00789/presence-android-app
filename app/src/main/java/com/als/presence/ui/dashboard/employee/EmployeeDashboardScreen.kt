@@ -42,6 +42,13 @@ fun EmployeeDashboardScreen(
             activeMessage = clockState.message
             clockInViewModel.consumeMessage()
             attendanceViewModel.refresh()
+            ledgerViewModel.refresh()
+        }
+    }
+    LaunchedEffect(clockState.error) {
+        if (clockState.error != null) {
+            activeMessage = clockState.error
+            clockInViewModel.consumeError()
         }
     }
 
@@ -57,7 +64,10 @@ fun EmployeeDashboardScreen(
                 state = clockState,
                 onRefresh = { clockInViewModel.refresh() },
                 onLocate = clockInViewModel::locate,
-                onClockIn = clockInViewModel::clockIn,
+                onUpdateLocation = clockInViewModel::updateLocation,
+                onClockIn = { overtimeId, embedding ->
+                    clockInViewModel.clockIn(overtimeId, embedding?.vector?.toList())
+                },
                 onClockOut = clockInViewModel::clockOut,
                 engine = clockInViewModel.faceEmbeddingEngine,
                 onFaceCaptured = clockInViewModel::setFaceEmbedding,

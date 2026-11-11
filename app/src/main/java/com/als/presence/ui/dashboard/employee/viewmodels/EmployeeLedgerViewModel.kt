@@ -51,7 +51,7 @@ class EmployeeLedgerViewModel @Inject constructor(
     private fun observeWebSocketEvents() {
         viewModelScope.launch {
             webSocketService.events.collect { event ->
-                if (event is DomainWebSocketEvent.WalletUpdate || event is DomainWebSocketEvent.Generic) {
+                if (event is DomainWebSocketEvent.WalletUpdate || event is DomainWebSocketEvent.AttendanceUpdate || event is DomainWebSocketEvent.Generic) {
                     refresh()
                 }
             }

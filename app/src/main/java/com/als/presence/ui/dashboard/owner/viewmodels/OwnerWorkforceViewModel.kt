@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
+import com.als.presence.core.location.GpsLocation
 import com.als.presence.core.location.LocationManager
 import com.als.presence.core.location.ReverseGeocodedAddress
 import com.als.presence.core.network.NetworkMonitor
@@ -44,6 +45,7 @@ import javax.inject.Inject
 data class PremisesLocationState(
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
+    val accuracyMeters: Float? = null,
     val address: ReverseGeocodedAddress? = null,
     val isLoading: Boolean = false,
     val error: String? = null
@@ -92,11 +94,31 @@ class OwnerWorkforceViewModel @Inject constructor(
                     _locationAddressState.value = PremisesLocationState(
                         latitude = gps.latitude,
                         longitude = gps.longitude,
+                        accuracyMeters = gps.accuracyMeters,
                         address = rev,
                         isLoading = false
                     )
                 }
             }
+        }
+    }
+
+    fun setGpsLocationAndAddress(gps: GpsLocation) {
+        viewModelScope.launch {
+            _locationAddressState.value = PremisesLocationState(
+                latitude = gps.latitude,
+                longitude = gps.longitude,
+                accuracyMeters = gps.accuracyMeters,
+                isLoading = true
+            )
+            val rev = locationManager.reverseGeocode(gps.latitude, gps.longitude)
+            _locationAddressState.value = PremisesLocationState(
+                latitude = gps.latitude,
+                longitude = gps.longitude,
+                accuracyMeters = gps.accuracyMeters,
+                address = rev,
+                isLoading = false
+            )
         }
     }
 

@@ -26,3 +26,8 @@ fix.vbs
 # The marketing site lives in its own git repository (presence-marketing):
 /marketing/
 
+# Keystores and signing keys
+keystore/
+*.keystore
+*.jks
+

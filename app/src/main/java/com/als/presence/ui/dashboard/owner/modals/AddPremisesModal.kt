@@ -40,6 +40,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.als.presence.core.location.GpsLocation
+import com.als.presence.ui.dashboard.common.GpsAccuracyDialog
 import com.als.presence.ui.dashboard.owner.viewmodels.PremisesLocationState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,6 +49,7 @@ import com.als.presence.ui.dashboard.owner.viewmodels.PremisesLocationState
 fun AddPremisesModal(
     locationState: PremisesLocationState? = null,
     onFetchGpsAndAddress: () -> Unit = {},
+    onGpsLocationAcquired: (GpsLocation) -> Unit = {},
     onDismiss: () -> Unit,
     onAddPremises: (
         name: String,
@@ -63,6 +66,7 @@ fun AddPremisesModal(
     var latitude by remember { mutableStateOf("0.0") }
     var longitude by remember { mutableStateOf("0.0") }
     var radiusMeters by remember { mutableStateOf("50") }
+    var showGpsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(locationState) {
         if (locationState != null && !locationState.isLoading && locationState.error == null) {
@@ -95,8 +99,22 @@ fun AddPremisesModal(
             )
 
             val requestLocationPermission = com.als.presence.core.location.rememberLocationPermissionState(
-                onPermissionGranted = onFetchGpsAndAddress
+                onPermissionGranted = { showGpsDialog = true }
             )
+
+            if (showGpsDialog) {
+                GpsAccuracyDialog(
+                    title = "Calibrating Premises GPS",
+                    targetAccuracyMeters = 10f,
+                    onDismiss = { showGpsDialog = false },
+                    onLocationAcquired = { gps ->
+                        showGpsDialog = false
+                        latitude = gps.latitude.toString()
+                        longitude = gps.longitude.toString()
+                        onGpsLocationAcquired(gps)
+                    }
+                )
+            }
 
             OutlinedButton(
                 onClick = requestLocationPermission,
@@ -128,8 +146,9 @@ fun AddPremisesModal(
                         .background(Color(0xFFE8F5E9))
                         .padding(12.dp)
                 ) {
+                    val accuracyText = locationState?.accuracyMeters?.let { " (±${it.toInt()}m)" } ?: ""
                     Text(
-                        text = "🎯 GPS Fix Acquired: Lat $latitude · Lng $longitude",
+                        text = "🎯 GPS Fix Acquired: Lat $latitude · Lng $longitude$accuracyText",
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF2E7D32),
                         style = MaterialTheme.typography.bodySmall

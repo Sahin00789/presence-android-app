@@ -31,6 +31,7 @@ class AttendanceRepositoryImpl @Inject constructor(
         if (result is Resource.Success && result.data != null) {
             val entities = result.data.map { AttendanceEntity.fromDto(it) }
             attendanceDao.upsertAll(entities)
+            return result
         }
         val cached = attendanceDao.getAll()
         val filtered = if (!staffProfileId.isNullOrBlank()) {
@@ -50,16 +51,41 @@ class AttendanceRepositoryImpl @Inject constructor(
     }
 
     override suspend fun clockIn(request: ClockInRequest): Resource<AttendanceRecordDto> {
-        val record = AttendanceRecordDto(id = "att-${System.currentTimeMillis()}", status = "PRESENT", clockIn = "09:00:00")
-        attendanceDao.upsert(AttendanceEntity.fromDto(record))
-        snapshotProjectionEngine.rebuildOwnerPingsSnapshot("ALL")
-        return Resource.Success(record)
+        val result = safeApiCall("Error clocking in") {
+            if (request.overtimeId != null) {
+                attendanceApiService.clockInOvertime(request)
+            } else {
+                attendanceApiService.clockInShift(request)
+            }
+        }
+        return when (result) {
+            is Resource.Success -> {
+                val record = result.data
+                if (record != null) {
+                    attendanceDao.upsert(AttendanceEntity.fromDto(record))
+                    snapshotProjectionEngine.rebuildOwnerPingsSnapshot("ALL")
+                }
+                result
+            }
+            is Resource.Error -> result
+            Resource.Loading -> result
+        }
     }
 
     override suspend fun clockOut(eventId: String): Resource<ClockOutResponseDto> {
-        val clockOutDto = ClockOutResponseDto(id = eventId, clockOut = "17:00:00")
-        snapshotProjectionEngine.rebuildOwnerPingsSnapshot("ALL")
-        return Resource.Success(clockOutDto)
+        val result = safeApiCall("Error clocking out") {
+            attendanceApiService.clockOut(
+                ClockOutRequest(attendanceEventId = eventId.takeIf { it.isNotBlank() })
+            )
+        }
+        return when (result) {
+            is Resource.Success -> {
+                snapshotProjectionEngine.rebuildOwnerPingsSnapshot("ALL")
+                result
+            }
+            is Resource.Error -> result
+            Resource.Loading -> result
+        }
     }
 
     override suspend fun getExceptions(): Resource<List<AttendanceExceptionDto>> = Resource.Success(emptyList())

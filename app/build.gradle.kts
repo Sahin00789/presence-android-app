@@ -27,7 +27,7 @@ android {
         }
 
         ndk {
-            abiFilters.addAll(setOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64"))
+            abiFilters.addAll(setOf("arm64-v8a", "armeabi-v7a"))
         }
 
         vectorDrawables {
@@ -35,11 +35,22 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("${rootDir}/keystore/release.keystore")
+            storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: "presence123"
+            keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "presence"
+            keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: "presence123"
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -48,6 +59,9 @@ android {
         }
         debug {
             isMinifyEnabled = false
+            ndk {
+                abiFilters.addAll(setOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64"))
+            }
             buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000/\"")
         }
     }

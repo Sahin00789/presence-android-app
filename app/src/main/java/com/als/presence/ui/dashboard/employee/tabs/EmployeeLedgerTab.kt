@@ -155,18 +155,18 @@ fun EmployeeLedgerTab(
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             MetricTile(
                                 label = "Total Earned",
-                                value = Money.format(overall.totalEarnedPaise),
+                                value = Money.format(overall.totalEarnedInr),
                                 modifier = Modifier.weight(1f)
                             )
                             MetricTile(
                                 label = "Total Paid",
-                                value = Money.format(overall.totalPaidPaise),
+                                value = Money.format(overall.totalPaidInr),
                                 modifier = Modifier.weight(1f),
                                 accent = MaterialTheme.colorScheme.secondary
                             )
                             MetricTile(
                                 label = "Total Due",
-                                value = Money.format(overall.totalDuePaise),
+                                value = Money.format(overall.totalDueInr),
                                 modifier = Modifier.weight(1f),
                                 accent = MaterialTheme.colorScheme.tertiary
                             )
@@ -386,7 +386,7 @@ private fun PaymentRow(payment: PaymentRecordDto) {
                 )
             }
             Text(
-                text = "-" + Money.format(payment.amountPaise),
+                text = "-" + Money.format(payment.amountInr),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.tertiary
@@ -397,14 +397,13 @@ private fun PaymentRow(payment: PaymentRecordDto) {
 
 private fun formatInrString(amountStr: String?): String {
     if (amountStr.isNullOrBlank()) return "₹0"
-    val cleaned = amountStr.filter { ch -> ch.isDigit() }
-    val num = cleaned.toLongOrNull() ?: 0L
+    val intPart = amountStr.replace("₹", "").replace(",", "").trim().substringBefore('.')
+    val num = intPart.toLongOrNull() ?: 0L
     return Money.format(num)
 }
 
 @Composable
 private fun LedgerRow(entry: StaffEarningLedgerDto) {
-    val amountPaise = entry.amountCents
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
@@ -448,7 +447,7 @@ private fun LedgerRow(entry: StaffEarningLedgerDto) {
                 )
             }
             Text(
-                text = "+" + Money.format(amountPaise),
+                text = "+" + Money.format(entry.amountInr),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.secondary

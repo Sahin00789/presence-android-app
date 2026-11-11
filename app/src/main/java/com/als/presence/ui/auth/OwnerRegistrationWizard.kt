@@ -96,6 +96,7 @@ import com.als.presence.core.location.GpsLocation
 import com.als.presence.data.model.GoogleRegistrationIdentity
 import com.als.presence.data.model.OtpResponse
 import com.als.presence.data.model.PostOffice
+import com.als.presence.ui.dashboard.common.GpsAccuracyDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,6 +114,7 @@ fun OwnerRegistrationWizard(
     onStartGoogle: () -> Unit,
     onLookupPincode: (String) -> Unit = {},
     onFetchGpsLocation: () -> Unit = {},
+    onGpsLocationAcquired: (GpsLocation) -> Unit = {},
     onCompleteWithOtp: (email: String, otp: String, ownerName: String, orgName: String, timezone: String, currency: String, premisesName: String, radius: Int, address: String?, latitude: String?, longitude: String?) -> Unit,
     onCompleteWithGoogle: (idToken: String, orgName: String, timezone: String, currency: String, premisesName: String, radius: Int, address: String?, latitude: String?, longitude: String?) -> Unit
 ) {
@@ -132,6 +134,7 @@ fun OwnerRegistrationWizard(
     val context = LocalContext.current
     var capturedLat by remember { mutableStateOf<String?>(null) }
     var capturedLng by remember { mutableStateOf<String?>(null) }
+    var showGpsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(otpResponse) {
         val resp = otpResponse
@@ -142,9 +145,23 @@ fun OwnerRegistrationWizard(
 
     val requestLocationPermission = com.als.presence.core.location.rememberLocationPermissionState(
         onPermissionGranted = {
-            onFetchGpsLocation()
+            showGpsDialog = true
         }
     )
+
+    if (showGpsDialog) {
+        GpsAccuracyDialog(
+            title = "Calibrating Premises GPS",
+            targetAccuracyMeters = 10f,
+            onDismiss = { showGpsDialog = false },
+            onLocationAcquired = { gps ->
+                showGpsDialog = false
+                capturedLat = gps.latitude.toString()
+                capturedLng = gps.longitude.toString()
+                onGpsLocationAcquired(gps)
+            }
+        )
+    }
 
     val scrollState = rememberScrollState()
     val loading = uiState is UiState.Loading

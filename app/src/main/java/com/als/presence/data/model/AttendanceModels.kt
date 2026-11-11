@@ -1,6 +1,7 @@
 package com.als.presence.data.model
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class AttendanceRecordDto(
@@ -8,6 +9,7 @@ data class AttendanceRecordDto(
     val organizationId: String = "",
     val premisesId: String = "",
     val employeeId: String = "",
+    val staffProfileId: String? = null,
     val staffName: String? = null,
     val staffCode: String? = null,
     val workDate: String = "",
@@ -116,6 +118,14 @@ data class ClockInRequest(
 )
 
 @Serializable
+data class ClockOutRequest(
+    val attendanceEventId: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val accuracyMeters: Double? = null
+)
+
+@Serializable
 data class ClockOutResponseDto(
     val id: String = "",
     val clockOut: String = ""
@@ -141,7 +151,7 @@ data class UnhandledEventItemDto(
     val amount: Double = 0.0,
     val currency: String = "INR",
     val actionLabel: String = "",
-    val metadata: Map<String, String>? = null
+    val metadata: Map<String, JsonElement>? = null
 )
 
 @Serializable
@@ -155,7 +165,7 @@ data class ClaimUnhandledEventRequestDto(
     val eventId: String,
     val type: String,
     val date: String,
-    val metadata: Map<String, String>? = null
+    val metadata: Map<String, JsonElement>? = null
 )
 
 @Serializable

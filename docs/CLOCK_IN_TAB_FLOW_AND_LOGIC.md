@@ -59,6 +59,10 @@ The Clock-In UI is structured into three clear visual cards:
     - *Badge*: `HOLIDAY` or `WEEKLY OFF`
     - *Short Note*: `"If you want to work today, ask your Owner to create overtime for today. Regular shifts are not scheduled on off-days or holidays, but overtime can be assigned."`
   - **Overtime Session Display**: The **Owner** creates and approves the Overtime session. Once assigned for today, it appears in "Today's Work" and the **Employee** clocks in to complete it.
+- **No Work Scheduled from Now**: When no active or upcoming shift/overtime is scheduled for today (e.g. shift completed or no shifts remaining), displays:
+  - *Title*: `"Work Completed for Today"` (if previous work exists) or `"No Work Scheduled"`
+  - *Short Note*: `"No work scheduled for the day from now (previous works can be seen in Today's History)."`
+  - *Badge*: `Completed` or `No Work`
 - **Header**: Shows title of current active session or next upcoming work (e.g. *"Assigned Shift"* or *"Overtime Session"*) with status badge:
   - `In Progress` (Green pill: Employee has clocked in)
   - `Running` (Amber pill: Not clocked in, but current time is within shift window on matching day / overtime date)

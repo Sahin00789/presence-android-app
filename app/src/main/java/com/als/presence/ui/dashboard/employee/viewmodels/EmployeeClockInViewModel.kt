@@ -81,7 +81,8 @@ class EmployeeClockInViewModel @Inject constructor(
         val isWithinGeofence: Boolean? = null,
         val lastGpsVerifiedTime: String? = null,
         val unhandledEvents: List<UnhandledEventItemDto> = emptyList(),
-        val isClaimingEvent: Boolean = false
+        val isClaimingEvent: Boolean = false,
+        val claimedEventIds: Set<String> = emptySet()
     )
 
     private val _state = MutableStateFlow(ClockInUiState())
@@ -93,6 +94,10 @@ class EmployeeClockInViewModel @Inject constructor(
 
     fun consumeMessage() {
         _state.update { it.copy(message = null, error = null) }
+    }
+
+    fun consumeError() {
+        _state.update { it.copy(error = null) }
     }
 
     fun setFaceEmbedding(embedding: FaceEmbeddingEngine.Embedding) {
@@ -132,7 +137,9 @@ class EmployeeClockInViewModel @Inject constructor(
             val holidays = (holidaysRes as? Resource.Success)?.data ?: emptyList()
             val presenceData = (presence as? Resource.Success)?.data
             val employeesList = (employeesRes as? Resource.Success)?.data ?: emptyList()
-            val unhandledEventsList = (unhandledRes as? Resource.Success)?.data?.events ?: emptyList()
+            val rawUnhandledEvents = (unhandledRes as? Resource.Success)?.data?.events ?: emptyList()
+            val currentClaimed = _state.value.claimedEventIds
+            val unhandledEventsList = rawUnhandledEvents.filterNot { it.id in currentClaimed }
 
             val userId = sessionManager.userId
             val myStaffDto = employeesList.firstOrNull {
@@ -290,6 +297,8 @@ class EmployeeClockInViewModel @Inject constructor(
 
             val verifiedTime = LocalTime.now().format(DateTimeFormatter.ofPattern("hh:mm a"))
 
+            android.util.Log.d("ClockInVM", "Loaded unhandled events count: ${unhandledEventsList.size}, result: $unhandledRes")
+
             _state.update {
                 it.copy(
                     isLoading = false,
@@ -323,7 +332,15 @@ class EmployeeClockInViewModel @Inject constructor(
 
     fun claimUnhandledEvent(item: UnhandledEventItemDto) {
         viewModelScope.launch {
-            _state.update { it.copy(isClaimingEvent = true) }
+            val updatedClaimed = _state.value.claimedEventIds + item.id
+            _state.update {
+                it.copy(
+                    isClaimingEvent = true,
+                    claimedEventIds = updatedClaimed,
+                    unhandledEvents = it.unhandledEvents.filterNot { ev -> ev.id == item.id }
+                )
+            }
+            android.util.Log.d("ClockInVM", "Claiming unhandled event: ${item.id}, date: ${item.date}, type: ${item.type}")
             val res = repository.claimUnhandledEvent(
                 ClaimUnhandledEventRequestDto(
                     eventId = item.id,
@@ -332,6 +349,7 @@ class EmployeeClockInViewModel @Inject constructor(
                     metadata = item.metadata
                 )
             )
+            android.util.Log.d("ClockInVM", "Claim result for ${item.id}: $res")
             when (res) {
                 is Resource.Success -> {
                     _state.update {
@@ -347,6 +365,8 @@ class EmployeeClockInViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             isClaimingEvent = false,
+                            claimedEventIds = it.claimedEventIds - item.id,
+                            unhandledEvents = listOf(item) + it.unhandledEvents.filterNot { ev -> ev.id == item.id },
                             error = res.message ?: "Failed to process claim"
                         )
                     }
@@ -395,72 +415,18 @@ class EmployeeClockInViewModel @Inject constructor(
             else -> null
         }
 
-        val validTodayShift = if (todayTemplate != null && !Dates.isSessionOver(todayIso, todayTemplate.endTime, todayTemplate.startTime)) {
+        val validTodayShift = if (todayTemplate != null) {
             todayAssignment to todayTemplate
         } else null
 
-        if (validTodayOvertime != null && validTodayShift != null) {
-            val otStart = validTodayOvertime.startTime ?: "99:99"
-            val shiftStart = validTodayShift.second.startTime.ifBlank { "09:00:00" }
-            if (otStart < shiftStart) {
-                return sessionFromOvertime(validTodayOvertime, presenceData)
-            } else {
-                return sessionFromShift(validTodayShift.first, validTodayShift.second, todayIso, presenceData)
-            }
+        if (validTodayShift != null) {
+            return sessionFromShift(validTodayShift.first, validTodayShift.second, todayIso, presenceData)
         } else if (validTodayOvertime != null) {
             return sessionFromOvertime(validTodayOvertime, presenceData)
-        } else if (validTodayShift != null) {
-            return sessionFromShift(validTodayShift.first, validTodayShift.second, todayIso, presenceData)
         }
 
-        // 2. Both shift & overtime on today are over or completed. Look ahead to future days (up to 14 days)
-        for (dayOffset in 1..14) {
-            val futureIso = Dates.isoDaysAhead(dayOffset.toLong())
-
-            val futureOvertime = overtimeEntries.firstOrNull { ot ->
-                ot.workDate == futureIso &&
-                    (ot.status in listOf("APPROVED", "IN_PROGRESS", "CREATED", "REQUESTED"))
-            }
-
-            val isFutureHoliday = holidays.any { it.holidayDate == futureIso || it.date == futureIso }
-            val futureAssignment = if (!isFutureHoliday) {
-                assignments.firstOrNull { a ->
-                    val template = templates.firstOrNull { it.id == a.shiftId }
-                    template != null && Dates.isShiftMatchingDay(template.dayName, futureIso, template.daysOfWeek)
-                } ?: if (assignments.isEmpty()) {
-                    templates.firstOrNull { Dates.isShiftMatchingDay(it.dayName, futureIso, it.daysOfWeek) }
-                } else null
-            } else null
-
-            val futureTemplate = when (futureAssignment) {
-                is ShiftAssignmentDto -> templates.firstOrNull { it.id == futureAssignment.shiftId }
-                is ShiftDto -> futureAssignment
-                else -> null
-            }
-
-            if (futureOvertime != null && futureTemplate != null) {
-                val otStart = futureOvertime.startTime ?: "99:99"
-                val shiftStart = futureTemplate.startTime.ifBlank { "09:00:00" }
-                if (otStart < shiftStart) {
-                    return sessionFromOvertime(futureOvertime, presenceData)
-                } else {
-                    return sessionFromShift(futureAssignment, futureTemplate, futureIso, presenceData)
-                }
-            } else if (futureOvertime != null) {
-                return sessionFromOvertime(futureOvertime, presenceData)
-            } else if (futureTemplate != null) {
-                return sessionFromShift(futureAssignment, futureTemplate, futureIso, presenceData)
-            }
-        }
-
-        // 3. Fallback if no matching assignment within 14 days
-        val fallbackAssignment = assignments.firstOrNull()
-        val fallbackTemplate = templates.firstOrNull { it.id == fallbackAssignment?.shiftId } ?: templates.firstOrNull()
-        if (fallbackTemplate != null) {
-            val tomorrowIso = Dates.isoDaysAhead(1)
-            return sessionFromShift(fallbackAssignment, fallbackTemplate, tomorrowIso, presenceData)
-        }
-
+        // Today's Work should strictly only return sessions scheduled for today.
+        // It should NOT give future overtime shifts or future shifts; future sessions appear in "Upcoming Schedule".
         return null
     }
 
@@ -559,8 +525,38 @@ class EmployeeClockInViewModel @Inject constructor(
         }
     }
 
-    fun clockIn(overtimeId: String? = null) {
-        val pending = _state.value.pendingEmbedding
+    fun updateLocation(loc: GpsLocation) {
+        val premLat = _state.value.premisesLatitude
+        val premLng = _state.value.premisesLongitude
+        val premRadius = _state.value.premisesRadiusMeters
+        val verifiedTime = LocalTime.now().format(DateTimeFormatter.ofPattern("hh:mm a"))
+
+        if (premLat != null && premLng != null) {
+            val dist = calculateDistanceMeters(loc.latitude, loc.longitude, premLat, premLng)
+            _state.update {
+                it.copy(
+                    location = loc,
+                    distanceToPremisesMeters = dist,
+                    isWithinGeofence = dist <= premRadius,
+                    lastGpsVerifiedTime = verifiedTime,
+                    error = null
+                )
+            }
+        } else {
+            _state.update {
+                it.copy(
+                    location = loc,
+                    distanceToPremisesMeters = null,
+                    isWithinGeofence = null,
+                    lastGpsVerifiedTime = verifiedTime,
+                    error = null
+                )
+            }
+        }
+    }
+
+    fun clockIn(overtimeId: String? = null, embeddingVector: List<Double>? = null) {
+        val pending = embeddingVector ?: _state.value.pendingEmbedding
         if (pending == null) {
             _state.update {
                 it.copy(
@@ -580,50 +576,57 @@ class EmployeeClockInViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isSubmitting = true, error = null, message = null) }
 
-            when (val location = getGpsLocation()) {
-                is Resource.Error -> {
-                    _state.update { it.copy(isSubmitting = false, error = location.message) }
-                    return@launch
+            val currentLoc = _state.value.location
+            val fix = if (currentLoc != null && currentLoc.accuracyMeters <= 30f) {
+                currentLoc
+            } else {
+                when (val location = getGpsLocation()) {
+                    is Resource.Error -> {
+                        _state.update { it.copy(isSubmitting = false, error = location.message) }
+                        return@launch
+                    }
+                    is Resource.Success -> {
+                        val fixLoc = location.data
+                        _state.update { it.copy(location = fixLoc) }
+                        fixLoc
+                    }
+                    Resource.Loading -> return@launch
                 }
-                is Resource.Success -> {
-                    val fix = location.data
-                    _state.update { it.copy(location = fix) }
+            }
 
-                    when (
-                        val result = repository.clockIn(
-                            ClockInRequest(
-                                latitude = fix.latitude,
-                                longitude = fix.longitude,
-                                accuracyMeters = fix.accuracyMeters.toDouble(),
-                                isMocked = fix.isMocked,
-                                faceVerified = true,
-                                overtimeId = overtimeId,
-                                embeddingVector = pending
-                            )
+            when (
+                val result = repository.clockIn(
+                    ClockInRequest(
+                        latitude = fix.latitude,
+                        longitude = fix.longitude,
+                        accuracyMeters = fix.accuracyMeters.toDouble(),
+                        isMocked = fix.isMocked,
+                        faceVerified = true,
+                        overtimeId = overtimeId,
+                        embeddingVector = pending
+                    )
+                )
+            ) {
+                is Resource.Success -> {
+                    _state.update {
+                        it.copy(
+                            isSubmitting = false,
+                            activeEvent = result.data ?: it.activeEvent,
+                            message = if (overtimeId != null) {
+                                "Clocked in for overtime successfully."
+                            } else {
+                                "Clocked in successfully."
+                            }
                         )
-                    ) {
-                        is Resource.Success -> {
-                            _state.update {
-                                it.copy(
-                                    isSubmitting = false,
-                                    message = if (overtimeId != null) {
-                                        "Clocked in for overtime successfully."
-                                    } else {
-                                        "Clocked in successfully."
-                                    }
-                                )
-                            }
-                            refresh(silent = true)
-                        }
-                        is Resource.Error -> {
-                            _state.update {
-                                it.copy(
-                                    isSubmitting = false,
-                                    error = result.message ?: "Clock-in failed"
-                                )
-                            }
-                        }
-                        Resource.Loading -> Unit
+                    }
+                    refresh(silent = true)
+                }
+                is Resource.Error -> {
+                    _state.update {
+                        it.copy(
+                            isSubmitting = false,
+                            error = result.message ?: "Clock-in failed"
+                        )
                     }
                 }
                 Resource.Loading -> Unit

@@ -69,12 +69,7 @@ class PayrollRepositoryImpl @Inject constructor(
                 payrollSnapshotDao.insertMonthlyEarningSnapshot(
                     MonthlyEarningSnapshotEntity.fromDto(result.data)
                 )
-                val cached = payrollSnapshotDao.getMonthlyEarningSnapshotsForMonth(month, year).firstOrNull()
-                if (cached != null) {
-                    Resource.Success(cached.toDto())
-                } else {
-                    result
-                }
+                result
             }
             is Resource.Error -> {
                 val cached = payrollSnapshotDao.getMonthlyEarningSnapshotsForMonth(month, year).firstOrNull()

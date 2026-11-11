@@ -52,6 +52,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.graphicsLayer
+import com.als.presence.data.model.ShiftAssignmentDto
+import com.als.presence.data.model.ShiftDto
 import com.als.presence.data.model.UnhandledEventItemDto
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,16 +64,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.ui.unit.sp
 import com.als.presence.core.designsystem.PresenceDesign
 import com.als.presence.core.face.FaceEmbeddingEngine
+import com.als.presence.core.location.GpsLocation
 import com.als.presence.domain.model.User
 import com.als.presence.ui.dashboard.common.Dates
 import com.als.presence.ui.dashboard.common.FaceCaptureDialog
+import com.als.presence.ui.dashboard.common.GpsAccuracyDialog
 import com.als.presence.ui.dashboard.common.Money
 import com.als.presence.ui.dashboard.common.PresenceBadge
 import com.als.presence.ui.dashboard.common.PresenceCard
@@ -80,6 +86,18 @@ import com.als.presence.ui.dashboard.common.PresenceRefreshButton
 import com.als.presence.ui.dashboard.common.PresenceTone
 import com.als.presence.ui.dashboard.common.SessionKind
 import com.als.presence.ui.dashboard.employee.viewmodels.EmployeeClockInViewModel
+
+private enum class TodayCardType {
+    CLOCKED_IN_SHIFT,
+    RUNNING_SHIFT,
+    UPCOMING_SHIFT,
+    CLOCKED_IN_OVERTIME,
+    RUNNING_OVERTIME,
+    UPCOMING_OVERTIME,
+    HOLIDAY,
+    OFF_DAY,
+    NO_WORK_SCHEDULED
+}
 
 private data class HistoryItem(
     val title: String,
@@ -131,30 +149,27 @@ private fun StatusEarningMiniChip(
 ) {
     Surface(
         color = bgColor,
-        shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(1.dp, borderColor),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(0.8.dp, borderColor),
         modifier = modifier
     ) {
-        Column(
-            modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+        Row(
+            modifier = Modifier.padding(vertical = 5.dp, horizontal = 2.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            val shortStatus = when (status) {
+                "Half-Day" -> "Half"
+                else -> status
+            }
             Text(
-                text = status,
+                text = "$shortStatus: $amount",
                 style = MaterialTheme.typography.labelSmall,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = textColor,
-                maxLines = 1
-            )
-            Text(
-                text = amount,
-                style = MaterialTheme.typography.bodySmall,
-                fontSize = 11.sp,
+                fontSize = 9.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = textColor,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -226,17 +241,20 @@ fun EmployeeClockInTab(
     state: EmployeeClockInViewModel.ClockInUiState,
     onRefresh: () -> Unit,
     onLocate: () -> Unit,
-    onClockIn: (overtimeId: String?) -> Unit,
+    onClockIn: (overtimeId: String?, embedding: FaceEmbeddingEngine.Embedding?) -> Unit,
     onClockOut: () -> Unit = {},
     engine: FaceEmbeddingEngine,
     onFaceCaptured: (FaceEmbeddingEngine.Embedding) -> Unit,
     modifier: Modifier = Modifier,
     isScrollable: Boolean = true,
     onSilentRefresh: () -> Unit = onRefresh,
-    onClaimUnhandledEvent: (UnhandledEventItemDto) -> Unit = {}
+    onClaimUnhandledEvent: (UnhandledEventItemDto) -> Unit = {},
+    onUpdateLocation: (GpsLocation) -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     var showCapture by remember { mutableStateOf(false) }
+    var showGpsDialog by remember { mutableStateOf(false) }
+    var pendingClockInAfterGps by remember { mutableStateOf(false) }
 
     val scrollModifier = if (isScrollable) Modifier.verticalScroll(scrollState) else Modifier
 
@@ -248,7 +266,8 @@ fun EmployeeClockInTab(
     val premLng = state.premisesLongitude
     val distanceMeters = state.distanceToPremisesMeters?.toInt()
     val allowedRadiusMeters = state.premisesRadiusMeters
-    val accuracyMeters = state.location?.accuracyMeters?.toInt() ?: 8
+    val accuracyMeters = state.location?.accuracyMeters?.toInt() ?: 99
+    val isAccuracyValid = state.location != null && accuracyMeters <= 10
     val lastVerifiedTime = state.lastGpsVerifiedTime ?: "Just now"
 
     val isGeofenceValid = state.isWithinGeofence ?: (distanceMeters != null && distanceMeters <= allowedRadiusMeters)
@@ -259,79 +278,159 @@ fun EmployeeClockInTab(
     val isRunningShift = isClockedIn && active?.overtimeId == null
     val isRunningOvertime = isClockedIn && active?.overtimeId != null
 
-    // Determine Single Next-Work Card
-    val nextSession = state.nextSession
-    val todayOvertime = state.openOvertime.firstOrNull {
-        Dates.isToday(it.workDate) &&
-            (it.status in listOf("APPROVED", "IN_PROGRESS", "CREATED", "REQUESTED")) &&
-            !Dates.isSessionOver(it.workDate, it.endTime, it.startTime)
-    }
-
     val todayIso = Dates.todayIso()
     val todayDayName = Dates.getDayNameByDate(todayIso)
     val todayDateFormatted = Dates.formatDate(todayIso)
 
-    val workDateIso = active?.workDate ?: nextSession?.workDate ?: todayOvertime?.workDate ?: todayIso
-    val workDayName = Dates.getDayNameByDate(workDateIso)
-    val workDateFormatted = Dates.formatDate(workDateIso)
-    val isSameDay = Dates.isToday(workDateIso)
+    // Completed works today
+    val isShiftCompletedToday = state.todayRecords.any { it.overtimeId == null && !it.clockIn.isNullOrBlank() && !it.clockOut.isNullOrBlank() }
+    val isOvertimeCompletedToday = state.todayRecords.any { it.overtimeId != null && !it.clockIn.isNullOrBlank() && !it.clockOut.isNullOrBlank() }
 
+    // Next Session from ViewModel
+    val nextSession = state.nextSession?.takeIf { Dates.isToday(it.workDate ?: todayIso) }
+
+    // 1. Shift candidate for TODAY
+    val todayAssignment = state.assignedShifts.firstOrNull { a ->
+        val template = state.shiftTemplates.firstOrNull { it.id == a.shiftId }
+        template != null && Dates.isShiftMatchingDay(template.dayName, todayIso, template.daysOfWeek)
+    } ?: if (state.assignedShifts.isEmpty()) {
+        state.shiftTemplates.firstOrNull { Dates.isShiftMatchingDay(it.dayName, todayIso, it.daysOfWeek) }
+    } else null
+
+    val todayShiftTemplate = when (todayAssignment) {
+        is ShiftAssignmentDto -> state.shiftTemplates.firstOrNull { it.id == todayAssignment.shiftId }
+        is ShiftDto -> todayAssignment
+        else -> null
+    }
+
+    val hasShiftToday = isRunningShift || todayShiftTemplate != null ||
+        (nextSession?.kind == SessionKind.SHIFT && (nextSession.day.equals(todayDayName, ignoreCase = true) || nextSession.day.equals("Scheduled Shift", ignoreCase = true)))
+    val isShiftEligibleToday = hasShiftToday && !isShiftCompletedToday
+
+    // 2. Overtime candidate for TODAY
+    val todayOvertime = state.openOvertime.firstOrNull {
+        Dates.isToday(it.workDate) &&
+            (it.status in listOf("APPROVED", "IN_PROGRESS", "CREATED", "REQUESTED")) &&
+            state.todayRecords.none { r -> r.overtimeId == it.id && !r.clockOut.isNullOrBlank() } &&
+            !Dates.isSessionOver(it.workDate, it.endTime, it.startTime)
+    } ?: (if (nextSession?.kind == SessionKind.OVERTIME && !isOvertimeCompletedToday) {
+        state.openOvertime.firstOrNull { it.id == nextSession.overtimeId }
+    } else null)
+
+    val hasOvertimeToday = isRunningOvertime || (todayOvertime != null && !isOvertimeCompletedToday)
+
+    // 3. Holiday candidate for TODAY
     val todayHoliday = state.holidays.firstOrNull { it.holidayDate == todayIso || it.date == todayIso }
     val isTodayHoliday = todayHoliday != null
 
-    val hasMatchingShiftToday = state.assignedShifts.any { a ->
-        val template = state.shiftTemplates.firstOrNull { it.id == a.shiftId }
-        template != null && Dates.isShiftMatchingDay(template.dayName, todayIso, template.daysOfWeek)
-    } || (state.assignedShifts.isEmpty() && state.shiftTemplates.any { t ->
-        Dates.isShiftMatchingDay(t.dayName, todayIso, t.daysOfWeek)
-    }) || (nextSession?.kind == SessionKind.SHIFT && (nextSession.day.equals(todayDayName, ignoreCase = true) || nextSession.day.equals("Scheduled Shift", ignoreCase = true)))
-    val isTodayOffDay = !isTodayHoliday && !hasMatchingShiftToday
-    val isNonWorkingDay = isTodayHoliday || isTodayOffDay
-    val hasTodayOvertime = isRunningOvertime || todayOvertime != null || (isSameDay && (nextSession?.kind == SessionKind.OVERTIME || nextSession?.overtimeId != null))
-
-    val showOffDayHolidayGreeting = isNonWorkingDay && !hasTodayOvertime && !isClockedIn
-
-    val hasScheduledWork = isClockedIn || nextSession != null || todayOvertime != null
-
-    val rawTitle = when {
-        isRunningOvertime -> "Overtime Session"
-        isRunningShift -> active?.shiftName?.ifBlank { "Assigned Shift" } ?: "Assigned Shift"
-        nextSession != null && nextSession.kind == SessionKind.OVERTIME -> nextSession.title.ifBlank { "Overtime Session" }
-        nextSession != null && !nextSession.title.equals("day", ignoreCase = true) && nextSession.title.isNotBlank() -> nextSession.title
-        todayOvertime != null -> todayOvertime.reason?.takeIf { it.isNotBlank() } ?: "Overtime Session"
-        else -> if (hasTodayOvertime) "Overtime Session" else "Assigned Shift"
+    // 4. Weekly Off candidate for TODAY
+    val currentDayOfWeek = try {
+        java.time.LocalDate.parse(todayIso).dayOfWeek
+    } catch (e: Exception) {
+        java.time.LocalDate.now().dayOfWeek
     }
-    val workTitle = if (rawTitle.equals("day", ignoreCase = true) || rawTitle.equals("No Shift Scheduled", ignoreCase = true) || rawTitle.isBlank()) {
-        if (hasTodayOvertime) "Overtime Session" else "Assigned Shift"
-    } else rawTitle
+    val isSunday = currentDayOfWeek == java.time.DayOfWeek.SUNDAY
+    val hasWeeklyOffEvent = state.unhandledEvents.any {
+        it.type.equals("WEEKLY_OFF", ignoreCase = true) && Dates.isToday(it.date)
+    }
+    val isWeeklyOffDay = isSunday || hasWeeklyOffEvent
 
-    val isOvertimeWork = isRunningOvertime || (!isClockedIn && (nextSession?.kind == SessionKind.OVERTIME || nextSession?.overtimeId != null || todayOvertime != null))
+    // Timing evaluation for Shift & Overtime
+    val shiftStartTime = todayShiftTemplate?.startTime?.ifBlank { null }
+        ?: (if (nextSession?.kind == SessionKind.SHIFT) nextSession.startTime else null)
+        ?: "09:00:00"
+    val shiftEndTime = todayShiftTemplate?.endTime?.ifBlank { null }
+        ?: (if (nextSession?.kind == SessionKind.SHIFT) nextSession.endTime else null)
+        ?: "18:00:00"
 
-    val startTimeRaw = when {
-        isRunningOvertime -> active?.assignedStartTime ?: nextSession?.startTime ?: todayOvertime?.startTime
-        isRunningShift -> active?.assignedStartTime ?: nextSession?.startTime
-        nextSession != null -> nextSession.startTime
-        todayOvertime != null -> todayOvertime.startTime
+    val otStartTime = todayOvertime?.startTime ?: (if (nextSession?.kind == SessionKind.OVERTIME) nextSession.startTime else null)
+    val otEndTime = todayOvertime?.endTime ?: (if (nextSession?.kind == SessionKind.OVERTIME) nextSession.endTime else null)
+
+    val isShiftWindowValid = if (isShiftEligibleToday) Dates.isWithinTimeWindow(shiftStartTime, shiftEndTime) else false
+    val isOvertimeWindowValid = if (hasOvertimeToday) Dates.isWithinTimeWindow(otStartTime, otEndTime) else false
+
+    // STRICT CARD PRIORITY: shift > overtime > holiday > offday > empty
+    val todayCardType = when {
+        isRunningShift -> TodayCardType.CLOCKED_IN_SHIFT
+        isRunningOvertime -> TodayCardType.CLOCKED_IN_OVERTIME
+        isShiftEligibleToday -> if (isShiftWindowValid) TodayCardType.RUNNING_SHIFT else TodayCardType.UPCOMING_SHIFT
+        hasOvertimeToday -> if (isOvertimeWindowValid) TodayCardType.RUNNING_OVERTIME else TodayCardType.UPCOMING_OVERTIME
+        isTodayHoliday -> TodayCardType.HOLIDAY
+        isWeeklyOffDay -> TodayCardType.OFF_DAY
+        else -> TodayCardType.NO_WORK_SCHEDULED
+    }
+
+    val isOvertimeWork = when (todayCardType) {
+        TodayCardType.CLOCKED_IN_OVERTIME,
+        TodayCardType.RUNNING_OVERTIME,
+        TodayCardType.UPCOMING_OVERTIME -> true
+        else -> false
+    }
+
+    val workTitle = when (todayCardType) {
+        TodayCardType.CLOCKED_IN_OVERTIME,
+        TodayCardType.RUNNING_OVERTIME,
+        TodayCardType.UPCOMING_OVERTIME ->
+            todayOvertime?.reason?.takeIf { it.isNotBlank() }
+                ?: (if (nextSession?.kind == SessionKind.OVERTIME) nextSession.title.ifBlank { "Overtime Session" } else "Overtime Session")
+        TodayCardType.CLOCKED_IN_SHIFT,
+        TodayCardType.RUNNING_SHIFT,
+        TodayCardType.UPCOMING_SHIFT ->
+            active?.shiftName?.ifBlank { null }
+                ?: todayShiftTemplate?.shiftName?.ifBlank { "Assigned Shift" }
+                ?: (if (nextSession?.kind == SessionKind.SHIFT) nextSession.title.ifBlank { "Assigned Shift" } else "Assigned Shift")
+        TodayCardType.HOLIDAY ->
+            todayHoliday?.name?.takeIf { it.isNotBlank() } ?: "Public Holiday"
+        TodayCardType.OFF_DAY ->
+            "Weekly Off"
+        TodayCardType.NO_WORK_SCHEDULED ->
+            "No Work Scheduled"
+    }
+
+    val startTimeRaw = when (todayCardType) {
+        TodayCardType.CLOCKED_IN_SHIFT -> active?.assignedStartTime ?: shiftStartTime
+        TodayCardType.RUNNING_SHIFT, TodayCardType.UPCOMING_SHIFT -> shiftStartTime
+        TodayCardType.CLOCKED_IN_OVERTIME -> active?.assignedStartTime ?: otStartTime
+        TodayCardType.RUNNING_OVERTIME, TodayCardType.UPCOMING_OVERTIME -> otStartTime
         else -> null
     }
 
-    val endTimeRaw = when {
-        isRunningOvertime -> active?.assignedEndTime ?: nextSession?.endTime ?: todayOvertime?.endTime
-        isRunningShift -> active?.assignedEndTime ?: nextSession?.endTime
-        nextSession != null -> nextSession.endTime
-        todayOvertime != null -> todayOvertime.endTime
+    val endTimeRaw = when (todayCardType) {
+        TodayCardType.CLOCKED_IN_SHIFT -> active?.assignedEndTime ?: shiftEndTime
+        TodayCardType.RUNNING_SHIFT, TodayCardType.UPCOMING_SHIFT -> shiftEndTime
+        TodayCardType.CLOCKED_IN_OVERTIME -> active?.assignedEndTime ?: otEndTime
+        TodayCardType.RUNNING_OVERTIME, TodayCardType.UPCOMING_OVERTIME -> otEndTime
         else -> null
     }
 
-    val isTimeWindowValid = if (hasScheduledWork && isSameDay) Dates.isWithinTimeWindow(startTimeRaw, endTimeRaw) else false
-    val canClockIn = !isClockedIn && hasScheduledWork && isSameDay && isGeofenceValid && isTimeWindowValid && !state.isSubmitting
+    val isTimeWindowValid = when (todayCardType) {
+        TodayCardType.CLOCKED_IN_SHIFT, TodayCardType.CLOCKED_IN_OVERTIME -> true
+        TodayCardType.RUNNING_SHIFT -> isShiftWindowValid
+        TodayCardType.RUNNING_OVERTIME -> isOvertimeWindowValid
+        else -> false
+    }
 
-    val isSessionRunningNow = !isClockedIn && isSameDay && (nextSession?.isActive == true || (hasScheduledWork && isTimeWindowValid))
+    val hasScheduledWork = when (todayCardType) {
+        TodayCardType.CLOCKED_IN_SHIFT,
+        TodayCardType.RUNNING_SHIFT,
+        TodayCardType.UPCOMING_SHIFT,
+        TodayCardType.CLOCKED_IN_OVERTIME,
+        TodayCardType.RUNNING_OVERTIME,
+        TodayCardType.UPCOMING_OVERTIME -> true
+        else -> false
+    }
+
+    val isSessionRunningNow = when (todayCardType) {
+        TodayCardType.RUNNING_SHIFT, TodayCardType.RUNNING_OVERTIME -> true
+        else -> false
+    }
+
+    val canClockIn = !isClockedIn && hasScheduledWork && isGeofenceValid && isAccuracyValid && isTimeWindowValid && !state.isSubmitting
 
     // Pay Rules calculation for the active/upcoming shift
     val currentAssignment = state.assignedShifts.firstOrNull { a ->
         val tmpl = state.shiftTemplates.firstOrNull { it.id == a.shiftId }
-        tmpl != null && Dates.isShiftMatchingDay(tmpl.dayName, workDateIso, tmpl.daysOfWeek)
+        tmpl != null && Dates.isShiftMatchingDay(tmpl.dayName, todayIso, tmpl.daysOfWeek)
     } ?: state.assignedShifts.firstOrNull { a ->
         (active?.shiftName != null && a.shiftName != null && a.shiftName.equals(active.shiftName, ignoreCase = true)) ||
         (nextSession?.title != null && a.shiftName != null && a.shiftName.equals(nextSession.title, ignoreCase = true)) ||
@@ -394,9 +493,10 @@ fun EmployeeClockInTab(
     // Half-day threshold check for Clock In button label
     val matchingTemplate = state.shiftTemplates.firstOrNull { it.id == currentAssignment?.shiftId } ?: state.shiftTemplates.firstOrNull { it.shiftName == workTitle }
     val halfDayThresholdStr = nextSession?.halfDayThreshold ?: matchingTemplate?.halfDayThreshold
-    val isTooLateForHalfDay = isSameDay && Dates.isPastHalfDayThreshold(startTimeRaw, halfDayThresholdStr)
+    val isTooLateForHalfDay = Dates.isPastHalfDayThreshold(startTimeRaw, halfDayThresholdStr)
     val clockInButtonText = when {
-        !isSameDay -> "Clock In (Upcoming)"
+        isOvertimeWork -> "Clock In (Overtime)"
+        todayCardType == TodayCardType.UPCOMING_SHIFT -> "Clock In (Upcoming)"
         isTooLateForHalfDay -> "Clock In (Half-Day)"
         else -> "Clock In (Present)"
     }
@@ -590,12 +690,16 @@ fun EmployeeClockInTab(
                         fontWeight = FontWeight.Bold,
                         color = PresenceDesign.Ink
                     )
-                    when {
-                        isClockedIn -> PresenceBadge(label = "On Duty", tone = PresenceTone.Success, dot = true)
-                        isSessionRunningNow -> PresenceBadge(label = "Shift Open", tone = PresenceTone.Info, dot = true)
-                        isTodayHoliday -> PresenceBadge(label = "Public Holiday", tone = PresenceTone.Purple)
-                        isTodayOffDay -> PresenceBadge(label = "Rest Day", tone = PresenceTone.Neutral)
-                        else -> PresenceBadge(label = "Upcoming", tone = PresenceTone.Neutral)
+                    when (todayCardType) {
+                        TodayCardType.CLOCKED_IN_SHIFT -> PresenceBadge(label = "Shift in Progress", tone = PresenceTone.Success, dot = true)
+                        TodayCardType.RUNNING_SHIFT -> PresenceBadge(label = "Shift Open", tone = PresenceTone.Warning, dot = true)
+                        TodayCardType.UPCOMING_SHIFT -> PresenceBadge(label = "Upcoming Shift", tone = PresenceTone.Neutral)
+                        TodayCardType.CLOCKED_IN_OVERTIME -> PresenceBadge(label = "Overtime in Progress", tone = PresenceTone.Purple, dot = true)
+                        TodayCardType.RUNNING_OVERTIME -> PresenceBadge(label = "Overtime Open", tone = PresenceTone.Warning, dot = true)
+                        TodayCardType.UPCOMING_OVERTIME -> PresenceBadge(label = "Upcoming Overtime", tone = PresenceTone.Neutral)
+                        TodayCardType.HOLIDAY -> PresenceBadge(label = "Public Holiday", tone = PresenceTone.Purple)
+                        TodayCardType.OFF_DAY -> PresenceBadge(label = "Rest Day", tone = PresenceTone.Neutral)
+                        TodayCardType.NO_WORK_SCHEDULED -> PresenceBadge(label = "No Shifts", tone = PresenceTone.Neutral)
                     }
                 }
                 Text(
@@ -726,10 +830,15 @@ fun EmployeeClockInTab(
                                     color = PresenceDesign.Muted
                                 )
                                 Text(
-                                    text = "±$accuracyMeters m",
+                                    text = if (state.location != null) "±$accuracyMeters m" else "Waiting...",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (accuracyMeters <= 20) PresenceDesign.Positive else PresenceDesign.CautionText
+                                    color = when {
+                                        state.location == null -> PresenceDesign.Muted
+                                        accuracyMeters <= 10 -> PresenceDesign.Positive
+                                        accuracyMeters <= 20 -> PresenceDesign.CautionText
+                                        else -> PresenceDesign.DangerText
+                                    }
                                 )
                             }
                         }
@@ -769,6 +878,7 @@ fun EmployeeClockInTab(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
+                        modifier = Modifier.weight(1f, fill = false),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
@@ -786,12 +896,19 @@ fun EmployeeClockInTab(
                             },
                             style = MaterialTheme.typography.bodySmall,
                             fontSize = 10.sp,
-                            color = PresenceDesign.Muted
+                            color = PresenceDesign.Muted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     OutlinedButton(
-                        onClick = onLocate,
+                        onClick = {
+                            pendingClockInAfterGps = false
+                            showGpsDialog = true
+                        },
                         shape = RoundedCornerShape(10.dp),
                         border = BorderStroke(1.dp, PresenceDesign.Line),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -802,7 +919,7 @@ fun EmployeeClockInTab(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Refresh,
+                                imageVector = Icons.Default.MyLocation,
                                 contentDescription = null,
                                 modifier = Modifier.size(13.dp),
                                 tint = PresenceDesign.Brand
@@ -820,24 +937,6 @@ fun EmployeeClockInTab(
             }
         }
 
-        // =====================================================================
-        // SECTION B: TODAY'S WORK - CONDITIONAL GREETING & WORK CARDS
-        // =====================================================================
-        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(
-                text = "Today's Work",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = PresenceDesign.Ink
-            )
-            Text(
-                text = "Scheduled shifts, overtime sessions, and off-day status for today.",
-                style = MaterialTheme.typography.bodySmall,
-                fontSize = 11.sp,
-                color = PresenceDesign.Muted
-            )
-        }
-
         // Resolve Unworked Earning Rules
         val holidayRule = state.unworkedRules.find { it.employeeId != null && it.dayType == "HOLIDAY" }
             ?: state.unworkedRules.find { it.dayType == "HOLIDAY" }
@@ -849,12 +948,30 @@ fun EmployeeClockInTab(
         val isApprovedLeaveToday = active?.status?.equals("LEAVE", ignoreCase = true) == true ||
             state.todayRecords.any { it.status.equals("LEAVE", ignoreCase = true) }
 
+        // =====================================================================
+        // SECTION: PENDING ACTIONS (UNHANDLED EVENTS)
+        // =====================================================================
         if (state.unhandledEvents.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    text = "Pending Actions (${state.unhandledEvents.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = PresenceDesign.Ink
+                )
+                Text(
+                    text = "Claim your off-day or holiday pay, confirm leave, or acknowledge missed shifts.",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 11.sp,
+                    color = PresenceDesign.Muted
+                )
+            }
             val currentEvent = state.unhandledEvents.first()
             val totalEvents = state.unhandledEvents.size
 
             AnimatedContent(
                 targetState = currentEvent,
+                contentKey = { it.id },
                 transitionSpec = {
                     (slideInHorizontally(initialOffsetX = { it }) + fadeIn() + scaleIn(initialScale = 0.92f))
                         .togetherWith(
@@ -863,6 +980,51 @@ fun EmployeeClockInTab(
                 },
                 label = "poker_card_transition"
             ) { event ->
+                val eventName = when (event.type) {
+                    "WEEKLY_OFF" -> "Weekly Off"
+                    "HOLIDAY" -> "Holiday"
+                    "LEAVE" -> "Leave"
+                    "ABSENT" -> "Missed Shift"
+                    else -> event.title
+                }
+
+                val buttonLabel = if (event.amount > 0) {
+                    "Claim ${Money.format(event.amount.toLong())} for $eventName"
+                } else {
+                    event.actionLabel.ifBlank {
+                        when (event.type) {
+                            "LEAVE" -> "Confirm Leave"
+                            "ABSENT" -> "Acknowledge Missed Shift"
+                            else -> "Claim $eventName"
+                        }
+                    }
+                }
+
+                val accentColor = when (event.type) {
+                    "WEEKLY_OFF" -> Color(0xFF059669)
+                    "HOLIDAY" -> Color(0xFF7C3AED)
+                    "LEAVE" -> Color(0xFFD97706)
+                    else -> Color(0xFF1E293B)
+                }
+                val borderColor = when (event.type) {
+                    "WEEKLY_OFF" -> Color(0xFF86EFAC)
+                    "HOLIDAY" -> Color(0xFFDDD6FE)
+                    "LEAVE" -> Color(0xFFFDE68A)
+                    else -> Color(0xFFFECDD3)
+                }
+                val headerGradient = when (event.type) {
+                    "WEEKLY_OFF" -> Brush.verticalGradient(listOf(Color(0xFFF0FDF4), Color(0xFFFFFFFF)))
+                    "HOLIDAY" -> Brush.verticalGradient(listOf(Color(0xFFFAF5FF), Color(0xFFFFFFFF)))
+                    "LEAVE" -> Brush.verticalGradient(listOf(Color(0xFFFFFBEB), Color(0xFFFFFFFF)))
+                    else -> Brush.verticalGradient(listOf(Color(0xFFFFF1F2), Color(0xFFFFFFFF)))
+                }
+                val (iconVector, iconBg, iconTint) = when (event.type) {
+                    "HOLIDAY" -> Triple(Icons.Default.Celebration, PresenceDesign.GrapeSoft, PresenceDesign.Grape)
+                    "WEEKLY_OFF" -> Triple(Icons.Default.Weekend, PresenceDesign.PositiveSoft, PresenceDesign.Positive)
+                    "LEAVE" -> Triple(Icons.Default.EventBusy, PresenceDesign.CautionSoft, PresenceDesign.CautionText)
+                    else -> Triple(Icons.Default.WarningAmber, PresenceDesign.DangerSoft, PresenceDesign.DangerText)
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -877,11 +1039,11 @@ fun EmployeeClockInTab(
                                 .offset(y = 12.dp)
                                 .graphicsLayer {
                                     alpha = 0.45f
-                                    rotationZ = -3f
+                                    rotationZ = -3.5f
                                 },
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(22.dp),
                             color = PresenceDesign.Surface,
-                            border = BorderStroke(1.dp, PresenceDesign.Line),
+                            border = BorderStroke(1.dp, PresenceDesign.Line.copy(alpha = 0.7f)),
                             shadowElevation = 2.dp
                         ) {}
                     }
@@ -892,91 +1054,269 @@ fun EmployeeClockInTab(
                                 .height(210.dp)
                                 .offset(y = 6.dp)
                                 .graphicsLayer {
-                                    alpha = 0.7f
-                                    rotationZ = 2f
+                                    alpha = 0.75f
+                                    rotationZ = 2.5f
                                 },
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(22.dp),
                             color = PresenceDesign.Surface,
                             border = BorderStroke(1.dp, PresenceDesign.Line),
-                            shadowElevation = 3.dp
+                            shadowElevation = 4.dp
                         ) {}
                     }
 
-                    PresenceCard(
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .graphicsLayer {
-                                shadowElevation = 8f
-                                shape = RoundedCornerShape(20.dp)
+                                shadowElevation = 10f
+                                shape = RoundedCornerShape(22.dp)
                                 clip = true
-                            }
+                            },
+                        shape = RoundedCornerShape(22.dp),
+                        color = Color.White,
+                        border = BorderStroke(1.5.dp, borderColor)
                     ) {
-                        Column(
-                            modifier = Modifier.padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(headerGradient)
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                modifier = Modifier.padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
+                                // Top Header Row: Card counter pill & date
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = accentColor.copy(alpha = 0.12f),
+                                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(6.dp)
+                                                    .clip(CircleShape)
+                                                    .background(accentColor)
+                                            )
+                                            Text(
+                                                text = "CARD 1 OF $totalEvents",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 10.sp,
+                                                color = accentColor,
+                                                letterSpacing = 0.5.sp
+                                            )
+                                        }
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = PresenceDesign.Surface,
+                                        border = BorderStroke(1.dp, PresenceDesign.Line)
+                                    ) {
+                                        Text(
+                                            text = event.date,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = PresenceDesign.Ink,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+
+                                // Center Row: Icon, Title, Subtitle & Earnings Chip
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(PresenceDesign.Brand)
-                                    )
-                                    Text(
-                                        text = "Action 1 of $totalEvents",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = PresenceDesign.Brand
-                                    )
+                                            .size(52.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(iconBg)
+                                            .border(1.dp, iconTint.copy(alpha = 0.2f), RoundedCornerShape(16.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = iconVector,
+                                            contentDescription = null,
+                                            tint = iconTint,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    }
+
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Text(
+                                            text = event.title,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = PresenceDesign.Ink,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = event.subtitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 12.sp,
+                                            color = PresenceDesign.Muted,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    if (event.amount > 0) {
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = Color(0xFFECFDF5),
+                                            border = BorderStroke(1.5.dp, Color(0xFF6EE7B7))
+                                        ) {
+                                            Text(
+                                                text = "+${Money.format(event.amount.toLong())}",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Black,
+                                                fontSize = 13.sp,
+                                                color = Color(0xFF047857),
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                            )
+                                        }
+                                    }
                                 }
 
-                                PresenceBadge(
-                                    label = event.date,
-                                    tone = PresenceTone.Neutral
+                                HorizontalDivider(
+                                    color = PresenceDesign.Line.copy(alpha = 0.6f),
+                                    thickness = 0.5.dp
                                 )
-                            }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                val (iconVector, iconBg, iconTint) = when (event.type) {
-                                    "HOLIDAY" -> Triple(Icons.Default.Celebration, PresenceDesign.GrapeSoft, PresenceDesign.Grape)
-                                    "WEEKLY_OFF" -> Triple(Icons.Default.Weekend, PresenceDesign.PositiveSoft, PresenceDesign.Positive)
-                                    "LEAVE" -> Triple(Icons.Default.EventBusy, PresenceDesign.CautionSoft, PresenceDesign.CautionText)
-                                    else -> Triple(Icons.Default.WarningAmber, PresenceDesign.DangerSoft, PresenceDesign.DangerText)
+                                // Action Button: Claim {amount} for {event}
+                                Button(
+                                    onClick = {
+                                        android.util.Log.d("ClockInTab", "Claim button clicked for event: ${event.id}")
+                                        onClaimUnhandledEvent(event)
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(50.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    enabled = !state.isClaimingEvent,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = accentColor,
+                                        contentColor = Color.White,
+                                        disabledContainerColor = accentColor.copy(alpha = 0.6f)
+                                    )
+                                ) {
+                                    if (state.isClaimingEvent) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            color = Color.White,
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = if (event.amount > 0) Icons.Default.Celebration else Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(19.dp)
+                                            )
+                                            Text(
+                                                text = buttonLabel,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 14.sp
+                                            )
+                                        }
+                                    }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
+        // =====================================================================
+        // SECTION B: TODAY'S WORK - CONDITIONAL GREETING & WORK CARDS
+        // =====================================================================
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                text = "Today's Work",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = PresenceDesign.Ink
+            )
+            Text(
+                text = when (todayCardType) {
+                    TodayCardType.CLOCKED_IN_SHIFT -> "Your regular shift is active and in progress."
+                    TodayCardType.RUNNING_SHIFT -> "Shift clock-in window is open now."
+                    TodayCardType.UPCOMING_SHIFT -> "Scheduled shift for later today."
+                    TodayCardType.CLOCKED_IN_OVERTIME -> "Your overtime session is active and in progress."
+                    TodayCardType.RUNNING_OVERTIME -> "Overtime clock-in window is open now."
+                    TodayCardType.UPCOMING_OVERTIME -> "Approved overtime session for later today."
+                    TodayCardType.HOLIDAY -> "Paid holiday status and earning rate for today."
+                    TodayCardType.OFF_DAY -> "Scheduled rest day and earning rate for today."
+                    TodayCardType.NO_WORK_SCHEDULED -> "No shifts or overtime scheduled for remaining hours today."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                fontSize = 11.sp,
+                color = PresenceDesign.Muted
+            )
+        }
+
+        when (todayCardType) {
+            // =============================================================
+            // CARD 1: SHIFT CARD (Clocked In, Running, or Upcoming)
+            // =============================================================
+            TodayCardType.CLOCKED_IN_SHIFT,
+            TodayCardType.RUNNING_SHIFT,
+            TodayCardType.UPCOMING_SHIFT -> {
+                PresenceCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        // Header Row: Work Title, Date, Premises, and Status Badge
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(iconBg),
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(PresenceDesign.BrandSoft),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = iconVector,
+                                        imageVector = Icons.Default.Schedule,
                                         contentDescription = null,
-                                        tint = iconTint,
-                                        modifier = Modifier.size(26.dp)
+                                        tint = PresenceDesign.Brand,
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
-
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                                ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(
-                                        text = event.title,
+                                        text = workTitle,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = PresenceDesign.Ink,
@@ -984,483 +1324,156 @@ fun EmployeeClockInTab(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = event.subtitle,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontSize = 12.sp,
-                                        color = PresenceDesign.Muted,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                if (event.amount > 0) {
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = PresenceDesign.PositiveSoft,
-                                        border = BorderStroke(1.dp, Color(0xFFA7F3D0))
-                                    ) {
-                                        Text(
-                                            text = "+${Money.format(event.amount.toLong())}",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = PresenceDesign.Positive,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            HorizontalDivider(
-                                color = PresenceDesign.Line,
-                                thickness = 0.5.dp
-                            )
-
-                            Button(
-                                onClick = { onClaimUnhandledEvent(event) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(14.dp),
-                                enabled = !state.isClaimingEvent,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = when (event.type) {
-                                        "ABSENT" -> PresenceDesign.Ink
-                                        else -> PresenceDesign.Brand
-                                    },
-                                    contentColor = Color.White
-                                )
-                            ) {
-                                if (state.isClaimingEvent) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.dp
-                                    )
-                                } else {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Text(
-                                            text = event.actionLabel.ifBlank { "Claim / Acknowledge" },
-                                            style = MaterialTheme.typography.labelLarge,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-        // CARD 1: Public Holiday Greeting Card
-        if (isTodayHoliday) {
-            PresenceCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(PresenceDesign.GrapeSoft),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Celebration,
-                                    contentDescription = null,
-                                    tint = PresenceDesign.Grape,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(
-                                    text = todayHoliday?.name?.takeIf { it.isNotBlank() } ?: "Public Holiday",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PresenceDesign.Ink
-                                )
-                                Text(
-                                    text = "$todayDayName, $todayDateFormatted • Paid Day Off",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 11.sp,
-                                    color = PresenceDesign.Grape,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-
-                        PresenceBadge(
-                            label = "Public Holiday",
-                            tone = PresenceTone.Purple
-                        )
-                    }
-
-                    HorizontalDivider(color = PresenceDesign.Line)
-
-                    Surface(
-                        color = PresenceDesign.GrapeSoft,
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color(0xFFDDD6FE)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Info,
-                                    contentDescription = null,
-                                    tint = PresenceDesign.Grape,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Text(
-                                    text = "Holiday Earning Rate:",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = PresenceDesign.GrapeText
-                                )
-                            }
-                            Text(
-                                text = "${Money.format(holidayPayInr)} / day",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = PresenceDesign.Grape
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // CARD 2: Weekly Off Greeting Card
-        if (isTodayOffDay && !isTodayHoliday) {
-            PresenceCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(PresenceDesign.BrandSoft),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.WavingHand,
-                                    contentDescription = null,
-                                    tint = PresenceDesign.Brand,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(
-                                    text = if (hasMatchingShiftToday) "Premises Weekly Off" else "My Weekly Off",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PresenceDesign.Ink
-                                )
-                                Text(
-                                    text = "$todayDayName, $todayDateFormatted • Scheduled Rest Day",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 11.sp,
-                                    color = PresenceDesign.Brand,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-
-                        PresenceBadge(
-                            label = "Weekly Off",
-                            tone = PresenceTone.Neutral
-                        )
-                    }
-
-                    HorizontalDivider(color = PresenceDesign.Line)
-
-                    Surface(
-                        color = PresenceDesign.Workspace,
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, PresenceDesign.Line),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Info,
-                                    contentDescription = null,
-                                    tint = PresenceDesign.Brand,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Text(
-                                    text = "Weekly Off Earning Rate:",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = PresenceDesign.BodyText
-                                )
-                            }
-                            Text(
-                                text = "${Money.format(weeklyOffPayInr)} / day",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = PresenceDesign.Brand
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // CARDS 3 & 4: SHIFT CARD and OVERTIME CARD
-        if (hasScheduledWork) {
-            PresenceCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    // Header Row: Work Title, Date, Premises, and Status Badge
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f, fill = false)) {
-                            Text(
-                                text = workTitle,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = PresenceDesign.Ink,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "$workDayName, $workDateFormatted • ${if (isOvertimeWork) "Overtime" else "Shift"} • $premisesName",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontSize = 11.sp,
-                                color = PresenceDesign.Muted
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        when {
-                            isClockedIn -> PresenceBadge(label = "In Progress", tone = PresenceTone.Success, dot = true)
-                            isSessionRunningNow -> PresenceBadge(label = "Window Open", tone = PresenceTone.Warning, dot = true)
-                            else -> PresenceBadge(label = "Upcoming", tone = PresenceTone.Neutral)
-                        }
-                    }
-
-                    HorizontalDivider(color = PresenceDesign.Line)
-
-                    // SECTION A: TIME SECTION (Scheduled Window, Clock In Time, Clock Out Time, Current Status)
-                    Text(
-                        text = "Time Breakdown",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = PresenceDesign.Ink
-                    )
-
-                    Surface(
-                        color = PresenceDesign.Workspace,
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, PresenceDesign.Line),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text("Scheduled Window", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = PresenceDesign.Muted)
-                                    Text(
-                                        text = "${Dates.formatTime(startTimeRaw)} – ${Dates.formatTime(endTimeRaw)}",
+                                        text = "$todayDayName, $todayDateFormatted • Scheduled Shift • $premisesName",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = PresenceDesign.Ink
-                                    )
-                                }
-                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text("Clock-In Time", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = PresenceDesign.Muted)
-                                    Text(
-                                        text = if (isClockedIn) "${Dates.formatTime(active?.clockIn)} (${if (calculatedLateMinutes > 0) "$calculatedLateMinutes mins late" else "On time"})" else if (isApprovedLeaveToday) "Approved Leave" else "Not Clocked In",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isClockedIn) PresenceDesign.Positive else if (isApprovedLeaveToday) PresenceDesign.Brand else PresenceDesign.Danger
+                                        color = PresenceDesign.Muted
                                     )
                                 }
                             }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text("Clock-Out Time", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = PresenceDesign.Muted)
-                                    Text(
-                                        text = if (active?.clockOut != null) Dates.formatTime(active.clockOut) else if (isClockedIn) "Pending Clock Out" else "—",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = PresenceDesign.Ink
-                                    )
-                                }
-                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text("Evaluated Status", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = PresenceDesign.Muted)
-                                    Text(
-                                        text = when (currentStatus) {
-                                            "PRESENT" -> "Present"
-                                            "HALF_DAY" -> "Half-Day"
-                                            "LEAVE" -> "Approved Leave"
-                                            "NOT_CLOCKED_IN" -> "Not Clocked In"
-                                            "UPCOMING" -> "Upcoming"
-                                            else -> "Absent"
-                                        },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = when (currentStatus) {
-                                            "PRESENT" -> PresenceDesign.Positive
-                                            "HALF_DAY" -> PresenceDesign.CautionText
-                                            "LEAVE" -> PresenceDesign.Brand
-                                            "NOT_CLOCKED_IN" -> PresenceDesign.CautionText
-                                            "UPCOMING" -> PresenceDesign.Brand
-                                            else -> PresenceDesign.Danger
-                                        }
-                                    )
-                                }
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            when (todayCardType) {
+                                TodayCardType.CLOCKED_IN_SHIFT -> PresenceBadge(label = "Shift in Progress", tone = PresenceTone.Success, dot = true)
+                                TodayCardType.RUNNING_SHIFT -> PresenceBadge(label = "Shift Open", tone = PresenceTone.Warning, dot = true)
+                                else -> PresenceBadge(label = "Upcoming Shift", tone = PresenceTone.Neutral)
                             }
                         }
-                    }
 
-                    HorizontalDivider(color = PresenceDesign.Line)
+                        HorizontalDivider(color = PresenceDesign.Line)
 
-                    // SECTION B: ATTENDANCE STATUS TIMELINE SECTION (Delivery Timeline Style)
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // SECTION A: TIME SECTION (Scheduled Window, Clock In Time, Clock Out Time, Current Status)
                         Text(
-                            text = "Attendance Delivery Timeline",
+                            text = "Time Breakdown",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = PresenceDesign.Ink
                         )
 
-                        AttendanceTimelineView(
-                            isClockedIn = isClockedIn,
-                            isSessionRunningNow = isTimeWindowValid,
-                            isApprovedLeave = isApprovedLeaveToday,
-                            clockInTime = if (isClockedIn) active?.clockIn else null,
-                            insideCount = insideCount,
-                            outsideCount = outsideCount,
-                            isCompleted = active?.clockOut != null
-                        )
-                    }
-
-                    HorizontalDivider(color = PresenceDesign.Line)
-
-                    // SECTION C: PAY RATES SECTION (Shift 4 outcome chips with active highlighted / Overtime compensation breakdown)
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            color = PresenceDesign.Workspace,
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, PresenceDesign.Line),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Scheduled Window", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = PresenceDesign.Muted)
+                                        Text(
+                                            text = "${Dates.formatTime(shiftStartTime)} – ${Dates.formatTime(shiftEndTime)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PresenceDesign.Ink
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Clock-In Time", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = PresenceDesign.Muted)
+                                        Text(
+                                            text = if (isClockedIn) "${Dates.formatTime(active?.clockIn)} (${if (calculatedLateMinutes > 0) "$calculatedLateMinutes mins late" else "On time"})" else if (isApprovedLeaveToday) "Approved Leave" else "Not Clocked In",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isClockedIn) PresenceDesign.Positive else if (isApprovedLeaveToday) PresenceDesign.Brand else PresenceDesign.Danger
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Clock-Out Time", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = PresenceDesign.Muted)
+                                        Text(
+                                            text = if (active?.clockOut != null) Dates.formatTime(active.clockOut) else if (isClockedIn) "Pending Clock Out" else "—",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PresenceDesign.Ink
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Evaluated Status", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = PresenceDesign.Muted)
+                                        Text(
+                                            text = when (currentStatus) {
+                                                "PRESENT" -> "Present"
+                                                "HALF_DAY" -> "Half-Day"
+                                                "LEAVE" -> "Approved Leave"
+                                                "NOT_CLOCKED_IN" -> "Not Clocked In"
+                                                "UPCOMING" -> "Upcoming"
+                                                else -> "Absent"
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = when (currentStatus) {
+                                                "PRESENT" -> PresenceDesign.Positive
+                                                "HALF_DAY" -> PresenceDesign.CautionText
+                                                "LEAVE" -> PresenceDesign.Brand
+                                                "NOT_CLOCKED_IN" -> PresenceDesign.CautionText
+                                                "UPCOMING" -> PresenceDesign.Brand
+                                                else -> PresenceDesign.Danger
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(color = PresenceDesign.Line)
+
+                        // SECTION B: ATTENDANCE STATUS TIMELINE SECTION
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
-                                text = if (isOvertimeWork) "Overtime Pay & Session Details" else "Shift Earning Rates",
+                                text = "Attendance Delivery Timeline",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = PresenceDesign.Ink
                             )
-                            Text(
-                                text = if (isOvertimeWork) "Agreed fixed sum for session" else "Payment as per attendance status",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontSize = 10.sp,
-                                color = PresenceDesign.Muted
+
+                            AttendanceTimelineView(
+                                isClockedIn = isClockedIn,
+                                isSessionRunningNow = isShiftWindowValid,
+                                isApprovedLeave = isApprovedLeaveToday,
+                                clockInTime = if (isClockedIn) active?.clockIn else null,
+                                insideCount = insideCount,
+                                outsideCount = outsideCount,
+                                isCompleted = active?.clockOut != null
                             )
                         }
 
-                        if (isOvertimeWork) {
+                        HorizontalDivider(color = PresenceDesign.Line)
+
+                        // SECTION C: SHIFT EARNING RATES
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                PayRuleChip(
-                                    modifier = Modifier.weight(1.2f),
-                                    label = "Agreed Payout",
-                                    amountText = Money.format(overtimePayInr),
-                                    isSelected = true,
-                                    activeBgColor = PresenceDesign.PositiveSoft,
-                                    activeTextColor = PresenceDesign.Positive,
-                                    activeBorderColor = Color(0xFFA7F3D0)
+                                Text(
+                                    text = "Shift Earning Rates",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PresenceDesign.Ink
                                 )
-                                PayRuleChip(
-                                    modifier = Modifier.weight(1f),
-                                    label = "Planned",
-                                    amountText = "${activeOvertime?.plannedMinutes ?: 0} min",
-                                    isSelected = false,
-                                    activeBgColor = PresenceDesign.Workspace,
-                                    activeTextColor = PresenceDesign.BodyText,
-                                    activeBorderColor = PresenceDesign.Line
-                                )
-                                PayRuleChip(
-                                    modifier = Modifier.weight(1f),
-                                    label = "Status",
-                                    amountText = activeOvertime?.status ?: "Approved",
-                                    isSelected = false,
-                                    activeBgColor = PresenceDesign.BrandSoft,
-                                    activeTextColor = PresenceDesign.BrandDark,
-                                    activeBorderColor = Color(0xFFC7D2FE)
+                                Text(
+                                    text = "Payment as per attendance status",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 10.sp,
+                                    color = PresenceDesign.Muted
                                 )
                             }
-                        } else {
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -1516,142 +1529,962 @@ fun EmployeeClockInTab(
                                 )
                             }
                         }
-                    }
 
-                    HorizontalDivider(color = PresenceDesign.Line)
+                        HorizontalDivider(color = PresenceDesign.Line)
 
-                    // GPS Monitoring Checks
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "GPS Monitoring Checks",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = PresenceDesign.Ink
-                        )
-                        PresenceBadge(
-                            label = if (isClockedIn) "Active Monitoring ($insideCount inside)" else "Inactive",
-                            tone = if (isClockedIn) PresenceTone.Success else PresenceTone.Neutral,
-                            dot = isClockedIn
-                        )
-                    }
+                        // GPS Monitoring Checks
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "GPS Monitoring Checks",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PresenceDesign.Ink
+                            )
+                            PresenceBadge(
+                                label = if (isClockedIn) "Active Monitoring ($insideCount inside)" else "Inactive (Starts at Clock-In)",
+                                tone = if (isClockedIn) PresenceTone.Success else PresenceTone.Neutral,
+                                dot = isClockedIn
+                            )
+                        }
 
-                    // Action Buttons (Clock In / Clock Out)
-                    if (!isClockedIn) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = { showCapture = true },
-                                enabled = canClockIn,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(50.dp),
-                                shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = PresenceDesign.Brand,
-                                    disabledContainerColor = Color(0xFFE2E8F0)
-                                ),
-                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Text(clockInButtonText, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                }
-                            }
-
-                            if (!canClockIn) {
-                                Surface(
-                                    color = PresenceDesign.CautionSoft,
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = BorderStroke(1.dp, Color(0xFFFDE68A)),
-                                    modifier = Modifier.fillMaxWidth()
+                        // Action Buttons (Clock In / Clock Out)
+                        if (!isClockedIn) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        if (!isAccuracyValid || !isGeofenceValid) {
+                                            pendingClockInAfterGps = true
+                                            showGpsDialog = true
+                                        } else {
+                                            showCapture = true
+                                        }
+                                    },
+                                    enabled = canClockIn,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(50.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = PresenceDesign.Brand,
+                                        disabledContainerColor = Color(0xFFE2E8F0)
+                                    ),
+                                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.Warning,
+                                            imageVector = Icons.Default.CheckCircle,
                                             contentDescription = null,
-                                            tint = PresenceDesign.CautionText,
-                                            modifier = Modifier.size(18.dp)
+                                            modifier = Modifier.size(20.dp)
                                         )
-                                        val guidanceReason = when {
-                                            !hasScheduledWork -> "No shift or overtime is scheduled."
-                                            !isSameDay -> "Shift is scheduled for $workDayName ($workDateFormatted). Clock-in opens on shift date."
-                                            !isGeofenceValid -> "Move inside premises (${distanceMeters ?: "—"} m). Radius limit is $allowedRadiusMeters m to clock in."
-                                            !isTimeWindowValid -> "Shift clock-in window is currently inactive."
-                                            state.isSubmitting -> "Clocking in..."
-                                            else -> "Clock-in is unavailable right now."
+                                        Text(clockInButtonText, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    }
+                                }
+
+                                if (!canClockIn) {
+                                    Surface(
+                                        color = PresenceDesign.CautionSoft,
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Warning,
+                                                contentDescription = null,
+                                                tint = PresenceDesign.CautionText,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            val guidanceReason = when {
+                                                state.location == null -> "Waiting for GPS fix. Tap 'Update GPS' or 'Clock In' to calibrate."
+                                                !isAccuracyValid -> "GPS accuracy is ±${accuracyMeters}m (Target: < 10m). Tap to calibrate."
+                                                !isGeofenceValid -> "Move inside premises (${distanceMeters ?: "—"} m). Radius limit is $allowedRadiusMeters m to clock in."
+                                                !isShiftWindowValid -> "Shift clock-in window is currently inactive."
+                                                state.isSubmitting -> "Clocking in..."
+                                                else -> "Clock-in is unavailable right now."
+                                            }
+                                            Text(
+                                                text = guidanceReason,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = PresenceDesign.CautionText
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Surface(
+                                    color = PresenceDesign.PositiveSoft,
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(8.dp)
+                                                    .clip(CircleShape)
+                                                    .background(PresenceDesign.Positive)
+                                            )
+                                            Text(
+                                                text = "Shift in Progress",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = PresenceDesign.Positive,
+                                                fontSize = 13.sp
+                                            )
                                         }
                                         Text(
-                                            text = guidanceReason,
+                                            text = "GPS Checks: $insideCount inside",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = PresenceDesign.Positive,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+
+                                Button(
+                                    onClick = onClockOut,
+                                    enabled = !state.isSubmitting,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = PresenceDesign.Danger,
+                                        contentColor = Color.White
+                                    ),
+                                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text("Clock Out", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // =============================================================
+            // CARD 2: OVERTIME CARD (Clocked In, Running, or Upcoming)
+            // =============================================================
+            TodayCardType.CLOCKED_IN_OVERTIME,
+            TodayCardType.RUNNING_OVERTIME,
+            TodayCardType.UPCOMING_OVERTIME -> {
+                PresenceCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        // Header Row: Overtime Title, Date, Premises, and Status Badge
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(PresenceDesign.GrapeSoft),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Weekend,
+                                        contentDescription = null,
+                                        tint = PresenceDesign.Grape,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = workTitle,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PresenceDesign.Ink,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "$todayDayName, $todayDateFormatted • Overtime Session • $premisesName",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 11.sp,
+                                        color = PresenceDesign.GrapeText
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            when (todayCardType) {
+                                TodayCardType.CLOCKED_IN_OVERTIME -> PresenceBadge(label = "Overtime in Progress", tone = PresenceTone.Purple, dot = true)
+                                TodayCardType.RUNNING_OVERTIME -> PresenceBadge(label = "Overtime Open", tone = PresenceTone.Warning, dot = true)
+                                else -> PresenceBadge(label = "Upcoming Overtime", tone = PresenceTone.Neutral)
+                            }
+                        }
+
+                        HorizontalDivider(color = PresenceDesign.Line)
+
+                        // SECTION A: TIME SECTION (Scheduled Window, Clock In Time, Clock Out Time, Current Status)
+                        Text(
+                            text = "Time Breakdown",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = PresenceDesign.Ink
+                        )
+
+                        Surface(
+                            color = PresenceDesign.Workspace,
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, PresenceDesign.Line),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Scheduled Window", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = PresenceDesign.Muted)
+                                        Text(
+                                            text = "${Dates.formatTime(otStartTime)} – ${Dates.formatTime(otEndTime)}",
                                             style = MaterialTheme.typography.bodySmall,
                                             fontSize = 11.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = PresenceDesign.CautionText
+                                            fontWeight = FontWeight.Bold,
+                                            color = PresenceDesign.Ink
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Clock-In Time", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = PresenceDesign.Muted)
+                                        Text(
+                                            text = if (isClockedIn) Dates.formatTime(active?.clockIn) else "Not Clocked In",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isClockedIn) PresenceDesign.Grape else PresenceDesign.Danger
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Clock-Out Time", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = PresenceDesign.Muted)
+                                        Text(
+                                            text = if (active?.clockOut != null) Dates.formatTime(active.clockOut) else if (isClockedIn) "Pending Clock Out" else "—",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PresenceDesign.Ink
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Evaluated Status", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = PresenceDesign.Muted)
+                                        Text(
+                                            text = if (isClockedIn) "In Progress" else if (isOvertimeWindowValid) "Window Open" else "Scheduled",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isClockedIn) PresenceDesign.Grape else PresenceDesign.Brand
                                         )
                                     }
                                 }
                             }
                         }
-                    } else {
-                        Surface(
-                            color = PresenceDesign.PositiveSoft,
-                            shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
+
+                        HorizontalDivider(color = PresenceDesign.Line)
+
+                        // SECTION B: ATTENDANCE STATUS TIMELINE SECTION
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "Attendance Delivery Timeline",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PresenceDesign.Ink
+                            )
+
+                            AttendanceTimelineView(
+                                isClockedIn = isClockedIn,
+                                isSessionRunningNow = isOvertimeWindowValid,
+                                isApprovedLeave = false,
+                                clockInTime = if (isClockedIn) active?.clockIn else null,
+                                insideCount = insideCount,
+                                outsideCount = outsideCount,
+                                isCompleted = active?.clockOut != null
+                            )
+                        }
+
+                        HorizontalDivider(color = PresenceDesign.Line)
+
+                        // SECTION C: OVERTIME PAY & SESSION DETAILS
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Overtime Pay & Session Details",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PresenceDesign.Ink
+                                )
+                                Text(
+                                    text = "Agreed fixed sum for session",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 10.sp,
+                                    color = PresenceDesign.Muted
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                PayRuleChip(
+                                    modifier = Modifier.weight(1.2f),
+                                    label = "Agreed Payout",
+                                    amountText = Money.format(overtimePayInr),
+                                    isSelected = true,
+                                    activeBgColor = PresenceDesign.PositiveSoft,
+                                    activeTextColor = PresenceDesign.Positive,
+                                    activeBorderColor = Color(0xFFA7F3D0)
+                                )
+                                PayRuleChip(
+                                    modifier = Modifier.weight(1f),
+                                    label = "Planned",
+                                    amountText = "${activeOvertime?.plannedMinutes ?: 0} min",
+                                    isSelected = false,
+                                    activeBgColor = PresenceDesign.Workspace,
+                                    activeTextColor = PresenceDesign.BodyText,
+                                    activeBorderColor = PresenceDesign.Line
+                                )
+                                PayRuleChip(
+                                    modifier = Modifier.weight(1f),
+                                    label = "Status",
+                                    amountText = activeOvertime?.status ?: "Approved",
+                                    isSelected = false,
+                                    activeBgColor = PresenceDesign.GrapeSoft,
+                                    activeTextColor = PresenceDesign.GrapeText,
+                                    activeBorderColor = Color(0xFFDDD6FE)
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(color = PresenceDesign.Line)
+
+                        // GPS Monitoring Checks
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "GPS Monitoring Checks",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PresenceDesign.Ink
+                            )
+                            PresenceBadge(
+                                label = if (isClockedIn) "Active Monitoring ($insideCount inside)" else "Inactive (Starts at Clock-In)",
+                                tone = if (isClockedIn) PresenceTone.Purple else PresenceTone.Neutral,
+                                dot = isClockedIn
+                            )
+                        }
+
+                        // Action Buttons (Clock In / Clock Out)
+                        if (!isClockedIn) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        if (!isAccuracyValid || !isGeofenceValid) {
+                                            pendingClockInAfterGps = true
+                                            showGpsDialog = true
+                                        } else {
+                                            showCapture = true
+                                        }
+                                    },
+                                    enabled = canClockIn,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(50.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = PresenceDesign.Grape,
+                                        disabledContainerColor = Color(0xFFE2E8F0)
+                                    ),
+                                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Text("Clock In (Overtime)", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    }
+                                }
+
+                                if (!canClockIn) {
+                                    Surface(
+                                        color = PresenceDesign.CautionSoft,
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Warning,
+                                                contentDescription = null,
+                                                tint = PresenceDesign.CautionText,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            val guidanceReason = when {
+                                                state.location == null -> "Waiting for GPS fix. Tap 'Update GPS' or 'Clock In' to calibrate."
+                                                !isAccuracyValid -> "GPS accuracy is ±${accuracyMeters}m (Target: < 10m). Tap to calibrate."
+                                                !isGeofenceValid -> "Move inside premises (${distanceMeters ?: "—"} m). Radius limit is $allowedRadiusMeters m to clock in."
+                                                !isOvertimeWindowValid -> "Overtime clock-in window is currently inactive."
+                                                state.isSubmitting -> "Clocking in..."
+                                                else -> "Clock-in is unavailable right now."
+                                            }
+                                            Text(
+                                                text = guidanceReason,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = PresenceDesign.CautionText
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Surface(
+                                    color = PresenceDesign.GrapeSoft,
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.dp, Color(0xFFDDD6FE)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(8.dp)
+                                                    .clip(CircleShape)
+                                                    .background(PresenceDesign.Grape)
+                                            )
+                                            Text(
+                                                text = "Overtime in Progress",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = PresenceDesign.Grape,
+                                                fontSize = 13.sp
+                                            )
+                                        }
+                                        Text(
+                                            text = "GPS Checks: $insideCount inside",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = PresenceDesign.GrapeText,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+
+                                Button(
+                                    onClick = onClockOut,
+                                    enabled = !state.isSubmitting,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = PresenceDesign.Danger,
+                                        contentColor = Color.White
+                                    ),
+                                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text("Clock Out", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // =============================================================
+            // CARD 3: PUBLIC HOLIDAY (Priority 3)
+            // =============================================================
+            TodayCardType.HOLIDAY -> {
+                PresenceCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(PresenceDesign.GrapeSoft),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Celebration,
+                                        contentDescription = null,
+                                        tint = PresenceDesign.Grape,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = todayHoliday?.name?.takeIf { it.isNotBlank() } ?: "Public Holiday",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PresenceDesign.Ink
+                                    )
+                                    Text(
+                                        text = "$todayDayName, $todayDateFormatted • Paid Public Holiday",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 11.sp,
+                                        color = PresenceDesign.Grape,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+
+                            PresenceBadge(
+                                label = "Paid Holiday",
+                                tone = PresenceTone.Purple
+                            )
+                        }
+
+                        HorizontalDivider(color = PresenceDesign.Line)
+
+                        Surface(
+                            color = PresenceDesign.GrapeSoft,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color(0xFFDDD6FE)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(PresenceDesign.Positive)
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = PresenceDesign.Grape,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                     Text(
-                                        text = "Shift in Progress",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = PresenceDesign.Positive,
-                                        fontSize = 13.sp
+                                        text = "Holiday Earning Rate:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = PresenceDesign.GrapeText
                                     )
                                 }
                                 Text(
-                                    text = "GPS Checks: $insideCount inside",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = PresenceDesign.Positive,
-                                    fontSize = 11.sp
+                                    text = "${Money.format(holidayPayInr)} / day",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = PresenceDesign.Grape
+                                )
+                            }
+                        }
+
+                        Surface(
+                            color = PresenceDesign.Workspace,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, PresenceDesign.Line.copy(alpha = 0.7f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = PresenceDesign.Muted,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "Today is a designated paid public holiday. Regular shifts are not scheduled for today, and holiday pay applies per company policy. If your team requires special holiday work, your manager can assign an Overtime session.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    color = PresenceDesign.Muted,
+                                    lineHeight = 15.sp
                                 )
                             }
                         }
                     }
                 }
             }
-        }
+
+            // =============================================================
+            // CARD 5: WEEKLY OFF / REST DAY (Priority 4)
+            // =============================================================
+            TodayCardType.OFF_DAY -> {
+                PresenceCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(PresenceDesign.BrandSoft),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Weekend,
+                                        contentDescription = null,
+                                        tint = PresenceDesign.Brand,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = "Weekly Off",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PresenceDesign.Ink
+                                    )
+                                    Text(
+                                        text = "$todayDayName, $todayDateFormatted • Scheduled Rest Day",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 11.sp,
+                                        color = PresenceDesign.Brand,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+
+                            PresenceBadge(
+                                label = "Rest Day",
+                                tone = PresenceTone.Neutral
+                            )
+                        }
+
+                        HorizontalDivider(color = PresenceDesign.Line)
+
+                        Surface(
+                            color = PresenceDesign.Workspace,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, PresenceDesign.Line),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = PresenceDesign.Brand,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = "Weekly Off Earning Rate:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = PresenceDesign.BodyText
+                                    )
+                                }
+                                Text(
+                                    text = "${Money.format(weeklyOffPayInr)} / day",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = PresenceDesign.Brand
+                                )
+                            }
+                        }
+
+                        Surface(
+                            color = PresenceDesign.Workspace,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, PresenceDesign.Line.copy(alpha = 0.7f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = PresenceDesign.Muted,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "Today is your scheduled weekly rest day. Take time to relax and recharge! If unscheduled work is required, an Overtime session can be assigned by your manager.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    color = PresenceDesign.Muted,
+                                    lineHeight = 15.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // =============================================================
+            // CARD 6: NO WORK SCHEDULED TODAY (Empty Card)
+            // =============================================================
+            TodayCardType.NO_WORK_SCHEDULED -> {
+                PresenceCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(Color(0xFFF1F5F9)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.EventBusy,
+                                        contentDescription = null,
+                                        tint = Color(0xFF64748B),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = "No Work Scheduled Today",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PresenceDesign.Ink
+                                    )
+                                    Text(
+                                        text = "$todayDayName, $todayDateFormatted • Normal Working Day",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 11.sp,
+                                        color = PresenceDesign.Muted
+                                    )
+                                }
+                            }
+
+                            PresenceBadge(
+                                label = "No Shifts",
+                                tone = PresenceTone.Neutral
+                            )
+                        }
+
+                        HorizontalDivider(color = PresenceDesign.Line)
+
+                        Surface(
+                            color = PresenceDesign.Workspace,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, PresenceDesign.Line.copy(alpha = 0.7f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = PresenceDesign.Muted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "You do not have any regular shifts scheduled for today, and no overtime is assigned in the next hours. If unscheduled work is required, your manager can assign an Overtime session.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.5.sp,
+                                    color = PresenceDesign.BodyText,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+
+                        // Next Scheduled Shift Hint (if any in upcoming schedule)
+                        val nextUpcoming = upcomingSchedule.firstOrNull { !it.isHoliday }
+                        if (nextUpcoming != null) {
+                            Surface(
+                                color = Color(0xFFF0FDF4),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Schedule,
+                                            contentDescription = null,
+                                            tint = Color(0xFF16A34A),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Column {
+                                            Text(
+                                                text = "Next: ${nextUpcoming.title} (${nextUpcoming.dayName}, ${nextUpcoming.dateFormatted})",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF166534),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = nextUpcoming.scheduledWindow,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontSize = 10.sp,
+                                                color = Color(0xFF15803D)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(6.dp))
+
+                                    Text(
+                                        text = if (nextUpcoming.isOvertime) Money.format(nextUpcoming.agreedOvertimePay) else Money.format(nextUpcoming.presentPay),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF166534)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // =====================================================================
@@ -1740,7 +2573,7 @@ fun EmployeeClockInTab(
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                upcomingSchedule.take(4).forEach { item ->
+                upcomingSchedule.take(7).forEach { item ->
                     Surface(
                         color = Color.White,
                         shape = RoundedCornerShape(14.dp),
@@ -1910,7 +2743,8 @@ fun EmployeeClockInTab(
 
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         StatusEarningMiniChip(
                                             modifier = Modifier.weight(1f),
@@ -2088,8 +2922,31 @@ fun EmployeeClockInTab(
             }
         }
 
+        if (showGpsDialog) {
+            GpsAccuracyDialog(
+                targetAccuracyMeters = 10f,
+                premisesLatitude = state.premisesLatitude,
+                premisesLongitude = state.premisesLongitude,
+                premisesRadiusMeters = state.premisesRadiusMeters,
+                onLocationAcquired = { loc ->
+                    onUpdateLocation(loc)
+                    showGpsDialog = false
+                    if (pendingClockInAfterGps) {
+                        pendingClockInAfterGps = false
+                        showCapture = true
+                    }
+                },
+                onDismiss = {
+                    showGpsDialog = false
+                    pendingClockInAfterGps = false
+                }
+            )
+        }
+
         if (showCapture) {
-            val targetOvertimeId = active?.overtimeId ?: nextSession?.overtimeId ?: todayOvertime?.id
+            val targetOvertimeId = if (isOvertimeWork) {
+                active?.overtimeId ?: todayOvertime?.id ?: nextSession?.overtimeId
+            } else null
             FaceCaptureDialog(
                 engine = engine,
                 mode = "VERIFY",
@@ -2098,12 +2955,14 @@ fun EmployeeClockInTab(
                 accuracyMeters = accuracyMeters,
                 onCapturedSingle = { embedding ->
                     onFaceCaptured(embedding)
-                    onClockIn(targetOvertimeId)
+                    onClockIn(targetOvertimeId, embedding)
                     showCapture = false
                 },
                 onDismiss = { showCapture = false }
             )
         }
+
+        Spacer(modifier = Modifier.height(80.dp))
     }
 }
 
@@ -2122,7 +2981,7 @@ private fun AttendanceTimelineView(
             .fillMaxWidth()
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
         TimelineStep(
             stepNumber = "1",
@@ -2240,14 +3099,16 @@ private fun TimelineStep(
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF171A34),
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodySmall,
             fontSize = 9.sp,
             color = if (tone == PresenceTone.Danger) Color(0xFFDC2626) else Color(0xFF747895),
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -2256,6 +3117,7 @@ private fun TimelineStep(
 private fun TimelineConnector(isDone: Boolean) {
     Box(
         modifier = Modifier
+            .padding(top = 11.dp)
             .width(16.dp)
             .height(2.dp)
             .background(if (isDone) Color(0xFF16A34A) else Color(0xFFE5E7EB))

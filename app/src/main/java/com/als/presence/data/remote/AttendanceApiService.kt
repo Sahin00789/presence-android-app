@@ -37,6 +37,11 @@ interface AttendanceApiService {
         @Body request: ClockInRequest
     ): Response<AttendanceRecordDto>
 
+    @POST("api/v1/attendance/clock-out")
+    suspend fun clockOut(
+        @Body request: ClockOutRequest
+    ): Response<ClockOutResponseDto>
+
     @GET("api/v1/live-monitor/presence")
     suspend fun getTodayLocationPresence(
         @Query("premisesId") premisesId: String? = null,

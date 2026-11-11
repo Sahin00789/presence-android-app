@@ -436,6 +436,15 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    fun updateGpsLocation(gps: GpsLocation) {
+        viewModelScope.launch {
+            _gpsLocationState.value = UiState.Success(gps)
+            _reverseGeocodeState.value = null
+            val rev = locationManager.reverseGeocode(gps.latitude, gps.longitude)
+            _reverseGeocodeState.value = rev
+        }
+    }
+
     fun updateProfile(fullName: String? = null, phone: String? = null, avatarBase64: String? = null) {
         viewModelScope.launch {
             _updateProfileState.value = UiState.Loading

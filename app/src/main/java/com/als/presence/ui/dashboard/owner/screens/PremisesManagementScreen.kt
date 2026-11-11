@@ -113,6 +113,7 @@ fun PremisesManagementScreen(
             premises = target,
             locationState = locationAddressState,
             onFetchGpsAndAddress = viewModel::fetchCurrentGpsAndAddress,
+            onGpsLocationAcquired = viewModel::setGpsLocationAndAddress,
             onDismiss = {
                 editTarget = null
                 viewModel.clearLocationAddressState()

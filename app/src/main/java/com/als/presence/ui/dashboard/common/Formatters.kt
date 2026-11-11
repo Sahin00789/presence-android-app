@@ -291,7 +291,7 @@ object Dates {
         startTimeRaw: String?,
         endTimeRaw: String?,
         bufferMinutesBeforeStart: Long = 120L,
-        bufferMinutesAfterEnd: Long = 120L
+        bufferMinutesAfterEnd: Long = 720L
     ): Boolean {
         if (startTimeRaw.isNullOrBlank() || endTimeRaw.isNullOrBlank()) {
             return true
