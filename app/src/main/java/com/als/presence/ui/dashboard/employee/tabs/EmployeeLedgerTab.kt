@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.als.presence.core.common.UiState
+import com.als.presence.core.designsystem.LocalScreenSizeInfo
 import com.als.presence.core.designsystem.PresenceDesign
 import com.als.presence.data.model.MonthlyEarningLedgerResponseDto
 import com.als.presence.data.model.MyOverallPayrollSummaryDto
@@ -91,14 +92,15 @@ fun EmployeeLedgerTab(
 
     val monthName = selectedMonth.month.name.lowercase().replaceFirstChar { it.uppercase() }
     val monthYearLabel = "$monthName ${selectedMonth.year}"
+    val screenInfo = LocalScreenSizeInfo.current
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(horizontal = 14.dp)
-            .padding(top = 10.dp, bottom = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = screenInfo.horizontalScreenPadding)
+            .padding(top = if (screenInfo.isVeryCompact) 6.dp else 10.dp, bottom = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 8.dp else 10.dp)
     ) {
         // Header
         Row(

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package com.als.presence.ui.dashboard.employee.tabs
 
 import androidx.compose.foundation.BorderStroke
@@ -5,6 +7,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.als.presence.core.common.UiState
+import com.als.presence.core.designsystem.LocalScreenSizeInfo
 import com.als.presence.core.designsystem.SecondaryEmerald
 import com.als.presence.data.model.AttendanceRecordDto
 import com.als.presence.data.model.OvertimeDto
@@ -110,14 +115,15 @@ fun personalAttendanceHistoryTab(
 
     val records = (recordsState as? UiState.Success)?.data.orEmpty()
     val scrollModifier = if (isScrollable) Modifier.verticalScroll(scrollState) else Modifier
+    val screenInfo = LocalScreenSizeInfo.current
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .then(scrollModifier)
-            .padding(horizontal = if (isScrollable) 16.dp else 0.dp)
+            .padding(horizontal = if (isScrollable) screenInfo.horizontalScreenPadding else 0.dp)
             .padding(top = if (isScrollable) 16.dp else 0.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 10.dp else 14.dp)
     ) {
         SectionHeader(
             title = "Personal Workspace",
@@ -131,7 +137,7 @@ fun personalAttendanceHistoryTab(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 8.dp else 10.dp)
         ) {
             MetricTile(
                 label = "Days Present",
@@ -284,6 +290,7 @@ private fun OverallRunningBalanceCard(
     totalBalanceInr: Long,
     totalEntriesCount: Int
 ) {
+    val screenInfo = LocalScreenSizeInfo.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -293,11 +300,14 @@ private fun OverallRunningBalanceCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(screenInfo.cardContentPadding),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 Text(
                     text = "OVERALL RUNNING BALANCE",
                     style = MaterialTheme.typography.labelSmall,
@@ -307,12 +317,12 @@ private fun OverallRunningBalanceCard(
                 )
                 Text(
                     text = Money.format(totalBalanceInr),
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = if (screenInfo.isVeryCompact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-
+            Spacer(modifier = Modifier.width(8.dp))
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -323,7 +333,7 @@ private fun OverallRunningBalanceCard(
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                 )
             }
         }
@@ -337,6 +347,7 @@ private fun MonthlyRunningBalanceHeader(
     monthlyRunningBalanceInr: Long,
     entryCount: Int
 ) {
+    val screenInfo = LocalScreenSizeInfo.current
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -346,11 +357,12 @@ private fun MonthlyRunningBalanceHeader(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = if (screenInfo.isVeryCompact) 10.dp else 14.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
+                modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -360,24 +372,28 @@ private fun MonthlyRunningBalanceHeader(
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp)
                 )
-                Column {
+                Column(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
                         text = monthTitle,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "$entryCount ${if (entryCount == 1) "entry" else "entries"} • Month Total: ${Money.format(monthTotalInr)}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
-
+            Spacer(modifier = Modifier.width(6.dp))
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = "Running Balance",
+                    text = "Running Bal",
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -398,6 +414,7 @@ private fun DayLedgerCard(
     dateIso: String,
     dayEntries: List<LedgerEntryWithBalance>
 ) {
+    val screenInfo = LocalScreenSizeInfo.current
     val dayTotalInr = remember(dayEntries) { dayEntries.sumOf { it.entry.amountCents } }
     val dateDisplay = remember(dateIso) { Dates.formatDate(dateIso) }
     val dayOfWeek = remember(dateIso) {
@@ -414,7 +431,7 @@ private fun DayLedgerCard(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(screenInfo.subCardPadding),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Day Header Row
@@ -427,8 +444,12 @@ private fun DayLedgerCard(
                     text = "$dateDisplay • $dayOfWeek",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f, fill = false),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "+${Money.format(dayTotalInr)}",
                     style = MaterialTheme.typography.labelMedium,
@@ -545,6 +566,7 @@ private fun formatMonthHeader(iso: String?): String {
 
 @Composable
 private fun RecordRow(record: AttendanceRecordDto) {
+    val screenInfo = LocalScreenSizeInfo.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -555,7 +577,7 @@ private fun RecordRow(record: AttendanceRecordDto) {
         )
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = if (screenInfo.isVeryCompact) 10.dp else 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
@@ -575,18 +597,19 @@ private fun RecordRow(record: AttendanceRecordDto) {
                         fontWeight = FontWeight.SemiBold
                     )
                 }
+                Spacer(modifier = Modifier.width(6.dp))
                 StatusPill(record.status)
             }
 
             if (!record.assignedStartTime.isNullOrBlank() || !record.assignedEndTime.isNullOrBlank()) {
                 val lateText = Dates.formatLateText(record.clockIn, record.assignedStartTime, record.lateMinutes)
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = "Assigned Shift: ${Dates.formatTime(record.assignedStartTime)} – ${Dates.formatTime(record.assignedEndTime)}",
+                        text = "Assigned: ${Dates.formatTime(record.assignedStartTime)} – ${Dates.formatTime(record.assignedEndTime)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -602,7 +625,7 @@ private fun RecordRow(record: AttendanceRecordDto) {
             }
 
             Text(
-                text = "Clock In: ${Dates.formatTime(record.clockIn)} • Clock Out: ${Dates.formatTime(record.clockOut)} (${Dates.formatMinutes(record.workedMinutes)})",
+                text = "In: ${Dates.formatTime(record.clockIn)} • Out: ${if (!record.clockOut.isNullOrBlank()) Dates.formatTime(record.clockOut) else "Pending"} (${Dates.formatMinutes(record.workedMinutes)})",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

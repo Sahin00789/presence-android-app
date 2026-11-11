@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import com.als.presence.core.designsystem.LocalScreenSizeInfo
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -665,13 +666,15 @@ fun EmployeeClockInTab(
         list
     }
 
+    val screenInfo = LocalScreenSizeInfo.current
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .then(scrollModifier)
-            .padding(horizontal = if (isScrollable) 12.dp else 0.dp)
-            .padding(top = if (isScrollable) 10.dp else 0.dp, bottom = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = if (isScrollable) screenInfo.horizontalScreenPadding else 0.dp)
+            .padding(top = if (isScrollable) (if (screenInfo.isVeryCompact) 6.dp else 10.dp) else 0.dp, bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 8.dp else 10.dp)
     ) {
         // SCREEN COMPACT TITLE HEADER WITH REFRESH ACTION
         Row(

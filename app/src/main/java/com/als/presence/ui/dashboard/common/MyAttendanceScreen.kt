@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package com.als.presence.ui.dashboard.common
 
 import androidx.compose.foundation.BorderStroke
@@ -5,6 +7,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -257,14 +262,15 @@ fun MyAttendanceContent(
 
     val scrollState = rememberScrollState()
     val scrollModifier = if (isScrollable) Modifier.verticalScroll(scrollState) else Modifier
+    val screenInfo = rememberScreenSizeInfo()
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .then(scrollModifier)
-            .padding(horizontal = if (isScrollable) 14.dp else 0.dp)
+            .padding(horizontal = if (isScrollable) screenInfo.horizontalScreenPadding else 0.dp)
             .padding(top = if (isScrollable) 10.dp else 0.dp, bottom = if (isScrollable) 28.dp else 0.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 12.dp else 16.dp)
     ) {
         if (showHeader) {
             Row(
@@ -340,7 +346,8 @@ fun MyAttendanceContent(
                             group = group,
                             assignments = assignments,
                             templates = templates,
-                            unworkedRules = unworkedRules
+                            unworkedRules = unworkedRules,
+                            screenInfo = screenInfo
                         )
                     }
                 }
@@ -356,7 +363,8 @@ private fun AttendanceDayCard(
     group: DayAttendanceGroup,
     assignments: List<ShiftAssignmentDto>,
     templates: List<ShiftDto>,
-    unworkedRules: List<UnworkedPaymentRuleDto>
+    unworkedRules: List<UnworkedPaymentRuleDto>,
+    screenInfo: ScreenSizeInfo = rememberScreenSizeInfo()
 ) {
     val primaryAssignment = assignments.firstOrNull()
     val presentPayInr = (primaryAssignment?.presentPay ?: 600.0).toLong()
@@ -415,8 +423,8 @@ private fun AttendanceDayCard(
         }
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            modifier = Modifier.padding(screenInfo.cardContentPadding),
+            verticalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 10.dp else 14.dp)
         ) {
             // Header Row: Date info on Left, Total Earning at Top Corner
             Row(
@@ -425,12 +433,13 @@ private fun AttendanceDayCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 8.dp else 10.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(if (screenInfo.isVeryCompact) 34.dp else 40.dp)
                             .clip(CircleShape)
                             .background(
                                 if (group.isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
@@ -442,17 +451,17 @@ private fun AttendanceDayCard(
                             Icons.Default.EventAvailable,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(if (screenInfo.isVeryCompact) 18.dp else 22.dp)
                         )
                     }
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
+                    Column(modifier = Modifier.weight(1f, fill = false)) {
+                        FlowRow(
+                            verticalArrangement = Arrangement.Center,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
                                 text = "${group.dateDisplay} • ${group.dayOfWeekName}",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = if (screenInfo.isVeryCompact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             if (group.isToday) {
@@ -464,9 +473,9 @@ private fun AttendanceDayCard(
                                         text = "TODAY",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 10.sp,
+                                        fontSize = 9.sp,
                                         color = MaterialTheme.colorScheme.onPrimary,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                                     )
                                 }
                             }
@@ -487,19 +496,23 @@ private fun AttendanceDayCard(
                         Text(
                             text = summaryText,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
                 // Top Right Corner: Small subtle earnings text
                 if (totalEarningInr > 0) {
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "Earned: ${Money.format(totalEarningInr)}",
                         style = MaterialTheme.typography.bodySmall,
-                        fontSize = 11.sp,
+                        fontSize = if (screenInfo.isVeryCompact) 10.sp else 11.sp,
                         fontWeight = FontWeight.Medium,
-                        color = Color(0xFF747895)
+                        color = Color(0xFF747895),
+                        maxLines = 1
                     )
                 }
             }
@@ -511,7 +524,8 @@ private fun AttendanceDayCard(
                         shift = shift,
                         assignments = assignments,
                         unworkedRules = unworkedRules,
-                        ledgerEntries = group.ledgerEntries
+                        ledgerEntries = group.ledgerEntries,
+                        screenInfo = screenInfo
                     )
                 }
             } else if (group.isToday && hasMatchingShiftToday) {
@@ -525,15 +539,17 @@ private fun AttendanceDayCard(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(12.dp),
+                            .padding(screenInfo.subCardPadding),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = primaryAssignment?.shiftName ?: "Assigned Shift",
                                 style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = "Assigned: ${Dates.formatTime(startTimeRaw)} – ${Dates.formatTime(endTimeRaw)}",
@@ -542,6 +558,7 @@ private fun AttendanceDayCard(
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
                         StatusPill(if (isSessionRunningNow) "RUNNING" else "UPCOMING")
                     }
                 }
@@ -550,7 +567,7 @@ private fun AttendanceDayCard(
             // 2. Overtime Sub-cards
             if (group.overtimes.isNotEmpty()) {
                 group.overtimes.forEach { ot ->
-                    OvertimeSubCard(ot = ot)
+                    OvertimeSubCard(ot = ot, screenInfo = screenInfo)
                 }
             }
 
@@ -558,7 +575,8 @@ private fun AttendanceDayCard(
             if (group.isWeeklyOff && group.shifts.isEmpty() && group.overtimes.isEmpty()) {
                 WeeklyOffSubCard(
                     unworkedRules = unworkedRules,
-                    assignments = assignments
+                    assignments = assignments,
+                    screenInfo = screenInfo
                 )
             }
 
@@ -566,7 +584,8 @@ private fun AttendanceDayCard(
             if (group.isHoliday && group.shifts.isEmpty() && group.overtimes.isEmpty()) {
                 HolidaySubCard(
                     unworkedRules = unworkedRules,
-                    assignments = assignments
+                    assignments = assignments,
+                    screenInfo = screenInfo
                 )
             }
 
@@ -605,7 +624,8 @@ private fun ShiftSubCard(
     shift: AttendanceRecordDto,
     assignments: List<ShiftAssignmentDto>,
     unworkedRules: List<UnworkedPaymentRuleDto>,
-    ledgerEntries: List<StaffEarningLedgerDto>
+    ledgerEntries: List<StaffEarningLedgerDto>,
+    screenInfo: ScreenSizeInfo = rememberScreenSizeInfo()
 ) {
     val shiftEarning = calculateShiftEarning(shift, assignments, unworkedRules, ledgerEntries)
     Surface(
@@ -615,7 +635,7 @@ private fun ShiftSubCard(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(screenInfo.subCardPadding),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -627,7 +647,9 @@ private fun ShiftSubCard(
                     Text(
                         text = shift.shiftName ?: if (shift.overtimeId != null) "Overtime Shift" else "Shift",
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     if (!shift.assignedStartTime.isNullOrBlank() || !shift.assignedEndTime.isNullOrBlank()) {
                         Text(
@@ -638,9 +660,10 @@ private fun ShiftSubCard(
                         )
                     }
                 }
+                Spacer(modifier = Modifier.width(6.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 4.dp else 8.dp)
                 ) {
                     StatusPill(shift.status)
                     Text(
@@ -652,10 +675,10 @@ private fun ShiftSubCard(
                 }
             }
 
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -682,6 +705,7 @@ private fun ShiftSubCard(
                     Text(
                         text = "Worked: ${shift.workedMinutes / 60}h ${shift.workedMinutes % 60}m",
                         style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -691,9 +715,10 @@ private fun ShiftSubCard(
             val earlyMins = calculateEarlyDepartureMinutes(shift.clockOut, shift.assignedEndTime)
 
             if (lateMins > 0 || earlyMins > 0) {
-                Row(
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     if (lateMins > 0) {
                         Surface(
@@ -737,10 +762,12 @@ private fun ShiftSubCard(
                     ((shift.scheduledMinutes - workedMins) / 10).coerceAtLeast(0)
                 } else 0
 
-                Row(
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 2.dp)
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp)
                 ) {
                     PingBadge(label = "Inside", count = insideCount, color = SecondaryEmerald)
                     PingBadge(label = "Outside", count = outsideCount, color = if (outsideCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline)
@@ -752,7 +779,10 @@ private fun ShiftSubCard(
 }
 
 @Composable
-private fun OvertimeSubCard(ot: OvertimeDto) {
+private fun OvertimeSubCard(
+    ot: OvertimeDto,
+    screenInfo: ScreenSizeInfo = rememberScreenSizeInfo()
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -760,7 +790,7 @@ private fun OvertimeSubCard(ot: OvertimeDto) {
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f))
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(screenInfo.subCardPadding),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -787,13 +817,14 @@ private fun OvertimeSubCard(ot: OvertimeDto) {
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+                Spacer(modifier = Modifier.width(6.dp))
                 StatusPill(ot.status)
             }
 
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
                     text = "Window: ${Dates.formatTime(ot.startTime)} – ${Dates.formatTime(ot.endTime)}",
@@ -804,6 +835,7 @@ private fun OvertimeSubCard(ot: OvertimeDto) {
                 Text(
                     text = "Worked: ${ot.workedMinutes}m / Planned: ${ot.plannedMinutes}m",
                     style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -816,9 +848,10 @@ private fun OvertimeSubCard(ot: OvertimeDto) {
                     ((ot.plannedMinutes - ot.workedMinutes) / 10).coerceAtLeast(0)
                 } else 0
 
-                Row(
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     PingBadge(label = "Inside", count = otInside, color = SecondaryEmerald)
                     PingBadge(label = "Outside", count = otOutside, color = MaterialTheme.colorScheme.outline)
@@ -832,7 +865,8 @@ private fun OvertimeSubCard(ot: OvertimeDto) {
 @Composable
 private fun WeeklyOffSubCard(
     unworkedRules: List<UnworkedPaymentRuleDto>,
-    assignments: List<ShiftAssignmentDto>
+    assignments: List<ShiftAssignmentDto>,
+    screenInfo: ScreenSizeInfo = rememberScreenSizeInfo()
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -841,17 +875,18 @@ private fun WeeklyOffSubCard(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(screenInfo.subCardPadding),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
+                modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 8.dp else 10.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(if (screenInfo.isVeryCompact) 28.dp else 32.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
@@ -863,22 +898,27 @@ private fun WeeklyOffSubCard(
                         modifier = Modifier.size(16.dp)
                     )
                 }
-                Column {
+                Column(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
                         text = "Weekly Off",
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "Scheduled Weekly Rest Day",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
+            Spacer(modifier = Modifier.width(6.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 4.dp else 8.dp)
             ) {
                 StatusPill("OFF_DAY")
                 val offDayPay = (unworkedRules.find { it.employeeId != null && it.dayType == "WEEKLY_OFF" }
@@ -899,7 +939,8 @@ private fun WeeklyOffSubCard(
 @Composable
 private fun HolidaySubCard(
     unworkedRules: List<UnworkedPaymentRuleDto>,
-    assignments: List<ShiftAssignmentDto>
+    assignments: List<ShiftAssignmentDto>,
+    screenInfo: ScreenSizeInfo = rememberScreenSizeInfo()
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -908,17 +949,18 @@ private fun HolidaySubCard(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(screenInfo.subCardPadding),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
+                modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 8.dp else 10.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(if (screenInfo.isVeryCompact) 28.dp else 32.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
@@ -930,22 +972,27 @@ private fun HolidaySubCard(
                         modifier = Modifier.size(16.dp)
                     )
                 }
-                Column {
+                Column(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
                         text = "Public Holiday",
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "Paid Holiday",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
+            Spacer(modifier = Modifier.width(6.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 4.dp else 8.dp)
             ) {
                 StatusPill("HOLIDAY")
                 val holidayPay = (unworkedRules.find { it.employeeId != null && it.dayType == "HOLIDAY" }
