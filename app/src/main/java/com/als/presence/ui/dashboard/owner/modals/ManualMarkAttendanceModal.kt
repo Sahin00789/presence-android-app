@@ -182,6 +182,7 @@ fun ManualMarkAttendanceModal(
                         onValueChange = { departureTimeText = it },
                         label = { Text("Departure Time (HH:mm) • Optional") },
                         placeholder = { Text("e.g. 15:30") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         colors = OutlinedTextFieldDefaults.colors(

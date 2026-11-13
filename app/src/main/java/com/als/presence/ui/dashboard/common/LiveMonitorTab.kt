@@ -747,7 +747,7 @@ fun DailyStaffPresenceCard(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Cancel overtime", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("Cancel Overtime", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         } else {
                             Row(

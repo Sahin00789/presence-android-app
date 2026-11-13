@@ -232,14 +232,16 @@ fun CreateShiftModal(
                         PresenceTextField(
                             value = start,
                             onValueChange = { start = it },
-                            label = "Start Time (HH:MM) *"
+                            label = "Start Time (HH:MM) *",
+                            keyboardType = KeyboardType.Number
                         )
                     }
                     Box(modifier = Modifier.weight(1f)) {
                         PresenceTextField(
                             value = end,
                             onValueChange = { end = it },
-                            label = "End Time (HH:MM) *"
+                            label = "End Time (HH:MM) *",
+                            keyboardType = KeyboardType.Number
                         )
                     }
                 }

@@ -159,6 +159,7 @@ fun BookOvertimeModal(
                     value = startTime,
                     onValueChange = { startTime = it },
                     label = { Text("Start (HH:MM)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
@@ -167,6 +168,7 @@ fun BookOvertimeModal(
                     value = endTime,
                     onValueChange = { endTime = it },
                     label = { Text("End (HH:MM)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
@@ -250,7 +252,7 @@ fun BookOvertimeModal(
                             ) {
                                 RadioButton(
                                     selected = isSelected,
-                                    onClick = { selectedEmployeeId = member.id }
+                                    onClick = null
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Box(

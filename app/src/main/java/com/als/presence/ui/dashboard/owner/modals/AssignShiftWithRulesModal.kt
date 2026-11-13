@@ -707,7 +707,7 @@ private fun EmployeeSelectionCard(
 
             RadioButton(
                 selected = selected,
-                onClick = onClick
+                onClick = null
             )
         }
     }
