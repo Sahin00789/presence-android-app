@@ -1675,32 +1675,6 @@ fun EmployeeClockInTab(
                                         )
                                     }
                                 }
-
-                                Button(
-                                    onClick = onClockOut,
-                                    enabled = !state.isSubmitting,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(48.dp),
-                                    shape = RoundedCornerShape(14.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = PresenceDesign.Danger,
-                                        contentColor = Color.White
-                                    ),
-                                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Text("Clock Out", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                    }
-                                }
                             }
                         }
                     }
@@ -2059,32 +2033,6 @@ fun EmployeeClockInTab(
                                             color = PresenceDesign.GrapeText,
                                             fontSize = 11.sp
                                         )
-                                    }
-                                }
-
-                                Button(
-                                    onClick = onClockOut,
-                                    enabled = !state.isSubmitting,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(48.dp),
-                                    shape = RoundedCornerShape(14.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = PresenceDesign.Danger,
-                                        contentColor = Color.White
-                                    ),
-                                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Text("Clock Out", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     }
                                 }
                             }
