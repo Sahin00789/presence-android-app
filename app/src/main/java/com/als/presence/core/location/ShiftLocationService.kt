@@ -39,10 +39,14 @@ class ShiftLocationService : Service() {
         private const val CHECK_INTERVAL_MS = 10 * 60 * 1000L
 
         fun start(context: Context) {
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context, ShiftLocationService::class.java)
-            )
+            try {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, ShiftLocationService::class.java)
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("ShiftLocationService", "Failed to start location service: ${e.message}")
+            }
         }
 
         fun stop(context: Context) {

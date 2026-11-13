@@ -327,6 +327,14 @@ class EmployeeClockInViewModel @Inject constructor(
                     unhandledEvents = unhandledEventsList
                 )
             }
+
+            if (activeRecord != null) {
+                com.als.presence.core.location.ShiftLocationService.start(context)
+                com.als.presence.core.location.LocationMonitorScheduler.schedule(context)
+            } else {
+                com.als.presence.core.location.ShiftLocationService.stop(context)
+                com.als.presence.core.location.LocationMonitorScheduler.cancel(context)
+            }
         }
     }
 
@@ -630,6 +638,8 @@ class EmployeeClockInViewModel @Inject constructor(
                             }
                         )
                     }
+                    com.als.presence.core.location.ShiftLocationService.start(context)
+                    com.als.presence.core.location.LocationMonitorScheduler.schedule(context)
                     refresh(silent = true)
                 }
                 is Resource.Error -> {
@@ -657,6 +667,8 @@ class EmployeeClockInViewModel @Inject constructor(
                             message = "Clocked out successfully."
                         )
                     }
+                    com.als.presence.core.location.ShiftLocationService.stop(context)
+                    com.als.presence.core.location.LocationMonitorScheduler.cancel(context)
                     refresh(silent = true)
                 }
                 is Resource.Error -> {
