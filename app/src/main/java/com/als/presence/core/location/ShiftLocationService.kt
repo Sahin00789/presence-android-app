@@ -77,11 +77,28 @@ class ShiftLocationService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (loop?.isActive == true) return START_STICKY
         loop = scope.launch {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val wakeLock = powerManager?.newWakeLock(
+                android.os.PowerManager.PARTIAL_WAKE_LOCK,
+                "presence:ShiftLocationServiceWakeLock"
+            )
+
             while (isActive) {
-                val outcome = monitor.runOnce()
-                if (!outcome.active) {
-                    stopSelf()
-                    break
+                try {
+                    wakeLock?.acquire(30_000L) // Hold wake lock for up to 30s for GPS fix & API ping
+                    val outcome = monitor.runOnce()
+                    if (!outcome.active) {
+                        stopSelf()
+                        break
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("ShiftLocationService", "Error during periodic location ping: ${e.message}")
+                } finally {
+                    if (wakeLock?.isHeld == true) {
+                        try {
+                            wakeLock.release()
+                        } catch (_: Exception) {}
+                    }
                 }
                 delay(CHECK_INTERVAL_MS)
             }
