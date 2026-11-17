@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -164,6 +165,10 @@ dependencies {
     implementation(libs.credentials.auth)
     implementation(libs.googleid.auth)
     implementation(libs.work.runtime.ktx)
+
+    // Firebase
+    implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
+    implementation("com.google.firebase:firebase-analytics")
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)

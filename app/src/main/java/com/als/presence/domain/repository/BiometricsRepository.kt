@@ -3,6 +3,7 @@ package com.als.presence.domain.repository
 import com.als.presence.core.common.Resource
 import com.als.presence.core.face.FaceEmbeddingEngine
 import com.als.presence.data.model.FaceStatusDto
+import com.als.presence.data.model.FaceVerifyResponseDto
 
 interface BiometricsRepository {
     suspend fun getStaffFaceStatus(employeeId: String? = null): Resource<List<FaceStatusDto>>
@@ -11,4 +12,5 @@ interface BiometricsRepository {
         embeddings: Map<String, FaceEmbeddingEngine.Embedding> = emptyMap()
     ): Resource<FaceStatusDto>
     suspend fun revokeFaceEnrollment(employeeId: String): Resource<Unit>
+    suspend fun verifyFace(embedding: FaceEmbeddingEngine.Embedding): Resource<FaceVerifyResponseDto>
 }

@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.EventAvailable
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
@@ -141,6 +142,7 @@ import com.als.presence.ui.dashboard.owner.screens.OwnerOvertimeScreen
 import com.als.presence.ui.dashboard.employee.screens.EmployeeHolidayScreen
 import com.als.presence.ui.dashboard.employee.screens.EmployeeLeaveScreen
 import com.als.presence.ui.dashboard.employee.screens.EmployeeOvertimeScreen
+import com.als.presence.ui.dashboard.employee.screens.EmployeeBiometricScreen
 import com.als.presence.ui.dashboard.owner.screens.PremisesManagementScreen
 import com.als.presence.ui.dashboard.owner.screens.ShiftManagementScreen
 import com.als.presence.ui.dashboard.employee.EmployeeDashboardScreen
@@ -164,6 +166,7 @@ private enum class SecondaryDestination(val label: String) {
     MY_SHIFTS("My Shifts"),
     MY_SALARY_PAYMENTS("My Salary"),
     MY_ATTENDANCE("My Attendance"),
+    CHECK_BIOMETRIC("Check Biometric"),
     EMPLOYEES_MANAGEMENT("Workforce Directory"),
     PREMISES_MANAGEMENT("Geofence Hub"),
     SHIFT_MANAGEMENT("Roster Schedule"),
@@ -301,6 +304,7 @@ fun DashboardScreen(
                     title = "MY WORKSPACE",
                     items = listOf(
                         DrawerEntry(SecondaryDestination.MY_SHIFTS, Icons.Default.Schedule),
+                        DrawerEntry(SecondaryDestination.CHECK_BIOMETRIC, Icons.Default.Face),
                         DrawerEntry(SecondaryDestination.OVERTIME, Icons.Default.VerifiedUser),
                         DrawerEntry(SecondaryDestination.HOLIDAY_MANAGEMENT, Icons.Default.CalendarMonth),
                         DrawerEntry(SecondaryDestination.LEAVE, Icons.Default.EventAvailable)
@@ -908,6 +912,7 @@ private fun SecondaryDestinationContent(
         SecondaryDestination.MY_SHIFTS -> MyShiftsScreen(user = user, onBack = onBack)
         SecondaryDestination.MY_SALARY_PAYMENTS -> MySalaryPaymentsScreen(onBack = onBack)
         SecondaryDestination.MY_ATTENDANCE -> MyAttendanceScreen(onBack = onBack)
+        SecondaryDestination.CHECK_BIOMETRIC -> EmployeeBiometricScreen(onBack = onBack)
         SecondaryDestination.EMPLOYEES_MANAGEMENT -> EmployeesManagementScreen(
             user = user,
             onBack = onBack,

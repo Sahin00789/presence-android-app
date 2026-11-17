@@ -133,6 +133,22 @@ class OperationsRepositoryImpl @Inject constructor(
         return Resource.Success(Unit)
     }
 
+    override suspend fun verifyFace(embedding: FaceEmbeddingEngine.Embedding): Resource<FaceVerifyResponseDto> {
+        return safeApiCall("Error verifying face biometrics") {
+            val req = ClockInFaceRequest(
+                liveVector = embedding.vector,
+                liveness = LivenessEvidenceDto(
+                    activeBlinkDetected = embedding.liveness.activeBlinkDetected,
+                    blinkCount = 1,
+                    passiveTextureScore = embedding.liveness.passiveTextureScore,
+                    passivePassed = embedding.liveness.passivePassed,
+                    capturedAt = java.time.Instant.now().toString()
+                )
+            )
+            faceApiService.verifyFace(req)
+        }
+    }
+
     override suspend fun getShiftAssignments(): Resource<List<ShiftAssignmentDto>> {
         val networkResult = safeApiCall("Error loading shift assignments") {
             shiftApiService.listAssignments()
