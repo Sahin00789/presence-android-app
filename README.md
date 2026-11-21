@@ -134,6 +134,7 @@ git push origin main
 ## 📚 Documentation Index
 
 Detailed specifications and domain logic rules are available in the [`docs/`](./docs/) directory:
+- 📖 [**User & Operational Guide (Markdown)**](./docs/USER_GUIDE.md) | 📄 [**Presence_User_Guide.pdf**](./Presence_User_Guide.pdf)
 - [Architecture & Tech Stack](./docs/ARCHITECTURE.md)
 - [Requirements & SLA](./docs/REQUIREMENTS.md)
 - [Role Permission Matrix](./docs/ROLE_PERMISSIONS.md)
@@ -144,6 +145,6 @@ Detailed specifications and domain logic rules are available in the [`docs/`](./
 - [Face Verification Policy](./docs/FACE_VERIFICATION.md)
 - [Location Monitoring & Geofencing](./docs/LOCATION_MONITORING.md)
 - [Salary Calculation & Rules](./docs/SALARY_RULES.md)
-- [Ledger Integrity](./docs/ledger_LEDGER.md)
+- [Ledger Integrity](./docs/EARNINGS_LEDGER.md)
 - [Monthly Payroll Lifecycle](./docs/PAYROLL.md)
 - [Development Roadmap](./docs/DEVELOPMENT_STAGES.md)

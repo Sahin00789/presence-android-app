@@ -179,6 +179,7 @@ dependencies {
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-appdistribution")
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
