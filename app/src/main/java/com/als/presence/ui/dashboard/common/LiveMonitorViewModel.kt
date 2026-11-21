@@ -4,9 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.als.presence.core.common.Resource
 import com.als.presence.core.common.UiState
+import com.als.presence.core.network.NetworkMonitor
+import com.als.presence.data.model.DomainWebSocketEvent
 import com.als.presence.data.model.LocationTodayPresenceResponseDto
 import com.als.presence.data.model.PremisesDto
 import com.als.presence.data.model.StaffDto
+import com.als.presence.data.remote.EventsWebSocketService
 import com.als.presence.domain.repository.OperationsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,10 +17,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
-import com.als.presence.data.model.DomainWebSocketEvent
-import com.als.presence.core.network.NetworkMonitor
-import com.als.presence.data.remote.EventsWebSocketService
 
 @HiltViewModel
 class LiveMonitorViewModel @Inject constructor(
@@ -77,15 +76,25 @@ class LiveMonitorViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
-            syncCoordinator.performSelectiveSync(com.als.presence.data.sync.SyncCoordinator.SyncDomain.LOCATIONS)
+            try {
+                syncCoordinator.performSelectiveSync(com.als.presence.data.sync.SyncCoordinator.SyncDomain.LOCATIONS)
+            } catch (e: Exception) {
+                // Non-fatal sync error; proceed to load presence directly
+            }
+
+            // Always trigger presence load for current selected premises (or default if null)
+            loadPresence(_selectedPremisesId.value)
+
+            // Refresh premises list
             _premises.value = UiState.Loading
             when (val res = repository.getPremises()) {
                 is Resource.Success -> {
                     _premises.value = UiState.Success(res.data)
                     if (_selectedPremisesId.value == null && res.data.isNotEmpty()) {
-                        _selectedPremisesId.value = res.data.first().id
+                        val firstId = res.data.first().id
+                        _selectedPremisesId.value = firstId
+                        loadPresence(firstId)
                     }
-                    loadPresence(_selectedPremisesId.value)
                 }
                 is Resource.Error -> {
                     _premises.value = UiState.Error(res.message ?: "Failed to load premises")
@@ -95,6 +104,7 @@ class LiveMonitorViewModel @Inject constructor(
                 }
             }
 
+            // Refresh employees list
             when (val staffRes = repository.getEmployees()) {
                 is Resource.Success -> _employee.value = UiState.Success(staffRes.data)
                 is Resource.Error -> _employee.value = UiState.Error(staffRes.message ?: "Failed to load staff")
@@ -114,7 +124,7 @@ class LiveMonitorViewModel @Inject constructor(
             when (val res = repository.getTodayLocationPresence(premisesId = premisesId)) {
                 is Resource.Success -> {
                     _presence.value = UiState.Success(res.data)
-                    if (res.data.premisesId != null) {
+                    if (res.data.premisesId != null && _selectedPremisesId.value == null) {
                         _selectedPremisesId.value = res.data.premisesId
                     }
                 }

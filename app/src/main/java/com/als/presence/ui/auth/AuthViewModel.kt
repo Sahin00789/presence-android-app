@@ -74,6 +74,10 @@ class AuthViewModel @Inject constructor(
                 Toast.makeText(it, "Syncing Room database...", Toast.LENGTH_SHORT).show()
             }
             val success = syncCoordinator.performSync(forceFullSync = true)
+            if (success) {
+                _isServerConnected.value = true
+                checkServerHealth()
+            }
             context?.let {
                 val msg = if (success) "Room database synced successfully" else "Sync completed with warnings"
                 Toast.makeText(it, msg, Toast.LENGTH_SHORT).show()

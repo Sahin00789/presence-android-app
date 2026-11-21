@@ -564,7 +564,8 @@ fun PresenceRefreshButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     isRefreshing: Boolean = false,
-    contentDescription: String = "Refresh"
+    contentDescription: String = "Refresh",
+    tint: Color = MaterialTheme.colorScheme.primary
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "RefreshRotation")
     val rotationAngle by infiniteTransition.animateFloat(
@@ -577,27 +578,29 @@ fun PresenceRefreshButton(
         label = "RefreshRotationAngle"
     )
 
-    IconButton(
-        onClick = onClick,
-        enabled = !isRefreshing,
+    Box(
+        contentAlignment = Alignment.Center,
         modifier = modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .size(32.dp)
+            .clip(RoundedCornerShape(8.dp))
             .background(
-                if (isRefreshing) PresenceDesign.BrandSoft else PresenceDesign.Workspace
+                if (isRefreshing) tint.copy(alpha = 0.16f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f)
             )
             .border(
                 1.dp,
-                if (isRefreshing) PresenceDesign.Brand.copy(alpha = 0.5f) else PresenceDesign.Line,
-                RoundedCornerShape(12.dp)
+                if (isRefreshing) tint.copy(alpha = 0.45f)
+                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f),
+                RoundedCornerShape(8.dp)
             )
+            .then(if (!isRefreshing) Modifier.clickable(onClick = onClick) else Modifier)
     ) {
         Icon(
             imageVector = Icons.Default.Refresh,
             contentDescription = contentDescription,
-            tint = PresenceDesign.Brand,
+            tint = tint,
             modifier = Modifier
-                .size(20.dp)
+                .size(16.dp)
                 .graphicsLayer {
                     rotationZ = if (isRefreshing) rotationAngle else 0f
                 }

@@ -50,6 +50,8 @@ object FlexibleNullableDoubleSerializer : KSerializer<Double?> {
 data class GpsPingSummaryDto(
     val id: String = "",
     val employeeId: String = "",
+    val shiftAttendanceId: String? = null,
+    val overtimeAttendanceId: String? = null,
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
     @Serializable(with = FlexibleNullableDoubleSerializer::class)
@@ -57,10 +59,16 @@ data class GpsPingSummaryDto(
     @Serializable(with = FlexibleNullableDoubleSerializer::class)
     val accuracyMeters: Double? = null,
     val isOutside: Boolean = false,
+    val isInsideGeofence: Boolean? = null,
     val pingTime: String = "",
+    val timestamp: String? = null,
     val checkTime: String = pingTime,
-    val status: String = if (isOutside) "Outside" else "Inside"
-)
+    val status: String = if (isOutside) "Outside" else "Inside",
+    val result: String? = null
+) {
+    val effectiveTime: String get() = timestamp?.takeIf { it.isNotBlank() } ?: pingTime.takeIf { it.isNotBlank() } ?: checkTime
+    val effectiveIsOutside: Boolean get() = isInsideGeofence?.let { !it } ?: isOutside
+}
 
 @Serializable
 data class GpsCountsDto(
@@ -95,6 +103,7 @@ data class LocationStaffCardDto(
     val overtimeClockInTime: String? = null,
     val overtimeClockOutTime: String? = null,
     val shiftStatus: String = "",
+    val overtimeStatus: String? = null,
     val hasOvertimeToday: Boolean = false,
     val overtimeId: String? = null,
     val consecutiveFailures: Int = 0,

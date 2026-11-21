@@ -94,8 +94,10 @@ import com.als.presence.ui.dashboard.common.NotificationsDrawer
 import com.als.presence.ui.dashboard.common.NotificationsViewModel
 import com.als.presence.ui.dashboard.common.PresenceBottomBar
 import com.als.presence.ui.dashboard.common.PresenceBottomItem
+import com.als.presence.ui.dashboard.common.TopBarServerIcon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -379,6 +381,12 @@ fun DashboardScreen(
 
     val syncState = remember(isSyncing, handleSelectiveRefresh) {
         SyncState(isSyncing = isSyncing, onSyncClick = handleSelectiveRefresh)
+    }
+
+    LaunchedEffect(isServerConnected) {
+        if (isServerConnected) {
+            handleSelectiveRefresh()
+        }
     }
 
     CompositionLocalProvider(LocalSyncState provides syncState) {
@@ -680,15 +688,16 @@ fun DashboardScreen(
                                 isOnline = isOnline,
                                 isServerConnected = isServerConnected,
                                 onServerIconClick = {
-                                    if (!isOnline || !isServerConnected) {
-                                        onCheckServerHealth()
-                                        val toastText = if (!isOnline) {
-                                            "Offline: Check internet connection"
-                                        } else {
-                                            "Server Connection Error. Retrying…"
-                                        }
-                                        Toast.makeText(context, toastText, Toast.LENGTH_SHORT).show()
+                                    onCheckServerHealth()
+                                    handleSelectiveRefresh()
+                                    val toastText = if (!isOnline) {
+                                        "Offline: Check internet connection"
+                                    } else if (!isServerConnected) {
+                                        "Checking server connection..."
+                                    } else {
+                                        "Server status reloaded: Connected"
                                     }
+                                    Toast.makeText(context, toastText, Toast.LENGTH_SHORT).show()
                                 }
                             )
                             ConnectivityBanner(
@@ -1123,62 +1132,43 @@ private fun DashboardTopAppBar(
 
                 Spacer(modifier = Modifier.width(6.dp))
 
-                // Right Actions: Connectivity Warning (only if offline/disconnected) + Notification Bell
+                // Right Actions: Server Status Indicator + Notification Bell
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if (!isOnline || !isServerConnected) {
-                        IconButton(
-                            onClick = onServerIconClick,
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFFFEF2F2))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CloudOff,
-                                contentDescription = "Connection issue. Tap to retry.",
-                                tint = Color(0xFFEF4444),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
+                    TopBarServerIcon(
+                        isOnline = isOnline,
+                        isServerConnected = isServerConnected,
+                        onClick = onServerIconClick
+                    )
 
-                    // Notification Button
+                    // Notification Button (Compact 32.dp container with Box + clickable)
                     Box(
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .clickable(onClick = onNotificationClick),
                         contentAlignment = Alignment.Center
                     ) {
-                        IconButton(
-                            onClick = onNotificationClick,
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Notifications,
-                                contentDescription = "Notifications",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = "Notifications",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
 
                         if (unreadCount > 0) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.error,
-                                shape = CircleShape,
-                                border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.surface),
+                            Box(
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
-                                    .padding(top = 4.dp, end = 4.dp)
-                            ) {
-                                Text(
-                                    text = if (unreadCount > 99) "99+" else unreadCount.toString(),
-                                    color = MaterialTheme.colorScheme.onError,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                )
-                            }
+                                    .padding(top = 2.dp, end = 2.dp)
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.error)
+                            )
                         }
                     }
                 }

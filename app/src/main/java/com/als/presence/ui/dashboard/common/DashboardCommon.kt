@@ -2,6 +2,7 @@ package com.als.presence.ui.dashboard.common
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,45 +68,13 @@ fun TopBarSyncRefreshButton(
     onSyncClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "SyncRotation")
-    val rotationAngle by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "SyncRotationAngle"
-    )
-
-    IconButton(
+    PresenceRefreshButton(
         onClick = onSyncClick,
-        enabled = !isSyncing,
+        isRefreshing = isSyncing,
+        contentDescription = "Sync Room Database",
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(
-                if (isSyncing) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-            )
-            .border(
-                1.dp,
-                if (isSyncing) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                RoundedCornerShape(12.dp)
-            )
-    ) {
-        Icon(
-            imageVector = Icons.Default.Refresh,
-            contentDescription = "Sync Room Database",
-            tint = if (isSyncing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .size(20.dp)
-                .graphicsLayer {
-                    rotationZ = if (isSyncing) rotationAngle else 0f
-                }
-        )
-    }
+    )
 }
 
 /**
@@ -123,38 +92,33 @@ fun TopBarServerIcon(
     val hasServerErr = !isOnline || !isServerConnected
     val icon = if (hasServerErr) Icons.Default.CloudOff else Icons.Default.Dns
     val iconColor = if (hasServerErr) Color(0xFFEF4444) else Color(0xFF10B981)
-    val bgColor = if (hasServerErr) Color(0xFFFEF2F2) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-    val borderColor = if (hasServerErr) Color(0xFFFCA5A5) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    val bgColor = if (hasServerErr) Color(0xFFFEF2F2) else Color(0xFFE8F5E9)
+    val borderColor = if (hasServerErr) Color(0xFFFCA5A5) else Color(0xFFA5D6A7)
     val dotColor = if (hasServerErr) Color(0xFFEF4444) else Color(0xFF10B981)
 
-    IconButton(
-        onClick = onClick,
-        enabled = hasServerErr,
+    Box(
+        contentAlignment = Alignment.Center,
         modifier = modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .size(32.dp)
+            .clip(RoundedCornerShape(8.dp))
             .background(bgColor)
-            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
     ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = if (hasServerErr) "Server connection error. Tap to reload." else "Server connected and healthy. Tap to reload status.",
+            tint = iconColor,
+            modifier = Modifier.size(16.dp)
+        )
         Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = if (hasServerErr) "Server connection error" else "Server connected",
-                tint = iconColor,
-                modifier = Modifier.size(20.dp)
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 5.dp, end = 5.dp)
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(dotColor)
-            )
-        }
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 3.dp, end = 3.dp)
+                .size(5.dp)
+                .clip(CircleShape)
+                .background(dotColor)
+        )
     }
 }
 

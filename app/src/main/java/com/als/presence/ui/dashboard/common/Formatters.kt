@@ -404,7 +404,9 @@ object StatusStyle {
     fun color(status: String?): Color = when (status?.uppercase()) {
         "PRESENT", "APPROVED", "COMPLETED", "PAID", "ACTIVE", "IN_PROGRESS" -> SecondaryEmerald
         "HALF_DAY", "PENDING", "REQUESTED", "OPEN", "CALCULATED" -> TertiaryAmber
-        "LEAVE", "LEAVE_REQUESTED" -> Color(0xFF0284C7)
+        "LEAVE", "LEAVE_REQUESTED", "APPROVED_LEAVE" -> Color(0xFF0284C7)
+        "WEEKLY_OFF", "OFF_DAY" -> Color(0xFF8B5CF6)
+        "HOLIDAY" -> Color(0xFF0D9488)
         "ABSENT", "REJECTED", "CANCELLED", "FAILED" -> Color(0xFFDC2626)
         else -> Color(0xFF64748B)
     }
@@ -412,6 +414,11 @@ object StatusStyle {
     fun label(status: String?): String = when (status?.uppercase()) {
         "IN_PROGRESS" -> "In progress"
         "HALF_DAY" -> "Half day"
+        "WEEKLY_OFF", "OFF_DAY" -> "Weekly Off"
+        "HOLIDAY" -> "Holiday"
+        "LEAVE" -> "On Leave"
+        "NO_SHIFT" -> "No Shift"
+        "SCHEDULED" -> "Scheduled"
         else -> (status ?: "Unknown")
             .lowercase()
             .replace('_', ' ')

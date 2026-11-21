@@ -104,6 +104,7 @@ import com.als.presence.ui.dashboard.common.PresenceFilterChip
 import com.als.presence.ui.dashboard.common.PresenceLoading
 import com.als.presence.ui.dashboard.common.PresenceMetaStrip
 import com.als.presence.ui.dashboard.common.PresencePageIntro
+import com.als.presence.ui.dashboard.common.PresenceSearchBar
 import com.als.presence.ui.dashboard.common.PresenceSecondaryScaffold
 import com.als.presence.ui.dashboard.common.PresenceSectionTitle
 import com.als.presence.ui.dashboard.common.PresenceSize
@@ -345,38 +346,10 @@ fun EmployeesManagementScreen(
                 modifier = Modifier.padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search employees...", fontSize = 13.sp) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(28.dp)) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Clear search",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+                PresenceSearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    placeholderText = "Search employees..."
                 )
 
                 // Filter Chips Row

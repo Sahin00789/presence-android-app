@@ -63,7 +63,7 @@ fun ManualMarkAttendanceModal(
     var reasonText by remember { mutableStateOf("") }
     var departureTimeText by remember { mutableStateOf("") }
 
-    val shiftActions = listOf("ABSENT", "HALF_DAY", "LEAVE", "PRESENT")
+    val shiftActions = listOf("ABSENT", "HALF_DAY", "PRESENT")
     val overtimeActions = listOf("DELETE_OVERTIME")
 
     val currentActions = if (isOvertime) overtimeActions else shiftActions

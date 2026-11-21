@@ -48,7 +48,8 @@ class EmployeeClockInViewModel @Inject constructor(
     val faceEmbeddingEngine: FaceEmbeddingEngine,
     private val sessionManager: SessionManager,
     @ApplicationContext private val context: Context,
-    private val syncCoordinator: com.als.presence.data.sync.SyncCoordinator
+    private val syncCoordinator: com.als.presence.data.sync.SyncCoordinator,
+    private val webSocketService: com.als.presence.data.remote.EventsWebSocketService
 ) : ViewModel() {
 
     data class ClockInUiState(
@@ -90,6 +91,20 @@ class EmployeeClockInViewModel @Inject constructor(
 
     init {
         refresh()
+        observeWebSocketEvents()
+    }
+
+    private fun observeWebSocketEvents() {
+        viewModelScope.launch {
+            webSocketService.events.collect { event ->
+                if (event is com.als.presence.data.model.DomainWebSocketEvent.AttendanceUpdate ||
+                    event is com.als.presence.data.model.DomainWebSocketEvent.ShiftUpdate ||
+                    event is com.als.presence.data.model.DomainWebSocketEvent.Generic
+                ) {
+                    refresh(silent = true)
+                }
+            }
+        }
     }
 
     fun consumeMessage() {

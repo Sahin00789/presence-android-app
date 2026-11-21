@@ -155,7 +155,7 @@ fun PresenceSecondaryScaffold(
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.padding(start = 8.dp)
                     ) {
                         if (actions != null) {

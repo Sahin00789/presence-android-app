@@ -58,6 +58,7 @@ import com.als.presence.core.designsystem.PresenceDesign
 import com.als.presence.data.model.OvertimeDto
 import com.als.presence.data.model.StaffDto
 import com.als.presence.ui.dashboard.common.Dates
+import com.als.presence.ui.dashboard.common.PresenceSearchBar
 import com.als.presence.ui.dashboard.common.InitialAvatar
 import com.als.presence.ui.dashboard.common.MessageSnackbar
 import com.als.presence.ui.dashboard.common.Money
@@ -272,21 +273,10 @@ fun OwnerOvertimeScreen(
             // Tab Content
             if (selectedTab == 0) {
                 // Search Bar
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search employee by name, code or department...", style = MaterialTheme.typography.bodySmall) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                    trailingIcon = if (searchQuery.isNotBlank()) {
-                        {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    } else null,
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                PresenceSearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    placeholderText = "Search employee by name, code or dept…"
                 )
 
                 when (staffState) {
