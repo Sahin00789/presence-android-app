@@ -49,7 +49,7 @@ android {
     }
 
     buildTypes {
-        release {
+        getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
@@ -58,8 +58,17 @@ android {
                 "proguard-rules.pro"
             )
             buildConfigField("String", "BASE_URL", "\"https://presenceapi.armanlogicalsystems.in/\"")
+            configure<com.google.firebase.appdistribution.gradle.AppDistributionExtension> {
+                appId = "1:402010851729:android:a4614a8395bbcdc5043230"
+                artifactType = "APK"
+                releaseNotes = "Presence release build v1.0.10"
+                val serviceKey = file("${rootDir}/keystore/firebase-service-account.json")
+                if (serviceKey.exists()) {
+                    serviceCredentialsFile = serviceKey.absolutePath
+                }
+            }
         }
-        debug {
+        getByName("debug") {
             isMinifyEnabled = false
             ndk {
                 abiFilters.addAll(setOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64"))
