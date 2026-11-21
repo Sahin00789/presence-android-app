@@ -7,7 +7,6 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.als.presence.BuildConfig
-import com.google.firebase.appdistribution.FirebaseAppDistribution
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,7 +14,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -54,22 +52,9 @@ class AppUpdateManager @Inject constructor(
 
         _updateState.value = UpdateState.Checking
 
-        // 1. Trigger Firebase App Distribution update check if available
-        try {
-            FirebaseAppDistribution.getInstance().updateIfNewReleaseAvailable()
-                .addOnSuccessListener { release ->
-                    if (release != null) {
-                        Log.d(TAG, "Firebase App Distribution update available: ${release.displayVersion}")
-                    }
-                }
-                .addOnFailureListener { e ->
-                    Log.d(TAG, "Firebase App Distribution check info: ${e.localizedMessage}")
-                }
-        } catch (e: Exception) {
-            Log.w(TAG, "Firebase App Distribution SDK check skipped: ${e.message}")
-        }
-
-        // 2. Query GitHub Releases API for direct APK version checking
+        // Query GitHub Releases API. Firebase App Distribution is intentionally not
+        // called here: its built-in in-app prompt would show a second, competing
+        // update dialog on top of AppUpdateDialog for testers.
         scope.launch {
             try {
                 val request = Request.Builder()
@@ -187,12 +172,9 @@ class AppUpdateManager @Inject constructor(
                     )
 
                     Log.d(TAG, "Download completed. File saved at: ${apkFile.absolutePath}, Uri: $apkUri")
+                    // Let the user confirm the install from the dialog. Auto-launching
+                    // here made ReadyToInstall flash by and bypassed the install button.
                     _updateState.value = UpdateState.ReadyToInstall(apkUri)
-
-                    // Auto-trigger installation
-                    withContext(Dispatchers.Main) {
-                        installUpdate(apkUri)
-                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to download update APK", e)
@@ -228,8 +210,13 @@ class AppUpdateManager @Inject constructor(
         if (remote.isBlank() || local.isBlank()) return false
         if (remote.equals(local, ignoreCase = true)) return false
 
-        val remoteParts = remote.split(".").mapNotNull { it.toIntOrNull() }
-        val localParts = local.split(".").mapNotNull { it.toIntOrNull() }
+        // Ignore tags like "v1.0.11-beta" / build metadata and compare only the
+        // numeric release segments. mapNotNull previously dropped invalid segments
+        // entirely, which made "1.0" compare as "1.0.0" against "1.0.10".
+        val remoteParts = remote.trim().trimStart('v', 'V').substringBefore('-')
+            .split(".").map { it.toIntOrNull() ?: 0 }
+        val localParts = local.trim().trimStart('v', 'V').substringBefore('-')
+            .split(".").map { it.toIntOrNull() ?: 0 }
 
         val maxLength = maxOf(remoteParts.size, localParts.size)
         for (i in 0 until maxLength) {

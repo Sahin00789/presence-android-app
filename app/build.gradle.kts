@@ -17,8 +17,8 @@ android {
         applicationId = "com.als.presence"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 11
+        versionName = "1.0.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -61,7 +61,7 @@ android {
             configure<com.google.firebase.appdistribution.gradle.AppDistributionExtension> {
                 appId = "1:402010851729:android:a4614a8395bbcdc5043230"
                 artifactType = "APK"
-                releaseNotes = "Presence release build v1.0.10"
+                releaseNotes = "Presence release build v1.0.11"
                 val serviceKey = file("${rootDir}/keystore/firebase-service-account.json")
                 if (serviceKey.exists()) {
                     serviceCredentialsFile = serviceKey.absolutePath
@@ -179,7 +179,7 @@ dependencies {
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
     implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-appdistribution")
+    implementation("com.google.firebase:firebase-appdistribution:16.0.0-beta21")
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)

@@ -1,5 +1,7 @@
 package com.als.presence.ui.dashboard
 
+import com.als.presence.core.update.AppUpdateDialog
+import com.als.presence.core.update.UpdateState
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -244,6 +246,22 @@ fun DashboardScreen(
     val authViewModel: AuthViewModel = hiltViewModel()
     val updateProfileState by authViewModel.updateProfileState.collectAsStateWithLifecycle()
     val updateOrgState by authViewModel.updateOrgState.collectAsStateWithLifecycle()
+    val appUpdateState by authViewModel.updateState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        authViewModel.checkForAppUpdates()
+    }
+
+    AppUpdateDialog(
+        updateState = appUpdateState,
+        onUpdateClick = { downloadUrl -> authViewModel.downloadAppUpdate(downloadUrl) },
+        onInstallClick = {
+            (appUpdateState as? UpdateState.ReadyToInstall)?.let { readyState ->
+                authViewModel.installAppUpdate(readyState.apkUri)
+            }
+        },
+        onDismiss = { authViewModel.dismissAppUpdate() }
+    )
 
     var showNotificationsDrawer by remember { mutableStateOf(false) }
     var showEditProfileModal by remember { mutableStateOf(false) }

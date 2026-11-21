@@ -29,6 +29,8 @@ import com.als.presence.domain.usecase.owner.RegisterOwnerWithGoogleUseCase
 import com.als.presence.domain.repository.AuthRepository
 import com.als.presence.domain.repository.OperationsRepository
 import com.als.presence.core.network.NetworkMonitor
+import com.als.presence.core.update.AppUpdateManager
+import com.als.presence.core.update.UpdateState
 import com.als.presence.core.auth.GoogleAuthManager
 import com.als.presence.core.auth.GoogleAuthResult
 import com.als.presence.data.model.OrganizationDto
@@ -61,11 +63,29 @@ class AuthViewModel @Inject constructor(
     private val locationManager: com.als.presence.core.location.LocationManager,
     private val eventsWebSocketService: EventsWebSocketService,
     private val syncCoordinator: SyncCoordinator,
+    private val appUpdateManager: AppUpdateManager,
     observeCurrentUserUseCase: ObserveCurrentUserUseCase,
     networkMonitor: NetworkMonitor
 ) : ViewModel() {
 
     val isSyncing: StateFlow<Boolean> = syncCoordinator.isSyncing
+    val updateState: StateFlow<UpdateState> = appUpdateManager.updateState
+
+    fun checkForAppUpdates(force: Boolean = false) {
+        appUpdateManager.checkForUpdates(force)
+    }
+
+    fun downloadAppUpdate(url: String) {
+        appUpdateManager.startDownload(url)
+    }
+
+    fun installAppUpdate(uri: android.net.Uri) {
+        appUpdateManager.installUpdate(uri)
+    }
+
+    fun dismissAppUpdate() {
+        appUpdateManager.dismissUpdate()
+    }
 
     fun syncRoomDatabase(context: Context? = null) {
         if (syncCoordinator.isSyncing.value) return
