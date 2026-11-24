@@ -1,8 +1,17 @@
 # Script to build release APK and publish ONLY docs & APK to public distribution repository/releases
 param (
     [string]$PublicRepoUrl = "Sahin00789/presence-android-app",
-    [string]$TagName = "latest"
+    [string]$TagName = ""
 )
+
+if ([string]::IsNullOrWhiteSpace($TagName)) {
+    $versionMatch = Select-String -Path 'app\build.gradle.kts' -Pattern 'versionName\s*=\s*"([^"]+)"' | Select-Object -First 1
+    if ($null -eq $versionMatch) {
+        Write-Host "ERROR: Could not read versionName from app/build.gradle.kts" -ForegroundColor Red
+        exit 1
+    }
+    $TagName = "v" + $versionMatch.Matches[0].Groups[1].Value
+}
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " Building Release APK for Public Distribution" -ForegroundColor Cyan
@@ -26,7 +35,7 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
 
     gh release create $TagName $apkPath `
         --repo $PublicRepoUrl `
-        --title "Presence Android App - Latest Release" `
+        --title "Presence Android App - $TagName" `
         --notes "Download the latest compiled Android APK (presence.apk)." `
         --latest
 

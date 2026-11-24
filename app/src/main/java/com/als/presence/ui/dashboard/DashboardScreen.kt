@@ -256,10 +256,14 @@ fun DashboardScreen(
         updateState = appUpdateState,
         onUpdateClick = { downloadUrl -> authViewModel.downloadAppUpdate(downloadUrl) },
         onInstallClick = {
-            (appUpdateState as? UpdateState.ReadyToInstall)?.let { readyState ->
-                authViewModel.installAppUpdate(readyState.apkUri)
+            when (val state = appUpdateState) {
+                is UpdateState.ReadyToInstall -> authViewModel.installAppUpdate(state.apkUri)
+                is UpdateState.InstallPermissionRequired -> authViewModel.installAppUpdate(state.apkUri)
+                else -> Unit
             }
         },
+        onOpenInstallSettings = { authViewModel.openInstallPermissionSettings() },
+        signerFingerprint = authViewModel.trustedSignerFingerprint,
         onDismiss = { authViewModel.dismissAppUpdate() }
     )
 

@@ -61,7 +61,10 @@ Run the automated PowerShell script to build the release APK and publish it to t
 ```
    - Users can always download the latest APK directly from `https://github.com/Sahin00789/presence-android-app/releases`.
 2. **Local PowerShell Release Script**:
-   - Run `.\scripts\release-github.ps1` in PowerShell to assemble the release APK and publish/update the `latest` release on GitHub via `gh` CLI.
+   - Run `.\scripts\release-github.ps1` in PowerShell to assemble the release APK and publish a versioned release (tag `v<versionName>` from `app/build.gradle.kts`) via `gh` CLI.
+3. **In-App Updates**:
+   - Releases must use semantic version tags (for example `v1.0.12`) so the in-app updater can compare them with `BuildConfig.VERSION_NAME`. The `latest` GitHub release alias still serves the direct download URL on the marketing site.
+   - Before installing, the app verifies that the downloaded APK is signed with the same certificate as the installed app and asks for Android's "Install unknown apps" permission when required.
 
 ---
 

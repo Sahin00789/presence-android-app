@@ -2,8 +2,12 @@ package com.als.presence.core.update
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.als.presence.BuildConfig
@@ -22,6 +26,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,6 +38,10 @@ class AppUpdateManager @Inject constructor(
 ) {
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
+
+    /** Certificate fingerprint of the installed app, shown in the update dialog. */
+    val trustedSignerFingerprint: String?
+        get() = installedSignerFingerprint()
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -165,6 +174,21 @@ class AppUpdateManager @Inject constructor(
                         }
                     }
 
+                    // Never install an APK that is not signed by the same key as the
+                    // installed app. This blocks substituted/malicious update files.
+                    val apkSigner = apkSignerFingerprint(apkFile)
+                    val trustedSigner = installedSignerFingerprint()
+                    if (apkSigner == null || trustedSigner == null ||
+                        !apkSigner.equals(trustedSigner, ignoreCase = true)
+                    ) {
+                        apkFile.delete()
+                        Log.e(TAG, "Update signature mismatch: apk=$apkSigner installed=$trustedSigner")
+                        _updateState.value = UpdateState.Error(
+                            "Update rejected: the APK is not signed with presence's trusted certificate."
+                        )
+                        return@use
+                    }
+
                     val apkUri = FileProvider.getUriForFile(
                         context,
                         "${context.packageName}.fileprovider",
@@ -184,9 +208,17 @@ class AppUpdateManager @Inject constructor(
     }
 
     /**
-     * Triggers system package installer for the downloaded APK.
+     * Triggers system package installer for the downloaded APK. Android 8+ requires
+     * the user to allow this app to install unknown apps before the intent works.
      */
     fun installUpdate(apkUri: Uri) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !context.packageManager.canRequestPackageInstalls()
+        ) {
+            _updateState.value = UpdateState.InstallPermissionRequired(apkUri)
+            return
+        }
+
         try {
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(apkUri, "application/vnd.android.package-archive")
@@ -199,9 +231,67 @@ class AppUpdateManager @Inject constructor(
         }
     }
 
+    /** Opens the system "Install unknown apps" screen for this app. */
+    fun openInstallPermissionSettings() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val packageUri = Uri.parse("package:${context.packageName}")
+        try {
+            context.startActivity(
+                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, packageUri)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Install unknown apps settings unavailable, opening app details", e)
+            try {
+                context.startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (fallbackError: Exception) {
+                Log.e(TAG, "Could not open app settings", fallbackError)
+            }
+        }
+    }
+
     fun dismissUpdate() {
         _updateState.value = UpdateState.Idle
     }
+
+    private fun installedSignerFingerprint(): String? = try {
+        val packageInfo = context.packageManager.getPackageInfo(context.packageName, signingFlags())
+        signaturesOf(packageInfo)?.firstOrNull()?.let { sha256(it.toByteArray()) }
+    } catch (e: Exception) {
+        Log.w(TAG, "Unable to read installed app signature", e)
+        null
+    }
+
+    private fun apkSignerFingerprint(apkFile: File): String? = try {
+        val packageInfo = context.packageManager
+            .getPackageArchiveInfo(apkFile.absolutePath, signingFlags()) ?: return null
+        signaturesOf(packageInfo)?.firstOrNull()?.let { sha256(it.toByteArray()) }
+    } catch (e: Exception) {
+        Log.w(TAG, "Unable to read update APK signature", e)
+        null
+    }
+
+    @Suppress("DEPRECATION")
+    private fun signingFlags(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            PackageManager.GET_SIGNATURES
+        }
+
+    private fun signaturesOf(packageInfo: PackageInfo): Array<Signature>? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo.signingInfo?.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION") packageInfo.signatures
+        }
+
+    private fun sha256(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
 
     /**
      * Semantic version comparison helper (e.g. 1.0.10 > 1.0.9).

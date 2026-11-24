@@ -21,6 +21,10 @@ sealed interface UpdateState {
         val apkUri: Uri
     ) : UpdateState
 
+    data class InstallPermissionRequired(
+        val apkUri: Uri
+    ) : UpdateState
+
     data class Error(
         val message: String
     ) : UpdateState

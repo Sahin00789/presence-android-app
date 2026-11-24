@@ -20,12 +20,17 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
+private fun shortFingerprint(value: String): String =
+    if (value.length <= 18) value else "${value.take(12)}…${value.takeLast(6)}"
+
 @Composable
 fun AppUpdateDialog(
     updateState: UpdateState,
     onUpdateClick: (downloadUrl: String) -> Unit,
     onInstallClick: () -> Unit,
     onDismiss: () -> Unit,
+    onOpenInstallSettings: () -> Unit,
+    signerFingerprint: String? = null,
     modifier: Modifier = Modifier
 ) {
     if (updateState is UpdateState.Idle || updateState is UpdateState.Checking) return
@@ -166,6 +171,25 @@ fun AppUpdateDialog(
                             Spacer(modifier = Modifier.height(20.dp))
                         }
 
+                        if (!signerFingerprint.isNullOrBlank()) {
+                            Text(
+                                text = "Signed by presence · SHA-256 ${shortFingerprint(signerFingerprint)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        Text(
+                            text = "If Google Play Protect asks, tap More details → Scan app. This update uses the same signing certificate as your installed app.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
                         // Buttons
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -236,6 +260,24 @@ fun AppUpdateDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        if (!signerFingerprint.isNullOrBlank()) {
+                            Text(
+                                text = "Verified signature: ${shortFingerprint(signerFingerprint)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Text(
+                            text = "If Play Protect asks, tap More details → Scan app, then install.",
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
                         Spacer(modifier = Modifier.height(20.dp))
 
                         Button(
@@ -244,6 +286,57 @@ fun AppUpdateDialog(
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Text("Install Now", fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    is UpdateState.InstallPermissionRequired -> {
+                        Text(
+                            text = "Allow app installs",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "Android needs your permission to install updates from outside Google Play. Open Settings, enable “Allow from this source” for presence, then come back and tap Try again.",
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onDismiss,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Cancel")
+                            }
+
+                            Button(
+                                onClick = onOpenInstallSettings,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Open Settings")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = onInstallClick,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Try Again", fontWeight = FontWeight.Bold)
                         }
                     }
 

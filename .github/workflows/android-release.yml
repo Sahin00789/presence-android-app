@@ -11,8 +11,8 @@ on:
       - '*.md'
   workflow_dispatch:
 
-# Required by softprops/action-gh-release to create/update the "latest"
-# release and upload presence.apk with the default GITHUB_TOKEN.
+# Required by softprops/action-gh-release to create the versioned release and
+# upload presence.apk with the default GITHUB_TOKEN.
 permissions:
   contents: write
 
@@ -35,6 +35,12 @@ jobs:
       - name: Grant Execute Permission for Gradle Wrapper
         run: chmod +x gradlew
 
+      - name: Read Android version
+        id: android_version
+        run: |
+          VERSION=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Build Release APK
         run: ./gradlew assembleRelease --stacktrace
 
@@ -47,12 +53,12 @@ jobs:
             exit 1
           fi
 
-      - name: Update GitHub Latest Release
+      - name: Publish Versioned GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: "Presence Android App (Latest Release)"
-          body: "Latest release build of `presence.apk`. Uploaded automatically on push to `main`."
+          tag_name: v${{ steps.android_version.outputs.version }}
+          name: "Presence v${{ steps.android_version.outputs.version }}"
+          body: "Release v${{ steps.android_version.outputs.version }} of `presence.apk`. Uploaded automatically on push to `main`."
           draft: false
           prerelease: false
           files: app/build/outputs/apk/release/presence.apk

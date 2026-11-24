@@ -70,6 +70,8 @@ class AuthViewModel @Inject constructor(
 
     val isSyncing: StateFlow<Boolean> = syncCoordinator.isSyncing
     val updateState: StateFlow<UpdateState> = appUpdateManager.updateState
+    val trustedSignerFingerprint: String?
+        get() = appUpdateManager.trustedSignerFingerprint
 
     fun checkForAppUpdates(force: Boolean = false) {
         appUpdateManager.checkForUpdates(force)
@@ -81,6 +83,10 @@ class AuthViewModel @Inject constructor(
 
     fun installAppUpdate(uri: android.net.Uri) {
         appUpdateManager.installUpdate(uri)
+    }
+
+    fun openInstallPermissionSettings() {
+        appUpdateManager.openInstallPermissionSettings()
     }
 
     fun dismissAppUpdate() {

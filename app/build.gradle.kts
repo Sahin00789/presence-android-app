@@ -45,6 +45,7 @@ android {
             keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: "presence123"
             enableV1Signing = true
             enableV2Signing = true
+            enableV3Signing = true
         }
     }
 

@@ -1,8 +1,21 @@
 # PowerShell script to build release APK and publish to GitHub Releases
 param (
-    [string]$TagName = "latest",
-    [string]$ReleaseTitle = "Presence Android App (Latest Release)"
+    [string]$TagName = "",
+    [string]$ReleaseTitle = ""
 )
+
+if ([string]::IsNullOrWhiteSpace($TagName)) {
+    $versionMatch = Select-String -Path 'app\build.gradle.kts' -Pattern 'versionName\s*=\s*"([^"]+)"' | Select-Object -First 1
+    if ($null -eq $versionMatch) {
+        Write-Host "ERROR: Could not read versionName from app/build.gradle.kts" -ForegroundColor Red
+        exit 1
+    }
+    $TagName = "v" + $versionMatch.Matches[0].Groups[1].Value
+}
+
+if ([string]::IsNullOrWhiteSpace($ReleaseTitle)) {
+    $ReleaseTitle = "Presence Android App - $TagName"
+}
 
 Write-Host "Building Release APK..." -ForegroundColor Cyan
 .\gradlew assembleRelease
