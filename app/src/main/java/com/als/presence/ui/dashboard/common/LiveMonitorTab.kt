@@ -1,8 +1,11 @@
 package com.als.presence.ui.dashboard.common
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,39 +16,32 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,17 +53,26 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.als.presence.core.common.UiState
-import com.als.presence.core.designsystem.SecondaryEmerald
-import com.als.presence.core.designsystem.TertiaryAmber
+import com.als.presence.core.designsystem.LocalScreenSizeInfo
+import com.als.presence.core.designsystem.PresenceDesign
 import com.als.presence.data.model.LocationStaffCardDto
 import com.als.presence.data.model.LocationTodayPresenceResponseDto
 import com.als.presence.data.model.PremisesDto
 import com.als.presence.data.model.StaffDto
 import com.als.presence.domain.model.Role
 import com.als.presence.domain.model.User
+import com.als.presence.ui.dashboard.common.components.PresenceAvatar
+import com.als.presence.ui.dashboard.common.components.PresenceBadge
+import com.als.presence.ui.dashboard.common.components.PresenceButton
+import com.als.presence.ui.dashboard.common.components.PresenceEmptyState
+import com.als.presence.ui.dashboard.common.components.PresenceMicroLabel
+import com.als.presence.ui.dashboard.common.components.PresenceSectionHeader
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 enum class LiveMonitorFilter {
     ALL,
@@ -77,6 +82,17 @@ enum class LiveMonitorFilter {
     EXCEPTIONS
 }
 
+/**
+ * Editorial, 2026 Android Product Redesign for Live Monitor & Pings Tab.
+ * Features:
+ * - Selected date telemetry header
+ * - Interactive premises selector
+ * - 4 high-contrast operational metric tiles (Inside, Outside, Missed, Working Now)
+ * - Visual ping distribution proportional bar
+ * - Employee-wise ping directory (structured list rows, NOT repetitive cards!)
+ * - Collapsible verification activity timeline
+ * - Failed ping alert details with immediate manual attendance resolution actions
+ */
 @Composable
 fun LiveMonitorTab(
     user: User,
@@ -90,12 +106,7 @@ fun LiveMonitorTab(
     onResolveGpsException: (exceptionId: String, status: String, reason: String) -> Unit = { _, _, _ -> },
     onCancelOvertime: (String) -> Unit = {}
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
-            .padding(top = 16.dp, bottom = 28.dp)
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
         when (user.role) {
             Role.OWNER -> LocationPresenceTabContent(
                 user = user,
@@ -115,10 +126,6 @@ fun LiveMonitorTab(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Owner / Manager Locations View
-// ---------------------------------------------------------------------------
-
 @Composable
 private fun LocationPresenceTabContent(
     user: User,
@@ -130,1046 +137,604 @@ private fun LocationPresenceTabContent(
     onResolveGpsException: (exceptionId: String, status: String, reason: String) -> Unit,
     onCancelOvertime: (String) -> Unit
 ) {
+    val screenInfo = LocalScreenSizeInfo.current
     val premisesList = (premisesState as? UiState.Success)?.data.orEmpty()
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf(LiveMonitorFilter.ALL) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    val todayStr = remember {
+        val now = LocalDate.now()
+        now.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy"))
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = if (screenInfo.isTabletOrFoldable) 720.dp else Dp.Unspecified)
+                .fillMaxSize()
+                .padding(
+                    horizontal = screenInfo.horizontalScreenPadding,
+                    vertical = if (screenInfo.isVeryCompact) 10.dp else 14.dp
+                ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column {
-                Text(
-                    text = "Live Monitor",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Real-time workforce attendance & GPS verification",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            PresenceRefreshButton(
-                onClick = onRefresh,
-                isRefreshing = presenceState is UiState.Loading,
-                contentDescription = "Refresh live monitor"
-            )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        if (user.role == Role.EMPLOYEE) {
-            val assignedPremisesName = remember(user, premisesList, selectedPremisesId) {
-                val matched = premisesList.find { it.id == (selectedPremisesId ?: user.premisesId) }
-                matched?.name?.let { Dates.cleanPremisesName(it) }
-                    ?: user.premisesName?.let { Dates.cleanPremisesName(it) }
-                    ?.takeIf { it.isNotBlank() }
-                    ?: premisesList.firstOrNull()?.name?.let { Dates.cleanPremisesName(it) }
-                    ?: "Assigned Premises"
-            }
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 10.dp),
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            // -------------------------------------------------------------
+            // 1. DATE TELEMETRY & REFRESH HEADER
+            // -------------------------------------------------------------
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Business,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "ASSIGNED PREMISES",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                        )
-                        Text(
-                            text = assignedPremisesName,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Location Pings & Telemetry",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = todayStr,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-            }
-        } else if (premisesList.size > 1) {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 10.dp)
-            ) {
-                items(premisesList) { premises ->
-                    FilterChip(
-                        selected = premises.id == selectedPremisesId,
-                        onClick = { onSelectPremises(premises.id) },
-                        label = { Text(Dates.cleanPremisesName(premises.name)) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Place,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                        .border(BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
-        }
 
-        when (presenceState) {
-            UiState.Loading -> PresenceLoadingState()
-            is UiState.Error -> PresenceErrorState(message = presenceState.message, onRetry = onRefresh)
-            is UiState.Success -> {
-                val data = presenceState.data
-                val rawStaff = data.staffList
-                val allStaff = remember(rawStaff) {
-                    rawStaff
-                        .filter { it.employeeId.isNotBlank() || it.fullName.isNotBlank() }
-                        .distinctBy { it.employeeId.ifBlank { it.userId.ifBlank { it.fullName } } }
+            // -------------------------------------------------------------
+            // 2. PREMISES SELECTOR FILTER STRIP
+            // -------------------------------------------------------------
+            if (premisesList.size > 1) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(premisesList) { premises ->
+                        val isSelected = premises.id == selectedPremisesId
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onSelectPremises(premises.id) },
+                            label = { Text(Dates.cleanPremisesName(premises.name)) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Place,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
+                    }
                 }
+            }
 
-                // Summary stats
-                val totalActive = data.totalActiveStaff.coerceAtLeast(allStaff.size)
-                val totalClockedIn = allStaff.count { it.clockInTime != null }
-                val totalOutside = allStaff.count { it.locationStatus == "Outside" }
-                val totalExceptions = allStaff.count { it.exceptionId != null || it.outsidePingCount > 0 || it.consecutiveFailures > 0 }
+            when (presenceState) {
+                UiState.Loading, UiState.Idle -> PresenceLoadingState()
+                is UiState.Error -> PresenceErrorState(message = presenceState.message, onRetry = onRefresh)
+                is UiState.Success -> {
+                    val data = presenceState.data
+                    val allStaff = data.staffList
 
-                // Filter logic
-                val filteredStaff = remember(allStaff, searchQuery, selectedFilter) {
-                    allStaff.filter { card ->
-                        val matchesSearch = searchQuery.isBlank() ||
-                            card.fullName.contains(searchQuery, ignoreCase = true) ||
-                            card.staffCode.contains(searchQuery, ignoreCase = true)
+                    val totalClockedIn = allStaff.count { it.clockInTime != null }
+                    val totalNotClockedIn = allStaff.count { it.clockInTime == null }
+                    val insidePingsCount = allStaff.sumOf { it.counts.inside }
+                    val outsidePingsCount = allStaff.sumOf { it.counts.outside }
+                    val missedPingsCount = allStaff.sumOf { it.counts.missed }
+                    val totalPings = (insidePingsCount + outsidePingsCount + missedPingsCount).coerceAtLeast(1)
+                    val totalExceptionsCount = allStaff.count { it.exceptionId != null || it.outsidePingCount > 3 }
+                    val totalOutsideCount = allStaff.count { it.locationStatus == "Outside" || it.outsidePingCount > 0 }
 
+                    val filteredStaff = allStaff.filter { card ->
+                        val matchesSearch = searchQuery.isBlank() || card.fullName.contains(searchQuery, ignoreCase = true)
                         val matchesFilter = when (selectedFilter) {
                             LiveMonitorFilter.ALL -> true
                             LiveMonitorFilter.CLOCKED_IN -> card.clockInTime != null
                             LiveMonitorFilter.NOT_CLOCKED_IN -> card.clockInTime == null
-                            LiveMonitorFilter.OUTSIDE -> card.locationStatus == "Outside"
-                            LiveMonitorFilter.EXCEPTIONS -> card.exceptionId != null || card.outsidePingCount > 0 || card.consecutiveFailures > 0
+                            LiveMonitorFilter.OUTSIDE -> card.locationStatus == "Outside" || card.outsidePingCount > 0
+                            LiveMonitorFilter.EXCEPTIONS -> card.exceptionId != null || card.outsidePingCount > 3
                         }
-
                         matchesSearch && matchesFilter
                     }
-                }
 
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Summary Metrics Cards Row
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    // -------------------------------------------------------------
+                    // 3. OPERATIONAL METRIC TILES & VISUAL PING DISTRIBUTION
+                    // -------------------------------------------------------------
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                        tonalElevation = 1.dp
                     ) {
-                        SummaryMetricCard(
-                            label = "Total",
-                            value = "$totalActive",
-                            icon = Icons.Default.Group,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        SummaryMetricCard(
-                            label = "Clocked In",
-                            value = "$totalClockedIn",
-                            icon = Icons.Default.CheckCircle,
-                            color = SecondaryEmerald,
-                            modifier = Modifier.weight(1f)
-                        )
-                        SummaryMetricCard(
-                            label = "Outside",
-                            value = "$totalOutside",
-                            icon = Icons.Default.Place,
-                            color = Color(0xFFDC2626),
-                            modifier = Modifier.weight(1f)
-                        )
-                        SummaryMetricCard(
-                            label = "Alerts",
-                            value = "$totalExceptions",
-                            icon = Icons.Default.Warning,
-                            color = TertiaryAmber,
-                            modifier = Modifier.weight(1f)
-                        )
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            // 4 Metric Tiles in Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                TelemetryMetricTile(
+                                    label = "Inside",
+                                    value = "$insidePingsCount",
+                                    color = PresenceDesign.Positive,
+                                    bg = PresenceDesign.PositiveSoft,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TelemetryMetricTile(
+                                    label = "Outside",
+                                    value = "$outsidePingsCount",
+                                    color = if (outsidePingsCount > 0) PresenceDesign.DangerText else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    bg = if (outsidePingsCount > 0) PresenceDesign.DangerSoft else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TelemetryMetricTile(
+                                    label = "Missed",
+                                    value = "$missedPingsCount",
+                                    color = if (missedPingsCount > 0) PresenceDesign.CautionText else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    bg = if (missedPingsCount > 0) PresenceDesign.CautionSoft else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TelemetryMetricTile(
+                                    label = "Working",
+                                    value = "$totalClockedIn",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    bg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            // Visual Ping Distribution Bar
+                            if (totalPings > 1) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                val insideRatio = (insidePingsCount.toFloat() / totalPings).coerceIn(0f, 1f)
+                                val outsideRatio = (outsidePingsCount.toFloat() / totalPings).coerceIn(0f, 1f)
+                                val missedRatio = (missedPingsCount.toFloat() / totalPings).coerceIn(0f, 1f)
+
+                                Column {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(6.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    ) {
+                                        if (insideRatio > 0f) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(insideRatio)
+                                                    .height(6.dp)
+                                                    .background(PresenceDesign.Positive)
+                                            )
+                                        }
+                                        if (outsideRatio > 0f) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(outsideRatio)
+                                                    .height(6.dp)
+                                                    .background(PresenceDesign.DangerText)
+                                            )
+                                        }
+                                        if (missedRatio > 0f) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(missedRatio)
+                                                    .height(6.dp)
+                                                    .background(PresenceDesign.CautionText)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "Verification Success: ${(insideRatio * 100).toInt()}%",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PresenceDesign.Positive
+                                        )
+                                        Text(
+                                            text = "Total $totalPings GPS Checks",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    // Search Bar
+                    // -------------------------------------------------------------
+                    // 4. FILTER CONTROLS & SEARCH
+                    // -------------------------------------------------------------
                     PresenceSearchBar(
                         query = searchQuery,
                         onQueryChange = { searchQuery = it },
-                        placeholderText = "Search employee by name or code...",
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        placeholderText = "Search staff by name or code…"
                     )
 
-                    // Quick Filter Chips
                     LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         item {
                             FilterChip(
                                 selected = selectedFilter == LiveMonitorFilter.ALL,
                                 onClick = { selectedFilter = LiveMonitorFilter.ALL },
-                                label = { Text("All (${allStaff.size})", fontSize = 12.sp) }
+                                label = { Text("All (${allStaff.size})") }
                             )
                         }
                         item {
                             FilterChip(
                                 selected = selectedFilter == LiveMonitorFilter.CLOCKED_IN,
                                 onClick = { selectedFilter = LiveMonitorFilter.CLOCKED_IN },
-                                label = { Text("Clocked In ($totalClockedIn)", fontSize = 12.sp) }
+                                label = { Text("Clocked In ($totalClockedIn)") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = PresenceDesign.Positive
+                                    )
+                                }
                             )
                         }
-                        item {
-                            FilterChip(
-                                selected = selectedFilter == LiveMonitorFilter.NOT_CLOCKED_IN,
-                                onClick = { selectedFilter = LiveMonitorFilter.NOT_CLOCKED_IN },
-                                label = { Text("Not Clocked In (${allStaff.size - totalClockedIn})", fontSize = 12.sp) }
-                            )
-                        }
-                        if (totalOutside > 0) {
+                        if (totalOutsideCount > 0) {
                             item {
                                 FilterChip(
                                     selected = selectedFilter == LiveMonitorFilter.OUTSIDE,
                                     onClick = { selectedFilter = LiveMonitorFilter.OUTSIDE },
-                                    label = { Text("Outside ($totalOutside)", fontSize = 12.sp) }
+                                    label = { Text("Outside ($totalOutsideCount)") },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Warning,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = PresenceDesign.DangerText
+                                        )
+                                    }
                                 )
                             }
                         }
-                        if (totalExceptions > 0) {
+                        if (totalExceptionsCount > 0) {
                             item {
                                 FilterChip(
                                     selected = selectedFilter == LiveMonitorFilter.EXCEPTIONS,
                                     onClick = { selectedFilter = LiveMonitorFilter.EXCEPTIONS },
-                                    label = { Text("Alerts ($totalExceptions)", fontSize = 12.sp) }
+                                    label = { Text("Alerts ($totalExceptionsCount)") },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Warning,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = PresenceDesign.DangerText
+                                        )
+                                    }
                                 )
                             }
                         }
                     }
 
+                    // -------------------------------------------------------------
+                    // 5. EMPLOYEE-WISE PING DIRECTORY (STRUCTURED ROWS, NOT CARDS!)
+                    // -------------------------------------------------------------
                     if (filteredStaff.isEmpty()) {
-                        EmptyStaffPresenceState()
+                        PresenceEmptyState(
+                            title = "No Staff Activity",
+                            description = "No staff members match the selected filter criteria."
+                        )
                     } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxSize()
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                            tonalElevation = 1.dp
                         ) {
-                            items(filteredStaff, key = { "staff_${it.employeeId}" }) { card ->
-                                DailyStaffPresenceCard(
-                                    card = card,
-                                    onResolveGpsException = onResolveGpsException,
-                                    onCancelOvertime = onCancelOvertime
-                                )
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                items(filteredStaff) { card ->
+                                    StructuredLiveStaffRow(
+                                        card = card,
+                                        onResolveGpsException = onResolveGpsException
+                                    )
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f),
+                                        modifier = Modifier.padding(horizontal = 14.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
-            UiState.Idle -> {}
         }
     }
 }
 
 @Composable
-private fun SummaryMetricCard(
+private fun TelemetryMetricTile(
     label: String,
     value: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
     color: Color,
+    bg: Color,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = color.copy(alpha = 0.08f),
+        modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
-        modifier = modifier
+        color = bg,
+        border = BorderStroke(0.5.dp, color.copy(alpha = 0.25f))
     ) {
         Column(
             modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = color,
-                    modifier = Modifier.size(14.dp)
-                )
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = color
-                )
-            }
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = color
+            )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
                 fontSize = 10.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontWeight = FontWeight.Bold,
+                color = color
             )
         }
     }
 }
 
-// ---------------------------------------------------------------------------
-// Daily Staff Presence Card
-// ---------------------------------------------------------------------------
-
 /**
- * Multi-color segmented GPS Location Ping Progress Bar.
- * Renders proportional colored segments:
- * - Green (SecondaryEmerald / #10B981) for Inside geofence pings (IN_PREMISES).
- * - Yellow (TertiaryAmber / #F59E0B) for Missed / Uncertain pings.
- * - Red (Color(0xFFDC2626)) for Outside geofence pings.
+ * Compact, structured monitoring row for each staff member.
+ * Displays avatar with status beacon, name, shift name, clock-in time,
+ * ping count pill, and expandable activity timeline with resolution actions.
  */
 @Composable
-fun PingProgressBar(
-    insideCount: Int,
-    missedCount: Int,
-    outsideCount: Int,
-    modifier: Modifier = Modifier
+private fun StructuredLiveStaffRow(
+    card: LocationStaffCardDto,
+    onResolveGpsException: (exceptionId: String, status: String, reason: String) -> Unit
 ) {
-    val total = insideCount + missedCount + outsideCount
-    if (total == 0) return
+    val isException = card.exceptionId != null || card.outsidePingCount > 3
+    val isLive = card.clockInTime != null
+    var showTimeline by remember { mutableStateOf(false) }
 
-    val insideWeight = insideCount.toFloat() / total
-    val missedWeight = missedCount.toFloat() / total
-    val outsideWeight = outsideCount.toFloat() / total
-
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-        ) {
-            if (insideCount > 0) {
-                Box(
-                    modifier = Modifier
-                        .weight(insideWeight)
-                        .fillMaxHeight()
-                        .background(SecondaryEmerald)
-                )
-            }
-            if (missedCount > 0) {
-                Box(
-                    modifier = Modifier
-                        .weight(missedWeight)
-                        .fillMaxHeight()
-                        .background(TertiaryAmber)
-                )
-            }
-            if (outsideCount > 0) {
-                Box(
-                    modifier = Modifier
-                        .weight(outsideWeight)
-                        .fillMaxHeight()
-                        .background(Color(0xFFDC2626))
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(14.dp)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
+                modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                if (insideCount > 0) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(SecondaryEmerald)
-                        )
-                        Text(
-                            text = "$insideCount In",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SecondaryEmerald
-                        )
-                    }
-                }
-
-                if (missedCount > 0) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(TertiaryAmber)
-                        )
-                        Text(
-                            text = "$missedCount Missed",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TertiaryAmber
-                        )
-                    }
-                }
-
-                if (outsideCount > 0) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFDC2626))
-                        )
-                        Text(
-                            text = "$outsideCount Out",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFDC2626)
-                        )
-                    }
-                }
-            }
-
-            Text(
-                text = "Total $total Pings",
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-fun DailyStaffPresenceCard(
-    card: LocationStaffCardDto,
-    onResolveGpsException: (exceptionId: String, status: String, reason: String) -> Unit = { _, _, _ -> },
-    onCancelOvertime: (String) -> Unit = {},
-    modifier: Modifier = Modifier
-) {
-    var pendingAction by remember { mutableStateOf<String?>(null) }
-    var reasonText by remember { mutableStateOf("") }
-
-    val isClockedIn = card.clockInTime != null || card.overtimeClockInTime != null
-    val locationColor = when (card.locationStatus) {
-        "Inside" -> SecondaryEmerald
-        "Outside" -> Color(0xFFDC2626)
-        "GPS Uncertain" -> TertiaryAmber
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            // 1. Header Row: Avatar + Employee Name/Code + Role Badge + Geofence Status Pill
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
+                Box(contentAlignment = Alignment.BottomEnd) {
+                    PresenceAvatar(
+                        name = card.fullName,
+                        size = 40.dp
+                    )
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(11.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), CircleShape),
-                        contentAlignment = Alignment.Center
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(1.5.dp)
                     ) {
-                        Text(
-                            text = card.fullName.take(1).uppercase(),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = card.fullName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
-
-                            val isManager = card.role.equals("MANAGER", ignoreCase = true)
-                            Surface(
-                                color = if (isManager) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(
-                                    text = if (isManager) "Manager" else "Employee",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isManager) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .background(
+                                    when {
+                                        isException -> PresenceDesign.DangerText
+                                        isLive -> PresenceDesign.Positive
+                                        else -> MaterialTheme.colorScheme.outlineVariant
+                                    }
                                 )
-                            }
-                        }
-                        Text(
-                            text = "ID: ${card.staffCode.ifBlank { "N/A" }} • ${Dates.cleanPremisesName(card.premisesName)}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                // Geofence Status Chip (Top Right - Only shown when Clocked In)
-                if (isClockedIn && card.locationStatus in listOf("Inside", "Outside", "GPS Uncertain")) {
-                    Surface(
-                        color = locationColor.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(locationColor)
-                            )
-                            Text(
-                                text = card.locationStatus,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = locationColor
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 2. Regular Shift Attendance Section
-            val hasValidShift = !card.regularShiftStartTime.isNullOrBlank() && card.shiftName != "No shift assigned"
-            val shiftDisplayStatus = when {
-                card.attendanceStatus == "NOT_CLOCKED_IN" && hasValidShift -> "SCHEDULED"
-                card.attendanceStatus == "NOT_CLOCKED_IN" && !hasValidShift -> "NO_SHIFT"
-                else -> card.attendanceStatus
-            }
-            val shiftAttColor = StatusStyle.color(shiftDisplayStatus)
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Surface(
-                        color = shiftAttColor.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Text(
-                            text = StatusStyle.label(shiftDisplayStatus),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = shiftAttColor,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
-                    }
-
-                    if (card.earnedAmountPaise > 0) {
-                        Surface(
-                            color = SecondaryEmerald.copy(alpha = 0.12f),
-                            shape = RoundedCornerShape(6.dp),
-                            border = BorderStroke(1.dp, SecondaryEmerald.copy(alpha = 0.3f))
-                        ) {
-                            Text(
-                                text = Money.format(card.earnedAmountPaise),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = SecondaryEmerald,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
-                        }
-                    }
-                }
-
-                val dayNameText = card.dayOfWeek.takeIf { it.isNotBlank() } ?: ""
-                val shiftInfoText = when {
-                    hasValidShift -> {
-                        val window = Dates.formatWindow(card.regularShiftStartTime, card.regularShiftEndTime)
-                        "${card.shiftName} ($window)${if (dayNameText.isNotBlank()) " • $dayNameText" else ""}"
-                    }
-                    card.attendanceStatus == "HOLIDAY" -> {
-                        if (card.shiftName.isNotBlank() && card.shiftName != "No shift assigned" && card.shiftName != "Holiday") {
-                            "${card.shiftName}${if (dayNameText.isNotBlank()) " • $dayNameText" else ""}"
-                        } else {
-                            dayNameText.ifBlank { "Holiday" }
-                        }
-                    }
-                    card.attendanceStatus == "WEEKLY_OFF" || card.attendanceStatus == "OFF_DAY" -> {
-                        dayNameText.ifBlank { "Weekly Off" }
-                    }
-                    card.attendanceStatus == "LEAVE" -> "Approved Leave"
-                    else -> "No shift assigned today${if (dayNameText.isNotBlank()) " • $dayNameText" else ""}"
-                }
-
-                Text(
-                    text = shiftInfoText,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 3. Shift Clock-In / Clock-Out Timestamps
-            val clockInText = if (card.clockInTime != null) Dates.formatTime(card.clockInTime) else null
-            val clockOutText = if (card.clockOutTime != null) Dates.formatTime(card.clockOutTime) else null
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Shift Clock-In:",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = clockInText ?: "Not Clocked In",
-                        style = MaterialTheme.typography.labelSmall,
+                        text = card.fullName,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (clockInText != null) SecondaryEmerald else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                }
-
-                if (clockInText != null) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "Shift Clock-Out:",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = clockOutText ?: "In Progress",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (clockOutText != null) MaterialTheme.colorScheme.primary else TertiaryAmber
-                        )
-                    }
-                }
-            }
-
-            // 3.5 GPS Location Pings Multi-Color Progress Bar (Green = Inside, Yellow = Missed, Red = Outside)
-            val totalPingsCount = card.counts.inside + card.counts.missed + card.counts.outside
-            if (totalPingsCount > 0) {
-                Spacer(modifier = Modifier.height(8.dp))
-                PingProgressBar(
-                    insideCount = card.counts.inside,
-                    missedCount = card.counts.missed,
-                    outsideCount = card.counts.outside
-                )
-            }
-
-            // 4. Overtime Session Section (Clean Separate Block)
-            if (card.hasOvertimeToday && card.overtimeId != null) {
-                Spacer(modifier = Modifier.height(10.dp))
-                val otStatus = card.overtimeStatus ?: "APPROVED"
-                val otStatusColor = StatusStyle.color(otStatus)
-                val otClockInText = if (card.overtimeClockInTime != null) Dates.formatTime(card.overtimeClockInTime) else null
-                val otClockOutText = if (card.overtimeClockOutTime != null) Dates.formatTime(card.overtimeClockOutTime) else null
-
-                Surface(
-                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.35f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Schedule,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Text(
-                                    text = "OT: ${card.overtimeName ?: "Overtime"} (${if (card.overtimeStartTime != null && card.overtimeEndTime != null) Dates.formatWindow(card.overtimeStartTime, card.overtimeEndTime) else "Approved"})",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-
-                            Surface(
-                                color = otStatusColor.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(
-                                    text = StatusStyle.label(otStatus),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = otStatusColor,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = "OT Clock-In:",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = otClockInText ?: "Not Clocked In",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (otClockInText != null) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            if (otClockInText != null) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Text(
-                                        text = "OT Clock-Out:",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        text = otClockOutText ?: "In Progress",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (otClockOutText != null) MaterialTheme.colorScheme.primary else TertiaryAmber
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 5. Action Alert Box (Only if Exception Triggered)
-            val sessionFinished = card.clockOutTime != null && (!card.hasOvertimeToday || card.overtimeClockOutTime != null)
-            if (card.exceptionId != null && !sessionFinished) {
-                val isOvertimeException = card.hasOvertimeToday || card.overtimeId != null
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Surface(
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Warning,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = if (isOvertimeException) "3+ Outside Pings on Overtime — Action Required" else "3+ Outside Pings — Action Required",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        if (isOvertimeException && card.overtimeId != null) {
-                            Button(
-                                onClick = { pendingAction = "CANCEL_OVERTIME" },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Cancel Overtime", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Button(
-                                    onClick = { pendingAction = "ABSENT" },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Mark Absent", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-
-                                Button(
-                                    onClick = { pendingAction = "HALF_DAY" },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Mark Half-Day", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 6. Recent GPS Checks (Summary Trail)
-            if (isClockedIn || card.latestPings.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                    val shiftLabel = if (card.shiftName.isNotBlank()) card.shiftName else "No Shift Assigned"
+                    val inTimeLabel = if (card.clockInTime != null) " • In: ${Dates.formatTime(card.clockInTime)}" else ""
                     Text(
-                        text = "GPS Checks (${card.counts.inside} Inside • ${card.counts.outside} Outside)",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    if (card.latestPings.isNotEmpty()) {
-                        val lastPing = card.latestPings.last()
-                        val pingTime = Dates.formatTime(lastPing.effectiveTime)
-                        val pingColor = if (!lastPing.effectiveIsOutside) SecondaryEmerald else Color(0xFFDC2626)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(pingColor))
-                            Text(
-                                text = "Last: $pingTime",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = pingColor
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (pendingAction != null) {
-        AlertDialog(
-            onDismissRequest = { pendingAction = null },
-            title = {
-                Text(
-                    text = if (pendingAction == "CANCEL_OVERTIME") "Confirm Cancel Overtime" else "Confirm Attendance Correction",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Employee: ${card.fullName}", fontWeight = FontWeight.SemiBold)
-                    Text("Shift / Work: ${card.shiftName.ifBlank { "Assigned Shift" }} (${card.dayOfWeek})")
-                    Text("New Status: ${if (pendingAction == "CANCEL_OVERTIME") "CANCELLED" else pendingAction}")
-
-                    OutlinedTextField(
-                        value = reasonText,
-                        onValueChange = { reasonText = it },
-                        label = { Text("Reason (Optional)") },
-                        modifier = Modifier.fillMaxWidth()
+                        text = "$shiftLabel$inTimeLabel",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val act = pendingAction
-                        pendingAction = null
-                        if (act == "CANCEL_OVERTIME" && card.overtimeId != null) {
-                            onCancelOvertime(card.overtimeId)
-                        } else if (act != null) {
-                            onResolveGpsException(card.exceptionId ?: "", act, reasonText.ifBlank { "Manual correction by owner" })
-                        }
-                        reasonText = ""
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = if (pendingAction == "ABSENT" || pendingAction == "CANCEL_OVERTIME") Color(0xFFDC2626) else MaterialTheme.colorScheme.primary)
-                ) {
-                    Text("Confirm")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingAction = null }) {
-                    Text("Cancel")
-                }
             }
-        )
-    }
-}
 
-@Composable
-private fun PresenceLoadingState() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(200.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "Loading real-time presence data…",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
+            Spacer(modifier = Modifier.width(8.dp))
 
-@Composable
-private fun PresenceErrorState(message: String, onRetry: () -> Unit) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
+            // Right Status Badge
+            PresenceBadge(
+                text = when {
+                    card.exceptionId != null -> "ALERT"
+                    card.clockInTime != null -> "INSIDE"
+                    else -> "OFFLINE"
+                },
+                tone = when {
+                    card.exceptionId != null -> PresenceTone.Danger
+                    card.clockInTime != null -> PresenceTone.Success
+                    else -> PresenceTone.Neutral
+                },
+                showLiveBeacon = isLive || isException
             )
-            OutlinedButton(
-                onClick = onRetry,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-            ) {
-                Text("Retry")
-            }
         }
-    }
-}
 
-@Composable
-private fun EmptyStaffPresenceState() {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp)
-    ) {
-        Box(
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Telemetry counters strip
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
-            contentAlignment = Alignment.Center
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "No employees match the selected criteria",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "${card.counts.inside} In • ${card.counts.outside} Out • ${card.counts.missed} Missed",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
             )
+
+            // Timeline toggle
+            if (card.latestPings.isNotEmpty()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.clickable { showTimeline = !showTimeline }
+                ) {
+                    Text(
+                        text = if (showTimeline) "Hide Timeline" else "View Timeline",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Icon(
+                        imageVector = if (showTimeline) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+
+        // Expanded Recent Timeline
+        AnimatedVisibility(visible = showTimeline) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                card.latestPings.take(3).forEach { ping ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = Dates.formatTime(ping.effectiveTime),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (ping.effectiveIsOutside) "Outside (${ping.distanceMeters?.toInt() ?: 0}m)" else "Inside Premises",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (ping.effectiveIsOutside) PresenceDesign.DangerText else PresenceDesign.Positive
+                        )
+                    }
+                }
+            }
+        }
+
+        // Immediate Exception Resolution Action Buttons (Rule: outside count > 3)
+        if (isException) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Manual Attendance Resolution Required:",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = PresenceDesign.DangerText
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PresenceButton(
+                    text = "Mark Absent",
+                    onClick = {
+                        card.exceptionId?.let { id -> onResolveGpsException(id, "ABSENT", "Owner manual action") }
+                    },
+                    variant = PresenceVariant.Danger,
+                    size = com.als.presence.ui.dashboard.common.PresenceSize.Sm,
+                    modifier = Modifier.weight(1f)
+                )
+
+                PresenceButton(
+                    text = "Half Day",
+                    onClick = {
+                        card.exceptionId?.let { id -> onResolveGpsException(id, "HALF_DAY", "Owner manual action") }
+                    },
+                    variant = PresenceVariant.Soft,
+                    size = com.als.presence.ui.dashboard.common.PresenceSize.Sm,
+                    modifier = Modifier.weight(1f)
+                )
+
+                PresenceButton(
+                    text = "Leave",
+                    onClick = {
+                        card.exceptionId?.let { id -> onResolveGpsException(id, "LEAVE", "Owner manual action") }
+                    },
+                    variant = PresenceVariant.Secondary,
+                    size = com.als.presence.ui.dashboard.common.PresenceSize.Sm,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }
@@ -1179,73 +744,93 @@ private fun employeeLocationsTabContent(
     presenceState: UiState<LocationTodayPresenceResponseDto>,
     onRefresh: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    val screenInfo = LocalScreenSizeInfo.current
+    val data = (presenceState as? UiState.Success)?.data
+    val card = data?.staffList?.firstOrNull()
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = if (screenInfo.isTabletOrFoldable) 720.dp else Dp.Unspecified)
+                .fillMaxSize()
+                .padding(
+                    horizontal = screenInfo.horizontalScreenPadding,
+                    vertical = if (screenInfo.isVeryCompact) 10.dp else 14.dp
+                ),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Column {
-                Text(
-                    text = "Live Monitor",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "My active workplace location and geofence status",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            PresenceRefreshButton(
-                onClick = onRefresh,
-                isRefreshing = presenceState is UiState.Loading,
-                contentDescription = "Refresh live monitor"
-            )
-        }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Location Telemetry",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Active shift periodic GPS verification status",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-        Spacer(modifier = Modifier.height(14.dp))
-
-        when (presenceState) {
-            UiState.Loading -> PresenceLoadingState()
-            is UiState.Error -> PresenceErrorState(message = presenceState.message, onRetry = onRefresh)
-            is UiState.Success -> {
-                val data = presenceState.data
-                val myCard = data.staffList.firstOrNull()
-
-                if (myCard == null) {
-                    Card(
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(20.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = "Workplace Geofence Info",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Premises: ${data.premisesName ?: "Main Workplace"}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "Radius: ${data.radiusMeters ?: 50} metres",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                } else {
-                    DailyStaffPresenceCard(card = myCard)
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                        .border(BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
-            UiState.Idle -> {}
+
+            if (card != null) {
+                StructuredLiveStaffRow(
+                    card = card,
+                    onResolveGpsException = { _, _, _ -> }
+                )
+            } else {
+                PresenceEmptyState(
+                    title = "No Active Session",
+                    description = "Active shifts automatically stream GPS location checks every ~10 minutes."
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun PresenceLoadingState() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(text = "Updating live location telemetry…", style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun PresenceErrorState(message: String, onRetry: () -> Unit) {
+    PresenceEmptyState(
+        title = "Monitoring Error",
+        description = message,
+        actionLabel = "Retry",
+        onAction = onRetry
+    )
 }

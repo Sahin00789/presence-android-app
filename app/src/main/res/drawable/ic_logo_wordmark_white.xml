@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="40dp"
+    android:viewportWidth="200"
+    android:viewportHeight="40">
+
+    <!-- Premium Geometric Wordmark 'Presence' (White) -->
+    <!-- 'P' -->
+    <path
+        android:pathData="M12,8 L12,32 M12,8 L24,8 C29.5,8 34,11.5 34,16 C34,20.5 29.5,24 24,24 L12,24"
+        android:strokeWidth="4"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 'r' -->
+    <path
+        android:pathData="M42,15 L42,32 M42,21 C45,17.5 49,16 53,16"
+        android:strokeWidth="3.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 'e' -->
+    <path
+        android:pathData="M62,24 L74,24 C74,19 70,15 65.5,15 C60.5,15 57,19 57,23.5 C57,28 60.5,32 66,32 C70,32 73,30 74.5,27.5"
+        android:strokeWidth="3.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 's' -->
+    <path
+        android:pathData="M91,18.5 C89.5,16.5 87,15.5 84.5,15.5 C81.5,15.5 79.5,17 79.5,19 C79.5,21 81,22 84,22.5 L86.5,23 C89.5,23.5 91.5,25 91.5,27.5 C91.5,30 89,32 85,32 C82,32 79.5,30.5 78,28.5"
+        android:strokeWidth="3.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 'e' -->
+    <path
+        android:pathData="M99,24 L111,24 C111,19 107,15 102.5,15 C97.5,15 94,19 94,23.5 C94,28 97.5,32 103,32 C107,32 110,30 111.5,27.5"
+        android:strokeWidth="3.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 'n' -->
+    <path
+        android:pathData="M120,15 L120,32 M120,21 C123,17 127,15 131.5,15 C136.5,15 139,18 139,23 L139,32"
+        android:strokeWidth="3.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 'c' -->
+    <path
+        android:pathData="M158,18.5 C156.5,16.2 153.8,15 150.5,15 C145.5,15 142,19 142,23.5 C142,28 145.5,32 151,32 C154.2,32 156.8,30.5 158.5,28"
+        android:strokeWidth="3.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 'e' -->
+    <path
+        android:pathData="M166,24 L178,24 C178,19 174,15 169.5,15 C164.5,15 161,19 161,23.5 C161,28 164.5,32 170,32 C174,32 177,30 178.5,27.5"
+        android:strokeWidth="3.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

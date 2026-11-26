@@ -192,14 +192,24 @@ class PayrollViewModel @Inject constructor(
                         val mName = monthNames.getOrNull(month - 1) ?: "Month$month"
                         val fileName = "Payslip_${mName}_${year}.pdf"
 
-                        val targetFile = java.io.File(
-                            context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS),
-                            fileName
-                        )
+                        val targetDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
+                            ?: context.filesDir
+                        targetDir.mkdirs()
+                        val targetFile = java.io.File(targetDir, fileName)
+
                         body.byteStream().use { input ->
                             targetFile.outputStream().use { output ->
                                 input.copyTo(output)
                             }
+                        }
+
+                        try {
+                            val publicDownloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                            if (publicDownloadsDir != null && (publicDownloadsDir.exists() || publicDownloadsDir.mkdirs())) {
+                                val publicFile = java.io.File(publicDownloadsDir, fileName)
+                                targetFile.copyTo(publicFile, overwrite = true)
+                            }
+                        } catch (_: Exception) {
                         }
 
                         val authority = "${context.packageName}.fileprovider"
@@ -214,6 +224,7 @@ class PayrollViewModel @Inject constructor(
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                             try {
                                 context.startActivity(android.content.Intent.createChooser(intent, "Open Payslip PDF"))
+                                _message.value = "Payslip saved: $fileName"
                             } catch (_: Exception) {
                                 _message.value = "Payslip saved to downloads: $fileName"
                             }

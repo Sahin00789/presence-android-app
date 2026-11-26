@@ -204,8 +204,8 @@ private fun BiometricsStatusCard(
 
     PresenceCard(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -214,11 +214,11 @@ private fun BiometricsStatusCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(36.dp)
                             .clip(CircleShape)
                             .background(
                                 if (isEnrolled) MaterialTheme.colorScheme.primaryContainer
@@ -230,20 +230,22 @@ private fun BiometricsStatusCard(
                             imageVector = if (isEnrolled) Icons.Default.Verified else Icons.Default.Face,
                             contentDescription = null,
                             tint = if (isEnrolled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
                     Column {
                         Text(
                             text = "Facial Biometrics",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
                             color = PresenceDesign.Ink
                         )
                         Text(
                             text = if (isEnrolled) "Multi-Pose SFace Template Active" else "No Multi-Pose Template Found",
                             style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.sp,
                             color = PresenceDesign.LabelText
                         )
                     }
@@ -256,7 +258,7 @@ private fun BiometricsStatusCard(
                 )
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
             // Stat Tiles Grid
             Row(

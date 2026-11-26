@@ -1,5 +1,15 @@
 <resources>
     <string name="app_name">presence</string>
+    <string name="presence_brand_name">Presence</string>
+    <string name="presence_tagline">Workforce Attendance &amp; Roster</string>
+    <string name="presence_subtitle">Attendance, Shift Roster &amp; Salary Ledger</string>
+    <string name="presence_logo_description">Presence Logo Symbol</string>
+    <string name="preview_title_light">Presence Brand Identity — Light Background</string>
+    <string name="preview_title_dark">Presence Brand Identity — Dark Background</string>
+    <string name="preview_label_horizontal">A. Primary Horizontal Logo</string>
+    <string name="preview_label_vertical">B. Vertical Logo (Auth / Splash Screen)</string>
+    <string name="preview_label_app_icon">C. App Icon Preview</string>
+    <string name="preview_label_monochrome">D. Monochrome Symbol</string>
     <!-- Web (server) OAuth client. It must be the web client because it is used both as
          serverClientId (the ID token's `aud` must match GOOGLE_WEB_CLIENT_ID on the server)
          and as the client that issues server auth codes, which only a web client can

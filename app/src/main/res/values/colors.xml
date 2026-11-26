@@ -7,4 +7,27 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Presence World-Class Brand Color Identity -->
+    <color name="presence_navy">#071D49</color>
+    <color name="presence_midnight">#030C1E</color>
+    <color name="presence_cobalt">#2563EB</color>
+    <color name="presence_cobalt_dark">#1E50D8</color>
+    <color name="presence_cyan">#06B6D4</color>
+    <color name="presence_cyan_accent">#06B6D4</color>
+    <color name="presence_cyan_light">#22D3EE</color>
+    <color name="presence_light_bg">#F8FAFC</color>
+    <color name="presence_dark_bg">#030C1E</color>
+    <color name="presence_card_dark">#0F172A</color>
+    <color name="presence_text_dark">#FFFFFF</color>
+    <color name="presence_text_light">#071D49</color>
+    <color name="presence_text_secondary">#64748B</color>
+    <color name="presence_border_dark">#1E293B</color>
+    <color name="presence_border_light">#E2E8F0</color>
+    <color name="presence_white">#FFFFFF</color>
+
+    <!-- Theme Dependent Colors -->
+    <color name="presence_bg">#F8FAFC</color>
+    <color name="presence_card">#FFFFFF</color>
+    <color name="presence_text_primary">#071D49</color>
 </resources>

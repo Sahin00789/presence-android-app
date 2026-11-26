@@ -242,10 +242,6 @@ private fun AttendanceRow(record: AttendanceRecordDto) {
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
-                    text = if (!record.clockOut.isNullOrBlank()) "Out: ${Dates.formatTime(record.clockOut)}" else "Out: --",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(
                     text = "Worked: ${Dates.formatMinutes(record.workedMinutes)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

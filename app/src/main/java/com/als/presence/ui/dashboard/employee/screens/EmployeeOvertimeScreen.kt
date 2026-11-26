@@ -102,68 +102,17 @@ fun EmployeeOvertimeScreen(
         onRefresh = viewModel::loadOvertime
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Tab Navigation
-            TabRow(
+            // Modern High-UX Segmented Tabs
+            com.als.presence.ui.dashboard.common.PresenceSegmentedTabRow(
                 selectedTabIndex = selectedTab,
-                modifier = Modifier.clip(RoundedCornerShape(12.dp)),
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                indicator = {},
-                divider = {}
-            ) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (selectedTab == 0) MaterialTheme.colorScheme.surface else androidx.compose.ui.graphics.Color.Transparent
-                        )
-                        .padding(vertical = 8.dp)
-                ) {
-                    Text(
-                        text = "Scheduled (${scheduledList.size})",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontSize = 12.sp,
-                        fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal
-                    )
-                }
-
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (selectedTab == 1) MaterialTheme.colorScheme.surface else androidx.compose.ui.graphics.Color.Transparent
-                        )
-                        .padding(vertical = 8.dp)
-                ) {
-                    Text(
-                        text = "Completed (${completedList.size})",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontSize = 12.sp,
-                        fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
-                    )
-                }
-
-                Tab(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (selectedTab == 2) MaterialTheme.colorScheme.surface else androidx.compose.ui.graphics.Color.Transparent
-                        )
-                        .padding(vertical = 8.dp)
-                ) {
-                    Text(
-                        text = "All (${allOvertime.size})",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontSize = 12.sp,
-                        fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal
-                    )
-                }
-            }
+                tabs = listOf(
+                    "Scheduled (${scheduledList.size})",
+                    "Completed (${completedList.size})",
+                    "All (${allOvertime.size})"
+                ),
+                onTabSelected = { selectedTab = it },
+                icons = listOf(Icons.Default.Schedule, Icons.Default.MoreTime, Icons.Default.CalendarMonth)
+            )
 
             // Tab Content List
             when (overtimeState) {

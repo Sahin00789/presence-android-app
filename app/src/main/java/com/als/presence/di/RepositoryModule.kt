@@ -8,55 +8,19 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
+/**
+ * Hilt module binding domain Repository interfaces to concrete Data Repository implementations.
+ */
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
 
-    @Binds
-    @Singleton
-    abstract fun bindAuthRepository(
-        authRepositoryImpl: AuthRepositoryImpl
-    ): AuthRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindOvertimeRepository(
-        overtimeRepositoryImpl: OvertimeRepositoryImpl
-    ): OvertimeRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindEmployeeRepository(
-        employeeRepositoryImpl: EmployeeRepositoryImpl
-    ): EmployeeRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindPremisesRepository(
-        premisesRepositoryImpl: PremisesRepositoryImpl
-    ): PremisesRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindPayrollRepository(
-        payrollRepositoryImpl: PayrollRepositoryImpl
-    ): PayrollRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindLeaveRepository(
-        leaveRepositoryImpl: LeaveRepositoryImpl
-    ): LeaveRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindAttendanceRepository(
-        attendanceRepositoryImpl: AttendanceRepositoryImpl
-    ): AttendanceRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindOperationsRepository(
-        operationsRepositoryImpl: OperationsRepositoryImpl
-    ): OperationsRepository
+    @Binds @Singleton abstract fun bindAuthRepository(authRepositoryImpl: AuthRepositoryImpl): AuthRepository
+    @Binds @Singleton abstract fun bindOvertimeRepository(overtimeRepositoryImpl: OvertimeRepositoryImpl): OvertimeRepository
+    @Binds @Singleton abstract fun bindEmployeeRepository(employeeRepositoryImpl: EmployeeRepositoryImpl): EmployeeRepository
+    @Binds @Singleton abstract fun bindPremisesRepository(premisesRepositoryImpl: PremisesRepositoryImpl): PremisesRepository
+    @Binds @Singleton abstract fun bindPayrollRepository(payrollRepositoryImpl: PayrollRepositoryImpl): PayrollRepository
+    @Binds @Singleton abstract fun bindLeaveRepository(leaveRepositoryImpl: LeaveRepositoryImpl): LeaveRepository
+    @Binds @Singleton abstract fun bindAttendanceRepository(attendanceRepositoryImpl: AttendanceRepositoryImpl): AttendanceRepository
+    @Binds @Singleton abstract fun bindOperationsRepository(operationsRepositoryImpl: OperationsRepositoryImpl): OperationsRepository
 }

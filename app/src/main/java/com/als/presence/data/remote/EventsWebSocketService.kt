@@ -146,19 +146,31 @@ class EventsWebSocketService @Inject constructor(
                         else -> "Real-time update received"
                     }
 
+                    val premisesId = json.optString("premisesId").takeIf { it.isNotBlank() }
+                        ?: dataObj?.optString("premisesId")?.takeIf { it.isNotBlank() }
+
                     val domainEvent = when {
+                        eventType.equals("notification", ignoreCase = true) ||
+                        eventType.contains("exception", ignoreCase = true) ->
+                            DomainWebSocketEvent.Notification(
+                                isOwnEvent = isOwnEvent,
+                                premisesId = premisesId,
+                                title = title,
+                                body = body ?: messageStr ?: reason,
+                                toastMessage = customToastText
+                            )
                         eventType.contains("premises", ignoreCase = true) ->
-                            DomainWebSocketEvent.PremisesUpdate(isOwnEvent = isOwnEvent, toastMessage = customToastText)
-                        eventType.contains("attendance", ignoreCase = true) ->
-                            DomainWebSocketEvent.AttendanceUpdate(isOwnEvent = isOwnEvent, toastMessage = customToastText)
+                            DomainWebSocketEvent.PremisesUpdate(isOwnEvent = isOwnEvent, premisesId = premisesId, toastMessage = customToastText)
+                        eventType.contains("attendance", ignoreCase = true) || eventType.contains("location", ignoreCase = true) ->
+                            DomainWebSocketEvent.AttendanceUpdate(isOwnEvent = isOwnEvent, premisesId = premisesId, toastMessage = customToastText)
                         eventType.contains("staff", ignoreCase = true) || eventType.contains("employee", ignoreCase = true) ->
-                            DomainWebSocketEvent.StaffUpdate(isOwnEvent = isOwnEvent, toastMessage = customToastText)
+                            DomainWebSocketEvent.StaffUpdate(isOwnEvent = isOwnEvent, premisesId = premisesId, toastMessage = customToastText)
                         eventType.contains("shift", ignoreCase = true) ->
-                            DomainWebSocketEvent.ShiftUpdate(isOwnEvent = isOwnEvent, toastMessage = customToastText)
-                        eventType.contains("wallet", ignoreCase = true) || eventType.contains("ledger", ignoreCase = true) || eventType.contains("salary", ignoreCase = true) ->
-                            DomainWebSocketEvent.WalletUpdate(isOwnEvent = isOwnEvent, toastMessage = customToastText)
+                            DomainWebSocketEvent.ShiftUpdate(isOwnEvent = isOwnEvent, premisesId = premisesId, toastMessage = customToastText)
+                        eventType.contains("wallet", ignoreCase = true) || eventType.contains("ledger", ignoreCase = true) || eventType.contains("salary", ignoreCase = true) || eventType.contains("payroll", ignoreCase = true) ->
+                            DomainWebSocketEvent.WalletUpdate(isOwnEvent = isOwnEvent, premisesId = premisesId, toastMessage = customToastText)
                         else ->
-                            DomainWebSocketEvent.Generic(isOwnEvent = isOwnEvent, toastMessage = customToastText)
+                            DomainWebSocketEvent.Generic(isOwnEvent = isOwnEvent, premisesId = premisesId, toastMessage = customToastText)
                     }
 
                     if (isBuffering) {

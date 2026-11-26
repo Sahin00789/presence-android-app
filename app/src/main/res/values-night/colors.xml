@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Presence Brand Night Theme Overrides -->
+    <color name="presence_bg">#030C1E</color>
+    <color name="presence_card">#0B2559</color>
+    <color name="presence_text_primary">#FFFFFF</color>
+    <color name="presence_text_secondary">#94A3B8</color>
+</resources>

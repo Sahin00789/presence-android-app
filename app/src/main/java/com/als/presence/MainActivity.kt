@@ -31,6 +31,7 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var eventsWebSocketService: EventsWebSocketService
+    @Inject lateinit var themePreferences: com.als.presence.core.designsystem.ThemePreferences
 
     private val authViewModel: AuthViewModel by viewModels()
 
@@ -38,7 +39,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            PresenceTheme {
+            val themeMode by themePreferences.themeModeFlow.collectAsState(initial = com.als.presence.core.designsystem.ThemeMode.SYSTEM)
+            val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val isDark = when (themeMode) {
+                com.als.presence.core.designsystem.ThemeMode.LIGHT -> false
+                com.als.presence.core.designsystem.ThemeMode.DARK -> true
+                com.als.presence.core.designsystem.ThemeMode.SYSTEM -> isSystemDark
+            }
+
+            PresenceTheme(darkTheme = isDark) {
                 // Request missing permissions (Location, Camera, Notifications) when app opens
                 RequestAppPermissionsOnOpen()
 

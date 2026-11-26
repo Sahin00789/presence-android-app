@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.FilterChip
+import com.als.presence.ui.dashboard.common.PresenceSegmentedTabRow
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -151,18 +152,11 @@ fun personalAttendanceHistoryTab(
             )
         }
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            sections.forEachIndexed { index, label ->
-                FilterChip(
-                    selected = section == index,
-                    onClick = { section = index },
-                    label = { Text(label) }
-                )
-            }
-        }
+        PresenceSegmentedTabRow(
+            selectedTabIndex = section,
+            tabs = sections,
+            onTabSelected = { section = it }
+        )
 
         when (section) {
             0 -> when (recordsState) {
@@ -625,7 +619,7 @@ private fun RecordRow(record: AttendanceRecordDto) {
             }
 
             Text(
-                text = "In: ${Dates.formatTime(record.clockIn)} • Out: ${if (!record.clockOut.isNullOrBlank()) Dates.formatTime(record.clockOut) else "Pending"} (${Dates.formatMinutes(record.workedMinutes)})",
+                text = if (!record.clockIn.isNullOrBlank()) "Clock In: ${Dates.formatTime(record.clockIn)} • ${Dates.formatMinutes(record.workedMinutes)}" else "Shift Completed",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

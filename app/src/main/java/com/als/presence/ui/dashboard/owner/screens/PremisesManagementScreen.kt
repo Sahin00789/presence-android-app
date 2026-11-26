@@ -46,7 +46,7 @@ import com.als.presence.ui.dashboard.common.PresenceLoading
 import com.als.presence.ui.dashboard.common.PresenceSectionTitle
 import com.als.presence.ui.dashboard.common.PresenceSecondaryScaffold
 import com.als.presence.ui.dashboard.common.PresenceTone
-import com.als.presence.ui.dashboard.owner.OwnerWorkforceViewModel
+import com.als.presence.ui.dashboard.owner.viewmodels.OwnerWorkforceViewModel
 import com.als.presence.ui.dashboard.owner.modals.EditPremisesModal
 
 /**
@@ -139,13 +139,13 @@ private fun PremisesManagementCard(
         ?: "Address not specified"
 
     PresenceCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Header Row: Badge Icon + Name + Badges + Edit
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(PresenceDesign.BrandSoft),
                     contentAlignment = Alignment.Center
                 ) {
@@ -153,18 +153,18 @@ private fun PremisesManagementCard(
                         imageVector = Icons.Default.Business,
                         contentDescription = null,
                         tint = PresenceDesign.Brand,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = nameOnly,
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = PresenceDesign.Ink
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(1.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -193,26 +193,26 @@ private fun PremisesManagementCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(10.dp))
                     .background(PresenceDesign.NeutralSoft)
-                    .padding(12.dp)
+                    .padding(8.dp)
             ) {
                 Row(verticalAlignment = Alignment.Top) {
                     Icon(
                         imageVector = Icons.Default.Home,
                         contentDescription = null,
                         modifier = Modifier
-                            .size(16.dp)
-                            .padding(top = 2.dp),
+                            .size(15.dp)
+                            .padding(top = 1.dp),
                         tint = PresenceDesign.Brand
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = formattedAddress,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = PresenceDesign.Ink,
-                        lineHeight = 18.sp
+                        lineHeight = 16.sp
                     )
                 }
             }

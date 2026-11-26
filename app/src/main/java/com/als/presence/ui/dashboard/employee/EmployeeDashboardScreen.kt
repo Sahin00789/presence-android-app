@@ -76,7 +76,6 @@ fun EmployeeDashboardScreen(
                 onClockIn = { overtimeId, embedding ->
                     clockInViewModel.clockIn(overtimeId, embedding?.vector?.toList())
                 },
-                onClockOut = clockInViewModel::clockOut,
                 engine = clockInViewModel.faceEmbeddingEngine,
                 onFaceCaptured = clockInViewModel::setFaceEmbedding,
                 onSilentRefresh = { clockInViewModel.refresh(silent = true) },

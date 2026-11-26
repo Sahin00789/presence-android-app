@@ -15,16 +15,16 @@ import retrofit2.Retrofit
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
+/**
+ * Hilt module providing OkHttpClient, Retrofit, KotlinX Serialization, and API Services.
+ */
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    /**
-     * `10.0.2.2` is the host loopback as seen from the Android emulator. Override
-     * it for a physical device by pointing it at the machine's LAN address.
-     */
     private val DEFAULT_BASE_URL = PRESENCE_BASE_URL
 
+    /** Provides KotlinX [Json] serializer instance. */
     @Provides
     @Singleton
     fun provideJson(): Json = Json {
@@ -34,6 +34,7 @@ object NetworkModule {
         explicitNulls = false
     }
 
+    /** Provides configured [OkHttpClient] with auth header interceptor and token authenticator. */
     @Provides
     @Singleton
     fun provideOkHttpClient(
@@ -55,6 +56,7 @@ object NetworkModule {
             .build()
     }
 
+    /** Provides [Retrofit] instance. */
     @Provides
     @Singleton
     fun provideRetrofit(
@@ -69,64 +71,20 @@ object NetworkModule {
             .build()
     }
 
-    @Provides
-    @Singleton
-    fun provideAuthApiService(retrofit: Retrofit): AuthApiService =
-        retrofit.create(AuthApiService::class.java)
+    @Provides @Singleton fun provideAuthApiService(retrofit: Retrofit): AuthApiService = retrofit.create(AuthApiService::class.java)
+    @Provides @Singleton fun provideAttendanceApiService(retrofit: Retrofit): AttendanceApiService = retrofit.create(AttendanceApiService::class.java)
+    @Provides @Singleton fun provideOvertimeApiService(retrofit: Retrofit): OvertimeApiService = retrofit.create(OvertimeApiService::class.java)
+    @Provides @Singleton fun provideEmployeeApiService(retrofit: Retrofit): EmployeeApiService = retrofit.create(EmployeeApiService::class.java)
+    @Provides @Singleton fun providePremisesApiService(retrofit: Retrofit): PremisesApiService = retrofit.create(PremisesApiService::class.java)
+    @Provides @Singleton fun provideOrganizationApiService(retrofit: Retrofit): OrganizationApiService = retrofit.create(OrganizationApiService::class.java)
+    @Provides @Singleton fun provideShiftApiService(retrofit: Retrofit): ShiftApiService = retrofit.create(ShiftApiService::class.java)
+    @Provides @Singleton fun providePayrollApiService(retrofit: Retrofit): PayrollApiService = retrofit.create(PayrollApiService::class.java)
+    @Provides @Singleton fun provideFaceApiService(retrofit: Retrofit): FaceApiService = retrofit.create(FaceApiService::class.java)
+    @Provides @Singleton fun provideLeaveApiService(retrofit: Retrofit): LeaveApiService = retrofit.create(LeaveApiService::class.java)
+    @Provides @Singleton fun provideHolidayApiService(retrofit: Retrofit): HolidayApiService = retrofit.create(HolidayApiService::class.java)
+    @Provides @Singleton fun provideShiftsApiService(retrofit: Retrofit): ShiftsApiService = retrofit.create(ShiftsApiService::class.java)
 
-    @Provides
-    @Singleton
-    fun provideAttendanceApiService(retrofit: Retrofit): AttendanceApiService =
-        retrofit.create(AttendanceApiService::class.java)
-
-    @Provides
-    @Singleton
-    fun provideOvertimeApiService(retrofit: Retrofit): OvertimeApiService =
-        retrofit.create(OvertimeApiService::class.java)
-
-    @Provides
-    @Singleton
-    fun provideEmployeeApiService(retrofit: Retrofit): EmployeeApiService =
-        retrofit.create(EmployeeApiService::class.java)
-
-    @Provides
-    @Singleton
-    fun providePremisesApiService(retrofit: Retrofit): PremisesApiService =
-        retrofit.create(PremisesApiService::class.java)
-
-    @Provides
-    @Singleton
-    fun provideOrganizationApiService(retrofit: Retrofit): OrganizationApiService =
-        retrofit.create(OrganizationApiService::class.java)
-
-    @Provides
-    @Singleton
-    fun provideShiftApiService(retrofit: Retrofit): ShiftApiService =
-        retrofit.create(ShiftApiService::class.java)
-
-    @Provides
-    @Singleton
-    fun providePayrollApiService(retrofit: Retrofit): PayrollApiService =
-        retrofit.create(PayrollApiService::class.java)
-
-    @Provides
-    @Singleton
-    fun provideFaceApiService(retrofit: Retrofit): FaceApiService =
-        retrofit.create(FaceApiService::class.java)
-
-    @Provides
-    @Singleton
-    fun provideLeaveApiService(retrofit: Retrofit): LeaveApiService =
-        retrofit.create(LeaveApiService::class.java)
-
-    @Provides
-    @Singleton
-    fun provideHolidayApiService(retrofit: Retrofit): HolidayApiService = retrofit.create(HolidayApiService::class.java)
-
-    @Provides
-    @Singleton
-    fun provideShiftsApiService(retrofit: Retrofit): ShiftsApiService = retrofit.create(ShiftsApiService::class.java)
-
+    /** Provides Ola Maps API Service for reverse geocoding address resolution. */
     @Provides
     @Singleton
     fun provideOlaMapsApiService(

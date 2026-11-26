@@ -15,20 +15,28 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Result wrapper for Google Credential Manager authentication flow. */
 sealed interface GoogleAuthResult {
+    /** Google sign-in succeeded with ID token. */
     data class Success(
         val idToken: String,
         val email: String? = null,
         val displayName: String? = null
     ) : GoogleAuthResult
 
+    /** Google sign-in was cancelled by user. */
     data object Cancelled : GoogleAuthResult
 
+    /** Signal to fallback to legacy Google Sign-In SDK. */
     data object FallbackToLegacy : GoogleAuthResult
 
+    /** Google sign-in failed with descriptive message. */
     data class Error(val message: String) : GoogleAuthResult
 }
 
+/**
+ * Manages Google OAuth 2.0 Single Sign-On using Android Credential Manager API.
+ */
 @Singleton
 class GoogleAuthManager @Inject constructor(
     @ApplicationContext private val context: Context

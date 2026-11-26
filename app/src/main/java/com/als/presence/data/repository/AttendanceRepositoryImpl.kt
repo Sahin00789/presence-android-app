@@ -90,22 +90,6 @@ class AttendanceRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun clockOut(eventId: String): Resource<ClockOutResponseDto> {
-        val result = safeApiCall("Error clocking out") {
-            attendanceApiService.clockOut(
-                ClockOutRequest(attendanceEventId = eventId.takeIf { it.isNotBlank() })
-            )
-        }
-        return when (result) {
-            is Resource.Success -> {
-                snapshotProjectionEngine.rebuildOwnerPingsSnapshot("ALL")
-                result
-            }
-            is Resource.Error -> result
-            Resource.Loading -> result
-        }
-    }
-
     override suspend fun getExceptions(): Resource<List<AttendanceExceptionDto>> = Resource.Success(emptyList())
 
     override suspend fun resolveException(exceptionId: String, correctedStatus: String, reason: String, note: String?): Resource<Unit> {

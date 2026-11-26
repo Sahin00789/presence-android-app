@@ -39,6 +39,20 @@ class ShiftLocationService : Service() {
         private const val CHECK_INTERVAL_MS = 10 * 60 * 1000L
 
         fun start(context: Context) {
+            val hasLocationPerm = ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.ACCESS_FINE_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+            if (!hasLocationPerm) {
+                android.util.Log.w("ShiftLocationService", "Cannot start location service: location permissions not granted.")
+                return
+            }
+
             try {
                 ContextCompat.startForegroundService(
                     context,
@@ -50,7 +64,11 @@ class ShiftLocationService : Service() {
         }
 
         fun stop(context: Context) {
-            context.stopService(Intent(context, ShiftLocationService::class.java))
+            try {
+                context.stopService(Intent(context, ShiftLocationService::class.java))
+            } catch (e: Exception) {
+                android.util.Log.e("ShiftLocationService", "Failed to stop location service: ${e.message}")
+            }
         }
     }
 
@@ -62,15 +80,20 @@ class ShiftLocationService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ServiceCompat.startForeground(
-                this,
-                NOTIFICATION_ID,
-                buildNotification(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, buildNotification())
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    buildNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, buildNotification())
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ShiftLocationService", "Failed to start foreground notification: ${e.message}")
+            stopSelf()
         }
     }
 

@@ -71,7 +71,7 @@ class SnapshotProjectionEngine @Inject constructor(
         var totalMinutes = 0L
 
         records.forEach { r ->
-            when (r.status.uppercase()) {
+            when (r.status.orEmpty().uppercase()) {
                 "PRESENT" -> present++
                 "ABSENT" -> absent++
                 "HALF_DAY" -> halfDays++

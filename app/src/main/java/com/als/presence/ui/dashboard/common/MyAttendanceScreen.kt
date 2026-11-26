@@ -2,8 +2,12 @@
 
 package com.als.presence.ui.dashboard.common
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +15,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,13 +30,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Celebration
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EventAvailable
-import androidx.compose.material.icons.filled.MoreTime
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,8 +52,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,11 +71,14 @@ import com.als.presence.data.model.ShiftAssignmentDto
 import com.als.presence.data.model.ShiftDto
 import com.als.presence.data.model.StaffEarningLedgerDto
 import com.als.presence.data.model.UnworkedPaymentRuleDto
+import com.als.presence.ui.dashboard.common.components.PresenceBadge
+import com.als.presence.ui.dashboard.common.components.PresenceMicroLabel
 import com.als.presence.ui.dashboard.employee.viewmodels.EmployeeAttendanceViewModel
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 
-private data class DayAttendanceGroup(
+data class DayAttendanceGroup(
     val dateIso: String,
     val dateDisplay: String,
     val dayOfWeekName: String,
@@ -78,9 +91,13 @@ private data class DayAttendanceGroup(
 )
 
 /**
- * Screen: "My Attendance" for Staff & Managers.
- * Shift-based actual shifts attended log with month-year scrollable chip selector
- * and monthly shift attendance statistics.
+ * Editorial, 2026 Redesign for "My Attendance" Screen.
+ * Contains:
+ * - Month/Year quick selector
+ * - Monthly Attendance Summary Surface (KPIs: Present, Absent, Half Day, Leave, Worked Hours, Total Month Earnings)
+ * - Calendar-style Attendance Visualization Grid (M, T, W, T, F, S, S) with semantic indicators
+ * - Interactive Day Selection Filter
+ * - Structured Daily Attendance List with shift details & earnings breakdown (NOT dozens of cards!)
  */
 @Composable
 fun MyAttendanceScreen(
@@ -120,12 +137,15 @@ fun MyAttendanceContent(
     val unworkedRulesState by viewModel.unworkedRules.collectAsStateWithLifecycle()
 
     var selectedMonth by remember { mutableStateOf(YearMonth.now()) }
+    var selectedDayFilter by remember { mutableStateOf<String?>(null) }
     val currentMonth = remember { YearMonth.now() }
     val monthOffsetList = remember { (-60..0).toList() }
     val monthListState = rememberLazyListState()
+    val isDark = isSystemInDarkTheme()
 
     LaunchedEffect(selectedMonth) {
         viewModel.loadForMonth(selectedMonth)
+        selectedDayFilter = null
     }
 
     LaunchedEffect(Unit) {
@@ -177,8 +197,6 @@ fun MyAttendanceContent(
             ot.status in listOf("COMPLETED", "APPROVED", "IN_PROGRESS") || ot.workedMinutes > 0 || ot.attendanceEventId != null
         }
     }
-
-
 
     val dayGroups = remember(attendedRecords, attendedOvertimes, allLedgerEntries, assignments, templates, selectedMonth, earliestAssignmentDateIso) {
         val dateSet = mutableSetOf<String>()
@@ -249,16 +267,47 @@ fun MyAttendanceContent(
             .sortedByDescending { it.dateIso }
     }
 
-
-
-    val totalShiftsAttended = dayGroups.count { g -> g.shifts.any { s -> s.status in listOf("PRESENT", "HALF_DAY", "COMPLETED") } }
+    // Monthly aggregates
     val presentCount = dayGroups.count { g -> g.shifts.any { s -> s.status == "PRESENT" || s.status == "COMPLETED" } }
     val halfDayCount = dayGroups.count { g -> g.shifts.any { s -> s.status == "HALF_DAY" } }
     val leaveCount = dayGroups.count { g -> g.shifts.any { s -> s.status == "LEAVE" } }
     val absentCount = dayGroups.count { g -> (g.shifts.isNotEmpty() && g.shifts.all { s -> s.status == "ABSENT" }) || (!g.isHoliday && !g.isWeeklyOff && g.shifts.isEmpty() && g.overtimes.isEmpty() && !g.isToday) }
-    val holidayCount = dayGroups.count { it.isHoliday }
-    val offDayCount = dayGroups.count { it.isWeeklyOff }
-    val totalOvertimesCount = dayGroups.sumOf { it.overtimes.size }
+    val totalWorkedMinutes = dayGroups.sumOf { g -> g.shifts.sumOf { it.workedMinutes } + g.overtimes.sumOf { it.workedMinutes } }
+
+    val totalMonthEarnedInr = remember(dayGroups, assignments, templates, unworkedRules) {
+        dayGroups.sumOf { group ->
+            val ledgerSum = group.ledgerEntries.sumOf { it.amountCents }
+            if (group.ledgerEntries.isNotEmpty()) {
+                ledgerSum
+            } else {
+                var sum = 0L
+                group.shifts.forEach { s ->
+                    sum += calculateShiftEarning(s, assignments, unworkedRules, group.ledgerEntries)
+                }
+                group.overtimes.forEach { ot ->
+                    if (ot.status in listOf("COMPLETED", "APPROVED", "IN_PROGRESS")) {
+                        sum += ot.paymentInr
+                    }
+                }
+                if (group.shifts.isEmpty() && group.overtimes.isEmpty()) {
+                    if (group.isHoliday) {
+                        val r = unworkedRules.find { it.employeeId != null && it.dayType == "HOLIDAY" }
+                            ?: unworkedRules.find { it.dayType == "HOLIDAY" }
+                        sum += r?.paymentInr ?: (assignments.firstOrNull()?.presentPay?.toLong() ?: 600L)
+                    } else if (group.isWeeklyOff) {
+                        val r = unworkedRules.find { it.employeeId != null && it.dayType == "WEEKLY_OFF" }
+                            ?: unworkedRules.find { it.dayType == "WEEKLY_OFF" }
+                        sum += r?.paymentInr ?: (assignments.firstOrNull()?.presentPay?.toLong() ?: 600L)
+                    }
+                }
+                sum
+            }
+        }
+    }
+
+    val filteredDayGroups = remember(dayGroups, selectedDayFilter) {
+        if (selectedDayFilter == null) dayGroups else dayGroups.filter { it.dateIso == selectedDayFilter }
+    }
 
     val scrollState = rememberScrollState()
     val scrollModifier = if (isScrollable) Modifier.verticalScroll(scrollState) else Modifier
@@ -270,7 +319,7 @@ fun MyAttendanceContent(
             .then(scrollModifier)
             .padding(horizontal = if (isScrollable) screenInfo.horizontalScreenPadding else 0.dp)
             .padding(top = if (isScrollable) 10.dp else 0.dp, bottom = if (isScrollable) 28.dp else 0.dp),
-        verticalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 12.dp else 16.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         if (showHeader) {
             Row(
@@ -280,26 +329,37 @@ fun MyAttendanceContent(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Attendance Register",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = PresenceDesign.Ink
+                        text = "Attendance Records",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Shift presence, overtime logs & work calendar",
+                        text = "Calendar visualization, shift logs & daily earnings",
                         style = MaterialTheme.typography.bodySmall,
-                        color = PresenceDesign.Muted
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                PresenceRefreshButton(
+                IconButton(
                     onClick = onRefresh,
-                    isRefreshing = recordsState is UiState.Loading,
-                    contentDescription = "Refresh attendance"
-                )
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
-        // 1. Month-Year Scrollable Chip Selector
+        // -------------------------------------------------------------
+        // 1. MONTH SELECTOR CHIP ROW
+        // -------------------------------------------------------------
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -324,65 +384,390 @@ fun MyAttendanceContent(
                         onClick = { selectedMonth = month },
                         label = {
                             Text(
-                                text = "${month.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }} ${month.year}"
+                                text = "${month.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }} ${month.year}",
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                             )
-                        }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     )
                 }
             }
         }
 
-        // 3. Date-by-date Attendance Log Cards
-        SectionHeader(title = "$monthYearLabel Register Log")
+        // -------------------------------------------------------------
+        // 2. MONTHLY ATTENDANCE SUMMARY SURFACE (FINTECH / EDITORIAL)
+        // -------------------------------------------------------------
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+            tonalElevation = 1.dp
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        PresenceMicroLabel(text = "$monthYearLabel Total Earned")
+                        Text(
+                            text = Money.format(totalMonthEarnedInr),
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = PresenceDesign.Positive
+                        )
+                    }
+
+                    Column(horizontalAlignment = Alignment.End) {
+                        PresenceMicroLabel(text = "Total Worked")
+                        Text(
+                            text = Dates.formatMinutes(totalWorkedMinutes),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 4 Semantic KPI tiles in a clean row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MonthlyStatPill(
+                        label = "Present",
+                        count = presentCount,
+                        color = PresenceDesign.Positive,
+                        bg = PresenceDesign.PositiveSoft,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MonthlyStatPill(
+                        label = "Half-Day",
+                        count = halfDayCount,
+                        color = PresenceDesign.CautionText,
+                        bg = PresenceDesign.CautionSoft,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MonthlyStatPill(
+                        label = "Leave",
+                        count = leaveCount,
+                        color = Color(0xFF7C3AED),
+                        bg = Color(0xFF7C3AED).copy(alpha = 0.12f),
+                        modifier = Modifier.weight(1f)
+                    )
+                    MonthlyStatPill(
+                        label = "Absent",
+                        count = absentCount,
+                        color = PresenceDesign.DangerText,
+                        bg = PresenceDesign.DangerSoft,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        // -------------------------------------------------------------
+        // 3. CALENDAR-STYLE ATTENDANCE VISUALIZATION GRID
+        // -------------------------------------------------------------
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+            tonalElevation = 1.dp
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Monthly Calendar",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (selectedDayFilter != null) {
+                        Text(
+                            text = "Show All Days",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
+                                .clickable { selectedDayFilter = null }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Weekday Headers (Mon - Sun)
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    listOf("M", "T", "W", "T", "F", "S", "S").forEach { dayLabel ->
+                        Text(
+                            text = dayLabel,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Calendar Days Grid
+                val firstOfMonth = selectedMonth.atDay(1)
+                val daysInMonth = selectedMonth.lengthOfMonth()
+                val startDayOfWeek = firstOfMonth.dayOfWeek.value // 1 = Monday, 7 = Sunday
+                val totalCells = ((startDayOfWeek - 1) + daysInMonth + 6) / 7 * 7
+
+                val dayMap = remember(dayGroups) {
+                    dayGroups.associateBy { it.dateIso }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (row in 0 until (totalCells / 7)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            for (col in 0..6) {
+                                val cellIndex = row * 7 + col
+                                val dayNum = cellIndex - (startDayOfWeek - 1) + 1
+                                if (dayNum in 1..daysInMonth) {
+                                    val date = selectedMonth.atDay(dayNum)
+                                    val dateIso = date.toString()
+                                    val group = dayMap[dateIso]
+                                    val isSelected = selectedDayFilter == dateIso
+                                    val isToday = dateIso == Dates.todayIso()
+
+                                    // Determine day status color
+                                    val statusColor = when {
+                                        group?.shifts?.any { it.status == "PRESENT" || it.status == "COMPLETED" } == true -> PresenceDesign.Positive
+                                        group?.shifts?.any { it.status == "HALF_DAY" } == true -> PresenceDesign.Caution
+                                        group?.shifts?.any { it.status == "LEAVE" } == true -> Color(0xFF7C3AED)
+                                        group?.isHoliday == true -> Color(0xFF0D9488)
+                                        group?.isWeeklyOff == true -> MaterialTheme.colorScheme.outlineVariant
+                                        group != null && (group.shifts.all { it.status == "ABSENT" } || date.isBefore(LocalDate.now())) -> PresenceDesign.Danger
+                                        else -> Color.Transparent
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .aspectRatio(1f)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(
+                                                if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                                                else if (isToday) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                                else Color.Transparent
+                                            )
+                                            .border(
+                                                BorderStroke(
+                                                    if (isSelected) 1.5.dp else if (isToday) 1.dp else 0.dp,
+                                                    if (isSelected) MaterialTheme.colorScheme.primary else if (isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else Color.Transparent
+                                                ),
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .clickable {
+                                                selectedDayFilter = if (selectedDayFilter == dateIso) null else dateIso
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            Text(
+                                                text = "$dayNum",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = if (isToday || isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                                fontSize = 11.5.sp,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                            )
+                                            if (statusColor != Color.Transparent) {
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(5.dp)
+                                                        .clip(CircleShape)
+                                                        .background(statusColor)
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Calendar Legend
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LegendItem("Present", PresenceDesign.Positive)
+                    LegendItem("Half-Day", PresenceDesign.Caution)
+                    LegendItem("Leave", Color(0xFF7C3AED))
+                    LegendItem("Absent", PresenceDesign.Danger)
+                    LegendItem("Holiday", Color(0xFF0D9488))
+                    LegendItem("Off", MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        }
+
+        // -------------------------------------------------------------
+        // 4. STRUCTURED DAILY ATTENDANCE LIST (NOT CARDS!)
+        // -------------------------------------------------------------
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (selectedDayFilter != null) "Attendance Log (${Dates.formatDate(selectedDayFilter!!)})" else "$monthYearLabel Daily Roster Log",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "${filteredDayGroups.size} record${if (filteredDayGroups.size != 1) "s" else ""}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
         when (recordsState) {
             is UiState.Loading, is UiState.Idle -> SectionLoading("Loading attendance records…")
             is UiState.Error -> SectionError((recordsState as UiState.Error).message)
             is UiState.Success -> {
-                if (dayGroups.isEmpty()) {
-                    SectionEmpty("No attendance records found for $monthYearLabel.")
+                if (filteredDayGroups.isEmpty()) {
+                    SectionEmpty("No attendance entries found for the selected period.")
                 } else {
-                    dayGroups.forEach { group ->
-                        AttendanceDayCard(
-                            group = group,
-                            assignments = assignments,
-                            templates = templates,
-                            unworkedRules = unworkedRules,
-                            screenInfo = screenInfo
-                        )
+                    // Unified Surface containing structured rows
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                        tonalElevation = 1.dp
+                    ) {
+                        Column {
+                            filteredDayGroups.forEachIndexed { index, group ->
+                                AttendanceStructuredRow(
+                                    group = group,
+                                    assignments = assignments,
+                                    templates = templates,
+                                    unworkedRules = unworkedRules
+                                )
+                                if (index < filteredDayGroups.lastIndex) {
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+                                        modifier = Modifier.padding(horizontal = 14.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
 @Composable
-private fun AttendanceDayCard(
+private fun MonthlyStatPill(
+    label: String,
+    count: Int,
+    color: Color,
+    bg: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = bg,
+        border = BorderStroke(0.5.dp, color.copy(alpha = 0.25f))
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "$count",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = color
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = color
+            )
+        }
+    }
+}
+
+@Composable
+private fun LegendItem(label: String, color: Color) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun AttendanceStructuredRow(
     group: DayAttendanceGroup,
     assignments: List<ShiftAssignmentDto>,
     templates: List<ShiftDto>,
-    unworkedRules: List<UnworkedPaymentRuleDto>,
-    screenInfo: ScreenSizeInfo = rememberScreenSizeInfo()
+    unworkedRules: List<UnworkedPaymentRuleDto>
 ) {
     val primaryAssignment = assignments.firstOrNull()
     val presentPayInr = (primaryAssignment?.presentPay ?: 600.0).toLong()
-    val halfDayPayInr = (primaryAssignment?.halfDayPay ?: (presentPayInr / 2.0)).toLong()
-    val leavePayInr = (primaryAssignment?.leavePay ?: presentPayInr).toLong()
-    val absentPayInr = (primaryAssignment?.absentPay ?: 0.0).toLong()
 
-    val todayIso = Dates.todayIso()
-    val hasMatchingShiftToday = assignments.any { a ->
-        val template = templates.firstOrNull { it.id == a.shiftId }
-        template != null && Dates.isShiftMatchingDay(template.dayName, todayIso, template.daysOfWeek)
-    }
-
-    val startTimeRaw = primaryAssignment?.let { a -> templates.find { it.id == a.shiftId }?.startTime }
-    val endTimeRaw = primaryAssignment?.let { a -> templates.find { it.id == a.shiftId }?.endTime }
-    val isSessionRunningNow = group.isToday && hasMatchingShiftToday && Dates.isWithinTimeWindow(startTimeRaw, endTimeRaw)
-
-    // Calculate Total Day Earnings for Top Corner
+    // Calculate Total Day Earnings
     val totalEarningInr = remember(group, assignments, templates, unworkedRules) {
         val ledgerSum = group.ledgerEntries.sumOf { it.amountCents }
         if (group.ledgerEntries.isNotEmpty()) {
@@ -412,730 +797,134 @@ private fun AttendanceDayCard(
         }
     }
 
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = if (group.isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surface,
-        border = if (group.isToday) {
-            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-        } else {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-        }
-    ) {
-        Column(
-            modifier = Modifier.padding(screenInfo.cardContentPadding),
-            verticalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 10.dp else 14.dp)
-        ) {
-            // Header Row: Date info on Left, Total Earning at Top Corner
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 8.dp else 10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(if (screenInfo.isVeryCompact) 34.dp else 40.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (group.isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.EventAvailable,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(if (screenInfo.isVeryCompact) 18.dp else 22.dp)
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        FlowRow(
-                            verticalArrangement = Arrangement.Center,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = "${group.dateDisplay} • ${group.dayOfWeekName}",
-                                style = if (screenInfo.isVeryCompact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            if (group.isToday) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.primary
-                                ) {
-                                    Text(
-                                        text = "TODAY",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 9.sp,
-                                        color = MaterialTheme.colorScheme.onPrimary,
-                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                        }
-                        val summaryText = buildString {
-                            if (group.shifts.isNotEmpty()) append("${group.shifts.size} Shift${if (group.shifts.size > 1) "s" else ""}")
-                            if (group.overtimes.isNotEmpty()) {
-                                if (isNotEmpty()) append(" • ")
-                                append("${group.overtimes.size} Overtime")
-                            }
-                            if (isEmpty()) {
-                                if (group.isHoliday) append("Public Holiday")
-                                else if (group.isWeeklyOff) append("Weekly Off")
-                                else if (group.isToday && hasMatchingShiftToday) append("Scheduled Shift")
-                                else append("No Shifts Scheduled")
-                            }
-                        }
-                        Text(
-                            text = summaryText,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
+    val primaryShift = group.shifts.firstOrNull()
+    val isPresent = primaryShift?.status in listOf("PRESENT", "COMPLETED")
+    val isHalfDay = primaryShift?.status == "HALF_DAY"
+    val isLeave = primaryShift?.status == "LEAVE"
+    val isAbsent = primaryShift?.status == "ABSENT"
 
-                // Top Right Corner: Small subtle earnings text
-                if (totalEarningInr > 0) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Earned: ${Money.format(totalEarningInr)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontSize = if (screenInfo.isVeryCompact) 10.sp else 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF747895),
-                        maxLines = 1
-                    )
-                }
-            }
-
-            // 1. Shift Sub-cards (Attended or Actual)
-            if (group.shifts.isNotEmpty()) {
-                group.shifts.forEach { shift ->
-                    ShiftSubCard(
-                        shift = shift,
-                        assignments = assignments,
-                        unworkedRules = unworkedRules,
-                        ledgerEntries = group.ledgerEntries,
-                        screenInfo = screenInfo
-                    )
-                }
-            } else if (group.isToday && hasMatchingShiftToday) {
-                // Today's Unclocked Assigned Shift Card
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(screenInfo.subCardPadding),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = primaryAssignment?.shiftName ?: "Assigned Shift",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "Assigned: ${Dates.formatTime(startTimeRaw)} – ${Dates.formatTime(endTimeRaw)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 2
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        StatusPill(if (isSessionRunningNow) "RUNNING" else "UPCOMING")
-                    }
-                }
-            }
-
-            // 2. Overtime Sub-cards
-            if (group.overtimes.isNotEmpty()) {
-                group.overtimes.forEach { ot ->
-                    OvertimeSubCard(ot = ot, screenInfo = screenInfo)
-                }
-            }
-
-            // 3. Weekly Off Sub-card
-            if (group.isWeeklyOff && group.shifts.isEmpty() && group.overtimes.isEmpty()) {
-                WeeklyOffSubCard(
-                    unworkedRules = unworkedRules,
-                    assignments = assignments,
-                    screenInfo = screenInfo
-                )
-            }
-
-            // 4. Holiday Sub-card
-            if (group.isHoliday && group.shifts.isEmpty() && group.overtimes.isEmpty()) {
-                HolidaySubCard(
-                    unworkedRules = unworkedRules,
-                    assignments = assignments,
-                    screenInfo = screenInfo
-                )
-            }
-
-            // 5. Accrued Ledger Entries (if any standalone entries exist)
-            val standaloneLedger = group.ledgerEntries.filter { le ->
-                le.type !in listOf("SHIFT", "OVERTIME", "HOLIDAY", "OFF_DAY", "WEEKLY_OFF")
-            }
-            if (standaloneLedger.isNotEmpty()) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-                standaloneLedger.forEach { entry ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = entry.type.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "+" + Money.format(entry.amountCents),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = SecondaryEmerald
-                        )
-                    }
-                }
-            }
-        }
+    val statusLabel = when {
+        isPresent -> "PRESENT"
+        isHalfDay -> "HALF_DAY"
+        isLeave -> "LEAVE"
+        isAbsent -> "ABSENT"
+        group.isHoliday -> "HOLIDAY"
+        group.isWeeklyOff -> "OFF_DAY"
+        group.isToday -> "TODAY"
+        else -> "NO_SHIFT"
     }
-}
 
-@Composable
-private fun ShiftSubCard(
-    shift: AttendanceRecordDto,
-    assignments: List<ShiftAssignmentDto>,
-    unworkedRules: List<UnworkedPaymentRuleDto>,
-    ledgerEntries: List<StaffEarningLedgerDto>,
-    screenInfo: ScreenSizeInfo = rememberScreenSizeInfo()
-) {
-    val shiftEarning = calculateShiftEarning(shift, assignments, unworkedRules, ledgerEntries)
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            modifier = Modifier.padding(screenInfo.subCardPadding),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        // Date & Shift Context
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // Compact Date Badge
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = if (group.isToday) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                border = BorderStroke(0.5.dp, if (group.isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = shift.shiftName ?: if (shift.overtimeId != null) "Overtime Shift" else "Shift",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (!shift.assignedStartTime.isNullOrBlank() || !shift.assignedEndTime.isNullOrBlank()) {
-                        Text(
-                            text = "Assigned: ${Dates.formatTime(shift.assignedStartTime)} – ${Dates.formatTime(shift.assignedEndTime)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 2
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(6.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 4.dp else 8.dp)
+                Column(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    StatusPill(shift.status)
+                    val dateParsed = runCatching { LocalDate.parse(group.dateIso) }.getOrNull()
                     Text(
-                        text = Money.format(shiftEarning),
-                        style = MaterialTheme.typography.labelMedium,
+                        text = dateParsed?.month?.name?.take(3)?.uppercase() ?: "",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (shift.status == "ABSENT" && shiftEarning == 0L) MaterialTheme.colorScheme.error else SecondaryEmerald
+                        color = if (group.isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${dateParsed?.dayOfMonth ?: ""}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (group.isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
 
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
+            // Shift Details
+            Column(modifier = Modifier.weight(1f)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Schedule,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                     Text(
-                        text = if (!shift.clockIn.isNullOrBlank()) {
-                            "Clock In: ${Dates.formatTime(shift.clockIn)} • Out: ${if (!shift.clockOut.isNullOrBlank()) Dates.formatTime(shift.clockOut) else "Pending"}"
-                        } else {
-                            "Not Clocked In"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                if (shift.workedMinutes > 0) {
-                    Text(
-                        text = "Worked: ${shift.workedMinutes / 60}h ${shift.workedMinutes % 60}m",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            val lateMins = if (shift.lateMinutes > 0) shift.lateMinutes else Dates.calculateLateMinutes(shift.clockIn, shift.assignedStartTime)
-            val earlyMins = calculateEarlyDepartureMinutes(shift.clockOut, shift.assignedEndTime)
-
-            if (lateMins > 0 || earlyMins > 0) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (lateMins > 0) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f))
-                        ) {
-                            Text(
-                                text = "⏰ Late: ${Dates.formatMinutes(lateMins)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                    if (earlyMins > 0) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = TertiaryAmber.copy(alpha = 0.15f),
-                            border = BorderStroke(1.dp, TertiaryAmber.copy(alpha = 0.4f))
-                        ) {
-                            Text(
-                                text = "🏃 Early Dep: ${Dates.formatMinutes(earlyMins)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (!shift.clockIn.isNullOrBlank()) {
-                val outsideCount = shift.outsidePingCount
-                val workedMins = shift.workedMinutes
-                val expectedPings = if (workedMins > 0) (workedMins / 10).coerceAtLeast(outsideCount + 1) else if (shift.clockOut == null) 1 else 0
-                val insideCount = (expectedPings - outsideCount).coerceAtLeast(0)
-                val missedCount = if (shift.scheduledMinutes > 0 && workedMins > 0 && workedMins < shift.scheduledMinutes) {
-                    ((shift.scheduledMinutes - workedMins) / 10).coerceAtLeast(0)
-                } else 0
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 2.dp)
-                ) {
-                    PingBadge(label = "Inside", count = insideCount, color = SecondaryEmerald)
-                    PingBadge(label = "Outside", count = outsideCount, color = if (outsideCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline)
-                    PingBadge(label = "Missed", count = missedCount, color = if (missedCount > 0) TertiaryAmber else MaterialTheme.colorScheme.outline)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun OvertimeSubCard(
-    ot: OvertimeDto,
-    screenInfo: ScreenSizeInfo = rememberScreenSizeInfo()
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f))
-    ) {
-        Column(
-            modifier = Modifier.padding(screenInfo.subCardPadding),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreTime,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.tertiary
-                    )
-                    Text(
-                        text = ot.reason?.ifBlank { "Overtime Session" } ?: "Overtime Session",
-                        style = MaterialTheme.typography.titleSmall,
+                        text = primaryShift?.shiftName ?: if (group.isHoliday) "Public Holiday" else if (group.isWeeklyOff) "Weekly Off" else primaryAssignment?.shiftName ?: "Assigned Shift",
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 2,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (group.isToday) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Text(
+                                text = "TODAY",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
                 }
-                Spacer(modifier = Modifier.width(6.dp))
-                StatusPill(ot.status)
-            }
 
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
+                // In/Out time & worked duration
+                val clockInStr = primaryShift?.clockIn?.let { Dates.formatTime(it) }
+                val clockOutStr = primaryShift?.clockOut?.let { Dates.formatTime(it) }
+                val timeDetail = when {
+                    clockInStr != null && clockOutStr != null -> "In: $clockInStr • Out: $clockOutStr"
+                    clockInStr != null -> "Clock In: $clockInStr"
+                    group.isHoliday -> "Gazetted Holiday"
+                    group.isWeeklyOff -> "Scheduled Weekly Off"
+                    else -> "No Clock-In Recorded"
+                }
                 Text(
-                    text = "Window: ${Dates.formatTime(ot.startTime)} – ${Dates.formatTime(ot.endTime)}",
+                    text = timeDetail,
                     style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        // Status & Earning Breakdown
+        Column(horizontalAlignment = Alignment.End) {
+            StatusPill(statusLabel)
+            if (totalEarningInr > 0L) {
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Worked: ${ot.workedMinutes}m / Planned: ${ot.plannedMinutes}m",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "+${Money.format(totalEarningInr)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = PresenceDesign.Positive
                 )
             }
-
-            if (ot.workedMinutes > 0 || ot.status == "IN_PROGRESS") {
-                val expectedPings = (ot.workedMinutes / 10).coerceAtLeast(1)
-                val otOutside = 0
-                val otInside = (expectedPings - otOutside).coerceAtLeast(0)
-                val otMissed = if (ot.plannedMinutes > 0 && ot.workedMinutes < ot.plannedMinutes) {
-                    ((ot.plannedMinutes - ot.workedMinutes) / 10).coerceAtLeast(0)
-                } else 0
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    PingBadge(label = "Inside", count = otInside, color = SecondaryEmerald)
-                    PingBadge(label = "Outside", count = otOutside, color = MaterialTheme.colorScheme.outline)
-                    PingBadge(label = "Missed", count = otMissed, color = if (otMissed > 0) TertiaryAmber else MaterialTheme.colorScheme.outline)
-                }
-            }
         }
     }
 }
 
-@Composable
-private fun WeeklyOffSubCard(
-    unworkedRules: List<UnworkedPaymentRuleDto>,
-    assignments: List<ShiftAssignmentDto>,
-    screenInfo: ScreenSizeInfo = rememberScreenSizeInfo()
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-    ) {
-        Row(
-            modifier = Modifier.padding(screenInfo.subCardPadding),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 8.dp else 10.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(if (screenInfo.isVeryCompact) 28.dp else 32.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CalendarMonth,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Weekly Off",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "Scheduled Rest Day",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(6.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 4.dp else 8.dp)
-            ) {
-                StatusPill("OFF_DAY")
-                val offDayPay = (unworkedRules.find { it.employeeId != null && it.dayType == "WEEKLY_OFF" }
-                    ?: unworkedRules.find { it.dayType == "WEEKLY_OFF" })?.paymentInr ?: (assignments.firstOrNull()?.presentPay ?: 600.0).toLong()
-                if (offDayPay > 0) {
-                    Text(
-                        text = "+${Money.format(offDayPay)}",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = SecondaryEmerald
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HolidaySubCard(
-    unworkedRules: List<UnworkedPaymentRuleDto>,
-    assignments: List<ShiftAssignmentDto>,
-    screenInfo: ScreenSizeInfo = rememberScreenSizeInfo()
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-    ) {
-        Row(
-            modifier = Modifier.padding(screenInfo.subCardPadding),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 8.dp else 10.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(if (screenInfo.isVeryCompact) 28.dp else 32.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Celebration,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Public Holiday",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "Paid Holiday",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(6.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 4.dp else 8.dp)
-            ) {
-                StatusPill("HOLIDAY")
-                val holidayPay = (unworkedRules.find { it.employeeId != null && it.dayType == "HOLIDAY" }
-                    ?: unworkedRules.find { it.dayType == "HOLIDAY" })?.paymentInr ?: (assignments.firstOrNull()?.presentPay ?: 600.0).toLong()
-                if (holidayPay > 0) {
-                    Text(
-                        text = "+${Money.format(holidayPay)}",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = SecondaryEmerald
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PingBadge(label: String, count: Int, color: Color) {
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = color.copy(alpha = 0.12f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(color)
-            )
-            Text(
-                text = "$label: $count",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-    }
-}
-
-@Composable
-private fun CompactStatChip(
-    label: String,
-    count: Int,
-    badgeColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        color = badgeColor.copy(alpha = 0.15f),
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.3f)),
-        modifier = modifier
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(badgeColor)
-            )
-            Text(
-                text = "$label: $count",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1
-            )
-        }
-    }
-}
-
-@Composable
-private fun AttendanceOutcomeChip(
-    label: String,
-    value: String,
-    isSelected: Boolean,
-    tone: PresenceTone,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
-        color = if (isSelected) when (tone) {
-            PresenceTone.Success -> Color(0xFFE6F4EA)
-            PresenceTone.Warning -> Color(0xFFFEF3C7)
-            PresenceTone.Info -> Color(0xFFEEF2FF)
-            PresenceTone.Danger -> Color(0xFFFCE8E6)
-            else -> MaterialTheme.colorScheme.surfaceVariant
-        } else MaterialTheme.colorScheme.surface,
-        border = BorderStroke(
-            if (isSelected) 1.5.dp else 1.dp,
-            if (isSelected) when (tone) {
-                PresenceTone.Success -> Color(0xFF34D399)
-                PresenceTone.Warning -> Color(0xFFFBBF24)
-                PresenceTone.Info -> Color(0xFF818CF8)
-                PresenceTone.Danger -> Color(0xFFF87171)
-                else -> MaterialTheme.colorScheme.outline
-            } else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = 10.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = if (isSelected) when (tone) {
-                    PresenceTone.Success -> Color(0xFF137333)
-                    PresenceTone.Warning -> Color(0xFFD97706)
-                    PresenceTone.Info -> Color(0xFF4338CA)
-                    PresenceTone.Danger -> Color(0xFFC5221F)
-                    else -> PresenceDesign.Ink
-                } else PresenceDesign.LabelText,
-                maxLines = 1
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = PresenceDesign.Ink,
-                maxLines = 1
-            )
-        }
-    }
-}
-
-private fun calculateEarlyDepartureMinutes(clockOut: String?, assignedEndTime: String?): Int {
+fun calculateEarlyDepartureMinutes(clockOut: String?, assignedEndTime: String?): Int {
     if (clockOut.isNullOrBlank() || assignedEndTime.isNullOrBlank()) return 0
     return try {
         val clockOutTime = Dates.parseLocalTime(clockOut) ?: return 0
@@ -1147,7 +936,7 @@ private fun calculateEarlyDepartureMinutes(clockOut: String?, assignedEndTime: S
     }
 }
 
-private fun calculateShiftEarning(
+fun calculateShiftEarning(
     shift: AttendanceRecordDto,
     assignments: List<ShiftAssignmentDto>,
     unworkedRules: List<UnworkedPaymentRuleDto>,

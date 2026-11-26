@@ -1,6 +1,7 @@
 package com.als.presence.ui.dashboard.owner.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.als.presence.core.designsystem.PresenceDesign
 import com.als.presence.domain.model.Role
 import com.als.presence.domain.model.User
 import com.als.presence.ui.auth.AuthViewModel
@@ -61,6 +64,7 @@ fun OrganizationSettingsScreen(
     onBack: () -> Unit,
     onEditProfileClick: (() -> Unit)? = null,
     onEditOrgClick: (() -> Unit)? = null,
+    onAboutClick: (() -> Unit)? = null,
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
     var localShowProfileModal by remember { mutableStateOf(false) }
@@ -110,36 +114,38 @@ fun OrganizationSettingsScreen(
         )
 
         PresenceCard {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(12.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (!user.avatarUrl.isNullOrBlank()) {
                         AsyncImage(
                             model = user.avatarUrl,
                             contentDescription = user.fullName,
                             modifier = Modifier
-                                .size(56.dp)
+                                .size(44.dp)
                                 .clip(CircleShape),
                             contentScale = ContentScale.Crop
                         )
                     } else {
-                        PresenceAvatar(name = user.fullName, modifier = Modifier.size(56.dp))
+                        PresenceAvatar(name = user.fullName, modifier = Modifier.size(44.dp))
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = user.fullName,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(1.dp))
                         Text(
                             text = user.email,
                             style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -153,18 +159,18 @@ fun OrganizationSettingsScreen(
                         }
                     )
                 }
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 PresenceDetailRow(label = "Full Name", value = user.fullName)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 PresenceDetailRow(label = "Email Address", value = user.email)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 PresenceDetailRow(label = "Account Role", value = user.role.name)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 PresenceDetailRow(label = "User ID", value = user.id)
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // 2. Organization Details Section
         PresenceSectionTitle(
@@ -184,65 +190,68 @@ fun OrganizationSettingsScreen(
         )
 
         PresenceCard {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(12.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (!user.organizationLogoUrl.isNullOrBlank()) {
                         AsyncImage(
                             model = user.organizationLogoUrl,
                             contentDescription = user.organizationName,
                             modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(12.dp)),
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(10.dp)),
                             contentScale = ContentScale.Crop
                         )
                     } else {
                         Box(
                             modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(12.dp))
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(10.dp))
                                 .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Business,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = user.organizationName.orEmpty().ifBlank { "Organization" },
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            maxLines = 2,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(1.dp))
                         Text(
                             text = "Primary Business Tenant",
                             style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     PresenceBadge(label = "Active", tone = PresenceTone.Success, dot = true)
                 }
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 PresenceDetailRow(label = "Organization Name", value = user.organizationName.orEmpty().ifBlank { "N/A" })
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 PresenceDetailRow(label = "Time Zone", value = "Asia/Kolkata (IST)")
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 PresenceDetailRow(label = "Currency", value = "INR (₹)")
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 PresenceDetailRow(label = "Tenant ID", value = user.organizationId.orEmpty())
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // 3. Security & Concurrency Rules Section
         PresenceSectionTitle(
@@ -251,14 +260,14 @@ fun OrganizationSettingsScreen(
         )
 
         PresenceCard {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(12.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
                         contentAlignment = Alignment.Center
@@ -267,22 +276,75 @@ fun OrganizationSettingsScreen(
                             imageVector = Icons.Default.Security,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                     Column {
                         Text(
                             text = "Single-Device Concurrency",
                             style = MaterialTheme.typography.titleSmall,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = "Active session enforced on 1 device at a time",
                             style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // 4. About & System Information Section
+        PresenceSectionTitle(
+            title = "About & System Info",
+            description = "App version, ONNX biometric engine, and diagnostics."
+        )
+
+        PresenceCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onAboutClick?.invoke() }
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(PresenceDesign.BrandSoft),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = PresenceDesign.Brand,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Presence Workforce v1.0.11",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Build 1011 • Biometric Engine • System Diagnostics",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                PresenceBadge(label = "View About", tone = PresenceTone.Info)
             }
         }
     }

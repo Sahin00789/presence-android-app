@@ -28,6 +28,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material3.IconButton
@@ -89,12 +91,25 @@ fun TopBarServerIcon(
     isServerConnected: Boolean = true,
     onClick: () -> Unit = {}
 ) {
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
     val hasServerErr = !isOnline || !isServerConnected
     val icon = if (hasServerErr) Icons.Default.CloudOff else Icons.Default.Dns
-    val iconColor = if (hasServerErr) Color(0xFFEF4444) else Color(0xFF10B981)
-    val bgColor = if (hasServerErr) Color(0xFFFEF2F2) else Color(0xFFE8F5E9)
-    val borderColor = if (hasServerErr) Color(0xFFFCA5A5) else Color(0xFFA5D6A7)
-    val dotColor = if (hasServerErr) Color(0xFFEF4444) else Color(0xFF10B981)
+    val iconColor = if (hasServerErr) {
+        if (isDark) Color(0xFFFB7185) else Color(0xFFEF4444)
+    } else {
+        if (isDark) Color(0xFF34D399) else Color(0xFF0D9488)
+    }
+    val bgColor = if (hasServerErr) {
+        if (isDark) Color(0xFF3B1219) else Color(0xFFFEF2F2)
+    } else {
+        if (isDark) Color(0xFF0D281E) else Color(0xFFE8F5E9)
+    }
+    val borderColor = if (hasServerErr) {
+        if (isDark) Color(0xFF6B1B29) else Color(0xFFFCA5A5)
+    } else {
+        if (isDark) Color(0xFF1B5E43) else Color(0xFFA5D6A7)
+    }
+    val dotColor = iconColor
 
     Box(
         contentAlignment = Alignment.Center,
@@ -269,8 +284,9 @@ fun StatusPill(status: String?, modifier: Modifier = Modifier) {
     val color = StatusStyle.color(status)
     Surface(
         modifier = modifier,
-        color = color.copy(alpha = 0.12f),
-        shape = RoundedCornerShape(9.dp)
+        color = color.copy(alpha = 0.14f),
+        shape = RoundedCornerShape(9.dp),
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, color.copy(alpha = 0.3f))
     ) {
         Text(
             text = StatusStyle.label(status),
@@ -291,29 +307,29 @@ fun MetricTile(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+        shape = RoundedCornerShape(12.dp),
+        color = accent.copy(alpha = 0.08f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.22f))
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = value,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
                 color = accent,
-                fontSize = 12.sp,
+                fontSize = 14.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 softWrap = false
             )
-            Spacer(modifier = Modifier.height(1.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                fontSize = 10.sp,
+                fontSize = 9.5.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -336,6 +352,11 @@ fun KeyValueRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+            .border(
+                0.75.dp,
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+                RoundedCornerShape(10.dp)
+            )
             .padding(horizontal = 12.dp, vertical = 9.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -360,19 +381,30 @@ fun InitialAvatar(
     modifier: Modifier = Modifier,
     accent: Color = MaterialTheme.colorScheme.primary
 ) {
+    val initial = name.trim().take(1).ifBlank { "?" }.uppercase()
+    val gradientColors = remember(initial) {
+        val hash = kotlin.math.abs(initial.hashCode())
+        when (hash % 5) {
+            0 -> listOf(Color(0xFF2563EB), Color(0xFF7C3AED)) // Indigo -> Purple
+            1 -> listOf(Color(0xFF059669), Color(0xFF0D9488)) // Emerald -> Teal
+            2 -> listOf(Color(0xFFD97706), Color(0xFFEA580C)) // Amber -> Orange
+            3 -> listOf(Color(0xFF0284C7), Color(0xFF2563EB)) // Sky -> Blue
+            else -> listOf(Color(0xFF7C3AED), Color(0xFFDB2777)) // Violet -> Pink
+        }
+    }
+
     Box(
         modifier = modifier
             .size(40.dp)
             .clip(CircleShape)
-            .background(accent.copy(alpha = 0.14f))
-            .border(1.dp, accent.copy(alpha = 0.28f), CircleShape),
+            .background(Brush.linearGradient(gradientColors)),
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = name.trim().take(1).ifBlank { "?" }.uppercase(),
+            text = initial,
             style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = accent
+            fontWeight = FontWeight.ExtraBold,
+            color = Color.White
         )
     }
 }

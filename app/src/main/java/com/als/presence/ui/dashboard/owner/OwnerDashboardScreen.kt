@@ -15,7 +15,6 @@ import com.als.presence.domain.model.User
 import com.als.presence.ui.dashboard.common.LiveMonitorTab
 import com.als.presence.ui.dashboard.common.LiveMonitorViewModel
 import com.als.presence.ui.dashboard.common.MessageSnackbar
-import com.als.presence.ui.dashboard.owner.tabs.OwnerApprovalsTab
 import com.als.presence.ui.dashboard.owner.tabs.OwnerReportsTab
 import com.als.presence.ui.dashboard.owner.tabs.OwnerWorkforceTab
 import com.als.presence.ui.dashboard.owner.viewmodels.OwnerAttendanceViewModel

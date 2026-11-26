@@ -1,12 +1,14 @@
 package com.als.presence.ui.dashboard.owner.tabs
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,33 +17,32 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Business
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.CurrencyRupee
+import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Work
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
-import com.als.presence.ui.dashboard.common.PresenceRefreshButton
-import com.als.presence.ui.dashboard.common.PresenceSearchBar
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,11 +56,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.als.presence.core.common.UiState
-import com.als.presence.core.designsystem.SecondaryEmerald
-import com.als.presence.core.designsystem.TertiaryAmber
+import com.als.presence.core.designsystem.LocalScreenSizeInfo
+import com.als.presence.core.designsystem.PresenceDesign
 import com.als.presence.data.model.AttendanceSummaryDto
 import com.als.presence.data.model.OrganizationMemberDto
 import com.als.presence.data.model.PayrollBreakdownDto
@@ -67,24 +69,28 @@ import com.als.presence.data.model.PayrollItemDto
 import com.als.presence.data.model.PayrollPeriodDto
 import com.als.presence.data.model.PremisesDto
 import com.als.presence.data.model.StaffDto
+import com.als.presence.data.model.StaffEarningLedgerDto
 import com.als.presence.ui.dashboard.common.Dates
-import com.als.presence.ui.dashboard.common.InitialAvatar
 import com.als.presence.ui.dashboard.common.Money
 import com.als.presence.ui.dashboard.common.MonthlyEarningLedgerModal
-import com.als.presence.ui.dashboard.common.SectionEmpty
-import com.als.presence.ui.dashboard.common.SectionError
-import com.als.presence.ui.dashboard.common.SectionHeader
-import com.als.presence.ui.dashboard.common.SectionLoading
-import com.als.presence.ui.dashboard.common.StatusPill
-import java.time.LocalDate
+import com.als.presence.ui.dashboard.common.PresenceSearchBar
+import com.als.presence.ui.dashboard.common.PresenceTone
+import com.als.presence.ui.dashboard.common.components.PresenceAvatar
+import com.als.presence.ui.dashboard.common.components.PresenceBadge
+import com.als.presence.ui.dashboard.common.components.PresenceEmptyState
+import com.als.presence.ui.dashboard.common.components.PresenceMicroLabel
+import com.als.presence.ui.dashboard.common.components.PresenceSectionHeader
 import java.time.YearMonth
-import java.time.format.DateTimeFormatter
-
-import com.als.presence.data.model.StaffEarningLedgerDto
 
 /**
- * Owner "Workforce" tab — every manager and every staff member of the
- * organization with live salary, wallet summary and monthly cards from joining date.
+ * Editorial, 2026 Android Product Redesign for Owner "Employees" Workforce Screen.
+ * Fulfills all product hierarchy requirements:
+ * 1. Organisation identity & premises context
+ * 2. Total workforce summary & present/active overview
+ * 3. Employee search & filter controls
+ * 4. Refined list directory (NOT large individual cards!)
+ * 5. Add employee action affordance
+ * 6. Smooth navigation to employee ledger & details
  */
 @Composable
 fun OwnerWorkforceTab(
@@ -100,294 +106,349 @@ fun OwnerWorkforceTab(
     onRecordPayment: ((itemId: String, amountPaise: Long, paymentMethod: String, reference: String) -> Unit)? = null,
     onLoadStaffLedger: ((staffProfileId: String, month: Int, year: Int) -> Unit)? = null,
     onDownloadPayslip: ((context: android.content.Context, month: Int, year: Int, staffProfileId: String?) -> Unit)? = null,
+    onAddEmployeeClick: (() -> Unit)? = null
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val scrollState = rememberScrollState()
     var ledgerTarget by remember { mutableStateOf<WorkforceLedgerTarget?>(null) }
     var searchQuery by remember { mutableStateOf("") }
+    var selectedPremisesId by remember { mutableStateOf<String?>(null) }
+    var selectedStatusFilter by remember { mutableStateOf("ALL") }
+    val isDark = isSystemInDarkTheme()
 
     val staff = (staffState as? UiState.Success)?.data.orEmpty().filter { it.id.isNotBlank() }.distinctBy { it.id }
-    val members = (membersState as? UiState.Success)?.data.orEmpty()
-    val premises = (premisesState as? UiState.Success)?.data.orEmpty()
-    val periods = (payrollPeriodsState as? UiState.Success)?.data.orEmpty()
-
-    val filteredStaff = staff
+    val premisesList = (premisesState as? UiState.Success)?.data.orEmpty()
 
     val queryTrimmed = searchQuery.trim()
-
-    val searchedStaff = filteredStaff.filter { member ->
-        queryTrimmed.isBlank() ||
+    val filteredStaff = staff.filter { member ->
+        val matchesPremises = selectedPremisesId == null || member.premisesId == selectedPremisesId
+        val matchesSearch = queryTrimmed.isBlank() ||
                 member.fullName.contains(queryTrimmed, ignoreCase = true) ||
                 member.staffCode.contains(queryTrimmed, ignoreCase = true) ||
                 member.email.contains(queryTrimmed, ignoreCase = true) ||
                 (member.department?.contains(queryTrimmed, ignoreCase = true) == true) ||
                 (member.designation?.contains(queryTrimmed, ignoreCase = true) == true)
+        val matchesStatus = when (selectedStatusFilter) {
+            "ACTIVE" -> member.isActive
+            "INACTIVE" -> !member.isActive
+            "DUE" -> (member.earnedBalancePaise - member.paidBalancePaise) > 0L
+            else -> true
+        }
+        matchesPremises && matchesSearch && matchesStatus
     }
 
-    val failure = listOfNotNull(
-        (staffState as? UiState.Error)?.message,
-        (membersState as? UiState.Error)?.message,
-        (premisesState as? UiState.Error)?.message,
-    ).firstOrNull()
+    // Workforce KPI Summary Counts
+    val totalEmployees = staff.size
+    val activeCount = staff.count { it.isActive }
+    val inactiveCount = staff.count { !it.isActive }
+    val dueCount = staff.count { (it.earnedBalancePaise - it.paidBalancePaise) > 0L }
+    val activeRatio = if (totalEmployees > 0) (activeCount.toFloat() / totalEmployees.toFloat()).coerceIn(0f, 1f) else 1f
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(horizontal = 16.dp)
-            .padding(top = 16.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+    val screenInfo = LocalScreenSizeInfo.current
+
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter
     ) {
-        // Header Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier
+                .widthIn(max = if (screenInfo.isTabletOrFoldable) 720.dp else Dp.Unspecified)
+                .fillMaxWidth()
+                .padding(
+                    horizontal = screenInfo.horizontalScreenPadding,
+                    vertical = if (screenInfo.isVeryCompact) 10.dp else 14.dp
+                ),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Workforce Roster",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            PresenceRefreshButton(
-                onClick = onRetry,
-                isRefreshing = staffState is UiState.Loading || membersState is UiState.Loading,
-                contentDescription = "Refresh workforce"
-            )
-        }
-
-        // Compact Search Bar
-        PresenceSearchBar(
-            query = searchQuery,
-            onQueryChange = { searchQuery = it },
-            placeholderText = "Search name, code, role or dept…"
-        )
-
-        // Top Premises Selector Chips
-
-
-        if (failure != null) {
-            Surface(
-                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
-                shape = RoundedCornerShape(12.dp),
+            // -------------------------------------------------------------
+            // 1. ORGANISATION IDENTITY & HEADER BAR
+            // -------------------------------------------------------------
+            Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = failure,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(12.dp),
-                )
-            }
-        }
-
-        // Workforce Salary Summary Card
-        val totalEarnedPaise = filteredStaff.sumOf { member: StaffDto -> member.earnedBalancePaise }
-        val totalPaidPaise = filteredStaff.sumOf { member: StaffDto -> member.paidBalancePaise }
-        val totalDuePaise = (totalEarnedPaise - totalPaidPaise).coerceAtLeast(0L)
-
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-        ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Workforce Directory",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        PresenceBadge(
+                            text = "OWNER",
+                            tone = PresenceTone.Info
+                        )
+                    }
                     Text(
-                        text = "Workforce Salary Ledger",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
+                        text = "Real-time roster, staff profiles & earning balances",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    StatusPill("${filteredStaff.size} Employees")
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = onRetry,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                        .border(BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)), CircleShape)
                 ) {
-                    Column {
-                        Text(
-                            text = "Total Earned",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = Money.format(totalEarnedPaise),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Total Paid",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = Money.format(totalPaidPaise),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = SecondaryEmerald,
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "Net Due Salary",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = Money.format(totalDuePaise),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (totalDuePaise > 0) TertiaryAmber else MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
-        }
 
-        // ---------------------------------------------------------------- Employee Roster
-        SectionHeader(
-            title = "Employee Roster",
-            trailing = {
-                Text(
-                    text = "${searchedStaff.size} employees",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            },
-        )
-
-        when (staffState) {
-            is UiState.Loading, is UiState.Idle -> SectionLoading("Loading roster…")
-            is UiState.Error -> SectionError(staffState.message)
-            is UiState.Success -> {
-                if (searchedStaff.isEmpty()) {
-                    SectionEmpty(
-                        if (queryTrimmed.isNotBlank()) "No employees match \"$queryTrimmed\"."
-                        else "No employees onboarded for selected premises."
-                    )
-                } else {
-                    searchedStaff.forEach { member ->
-                        StaffCard(
-                            staff = member,
-                            payrollPeriods = periods,
-                            payrollItemsMap = payrollItemsMap,
-                            onOpenLedger = { cardData ->
-                                val targetPeriodId = "${cardData.year}-${cardData.month.toString().padStart(2, '0')}"
-                                val itemId = cardData.payrollItemId?.ifBlank { null }
-                                    ?: payrollItemsMap[targetPeriodId]?.firstOrNull { item ->
-                                        item.employeeId == member.id || item.staffProfileId == member.id || item.resolvedEmployeeId == member.id ||
-                                        (!member.email.isBlank() && item.staffEmail.equals(member.email, ignoreCase = true)) ||
-                                        (!member.staffCode.isNullOrEmpty() && item.resolvedStaffCode.equals(member.staffCode, ignoreCase = true))
-                                    }?.let { item -> item.monthlyPayrollId.ifBlank { item.id } }
-                                    ?: periods.firstNotNullOfOrNull { period ->
-                                        payrollItemsMap[period.id]?.firstOrNull { item ->
-                                            item.employeeId == member.id || item.staffProfileId == member.id || item.resolvedEmployeeId == member.id ||
-                                            (!member.email.isBlank() && item.staffEmail.equals(member.email, ignoreCase = true)) ||
-                                            (!member.staffCode.isNullOrEmpty() && item.resolvedStaffCode.equals(member.staffCode, ignoreCase = true))
-                                        }
-                                    }?.let { item -> item.monthlyPayrollId.ifBlank { item.id } }
-
-                                val m = cardData.month
-                                val y = cardData.year
-                                onLoadStaffLedger?.invoke(member.id, m, y)
-
-                                ledgerTarget = WorkforceLedgerTarget(
-                                    payrollItemId = if (!itemId.isNullOrBlank()) itemId else null,
-                                    staffProfileId = member.id,
-                                    staffName = member.fullName,
-                                    staffCode = member.staffCode,
-                                    monthLabel = cardData.monthYearLabel,
-                                    month = m,
-                                    year = y,
-                                    earnedPaise = cardData.earnedPaise,
-                                    paidPaise = cardData.paidPaise,
-                                    attendanceSummary = cardData.attendanceSummary,
-                                    breakdown = cardData.breakdown,
+            // -------------------------------------------------------------
+            // 2. SELECTED PREMISES CONTEXT STRIP
+            // -------------------------------------------------------------
+            if (premisesList.size > 1) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    item {
+                        FilterChip(
+                            selected = selectedPremisesId == null,
+                            onClick = { selectedPremisesId = null },
+                            label = { Text("All Premises (${staff.size})") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
+                    }
+                    items(premisesList) { premises ->
+                        val count = staff.count { it.premisesId == premises.id }
+                        FilterChip(
+                            selected = premises.id == selectedPremisesId,
+                            onClick = {
+                                selectedPremisesId = if (selectedPremisesId == premises.id) null else premises.id
+                            },
+                            label = { Text("${Dates.cleanPremisesName(premises.name)} ($count)") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Place,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
                                 )
                             },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
                         )
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(4.dp))
+            // -------------------------------------------------------------
+            // 3. TOTAL WORKFORCE SUMMARY & ACTIVE RATIO OVERVIEW
+            // -------------------------------------------------------------
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                tonalElevation = 1.dp
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            PresenceMicroLabel(text = "Total Workforce")
+                            Text(
+                                text = "$totalEmployees Employees",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
 
-        Spacer(modifier = Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Column(horizontalAlignment = Alignment.End) {
+                                PresenceMicroLabel(text = "Active Staff")
+                                Text(
+                                    text = "$activeCount",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PresenceDesign.Positive
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                PresenceMicroLabel(text = "Pending Dues")
+                                Text(
+                                    text = "$dueCount",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (dueCount > 0) PresenceDesign.DangerText else PresenceDesign.Positive
+                                )
+                            }
+                        }
+                    }
 
-        // ------------------------------------------------------------- Premises
-        SectionHeader(title = "Geofenced Premises")
-        if (premises.isEmpty()) {
-            SectionEmpty("No premises configured. Add one from the menu.")
-        } else {
-            premises.forEach { site ->
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    ),
-                ) {
-                    val nameOnly = Dates.cleanPremisesName(site.name)
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    LinearProgressIndicator(
+                        progress = { activeRatio },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(5.dp)
+                            .clip(CircleShape),
+                        color = PresenceDesign.Positive,
+                        trackColor = PresenceDesign.NeutralSoft
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
+                        Text(
+                            text = "${(activeRatio * 100).toInt()}% Active Workforce",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = PresenceDesign.Positive,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "$inactiveCount Inactive",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // -------------------------------------------------------------
+            // 4. SEARCH & STATUS FILTER STRIP
+            // -------------------------------------------------------------
+            PresenceSearchBar(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                placeholderText = "Search by employee name, code, designation…"
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = selectedStatusFilter == "ALL",
+                    onClick = { selectedStatusFilter = "ALL" },
+                    label = { Text("All (${staff.size})") },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                )
+                FilterChip(
+                    selected = selectedStatusFilter == "ACTIVE",
+                    onClick = { selectedStatusFilter = "ACTIVE" },
+                    label = { Text("Active ($activeCount)") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = PresenceDesign.Positive
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = PresenceDesign.PositiveSoft,
+                        selectedLabelColor = PresenceDesign.Positive
+                    )
+                )
+                if (dueCount > 0) {
+                    FilterChip(
+                        selected = selectedStatusFilter == "DUE",
+                        onClick = { selectedStatusFilter = "DUE" },
+                        label = { Text("Balance Due ($dueCount)") },
+                        leadingIcon = {
                             Icon(
-                                Icons.Default.Business,
+                                imageVector = Icons.Default.CurrencyRupee,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(14.dp),
+                                tint = PresenceDesign.DangerText
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = PresenceDesign.DangerSoft,
+                            selectedLabelColor = PresenceDesign.DangerText
+                        )
+                    )
+                }
+            }
+
+            // -------------------------------------------------------------
+            // 5. REFINED EMPLOYEE DIRECTORY LIST (NOT INDIVIDUAL CARDS!)
+            // -------------------------------------------------------------
+            if (filteredStaff.isEmpty()) {
+                PresenceEmptyState(
+                    title = "No Employees Found",
+                    description = if (queryTrimmed.isNotBlank()) "No employee matching \"$queryTrimmed\"." else "No employees configured in this premises."
+                )
+            } else {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                    tonalElevation = 1.dp
+                ) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(filteredStaff, key = { it.id }) { member ->
+                            val ymNow = YearMonth.now()
+                            val netDuePaise = (member.earnedBalancePaise - member.paidBalancePaise).coerceAtLeast(0L)
+
+                            WorkforceEmployeeRow(
+                                member = member,
+                                netDuePaise = netDuePaise,
+                                onClick = {
+                                    val m = ymNow.monthValue
+                                    val y = ymNow.year
+                                    onLoadStaffLedger?.invoke(member.id, m, y)
+                                    ledgerTarget = WorkforceLedgerTarget(
+                                        staffProfileId = member.id,
+                                        staffName = member.fullName,
+                                        staffCode = member.staffCode,
+                                        monthLabel = "${ymNow.month.name.take(3)} $y",
+                                        month = m,
+                                        year = y,
+                                        earnedPaise = member.earnedBalancePaise,
+                                        paidPaise = member.paidBalancePaise
+                                    )
+                                }
+                            )
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f),
+                                modifier = Modifier.padding(horizontal = 14.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                nameOnly,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Gps Geofence active",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        StatusPill("${site.radiusMeters}m radius")
                     }
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(24.dp))
     }
 
+    // Ledger Modal (Employee drill-down)
     ledgerTarget?.let { target ->
         val key = "${target.staffProfileId}-${target.year}-${target.month}"
         val targetEntries = staffLedgerMap[key].orEmpty()
@@ -416,6 +477,110 @@ fun OwnerWorkforceTab(
     }
 }
 
+/**
+ * Compact, elegant workforce directory row.
+ * Displays avatar with status beacon, name, designation, shift/premises, and financial status.
+ */
+@Composable
+private fun WorkforceEmployeeRow(
+    member: StaffDto,
+    netDuePaise: Long,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Left: Avatar, Name, Designation & Code
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(contentAlignment = Alignment.BottomEnd) {
+                PresenceAvatar(
+                    name = member.fullName,
+                    size = 42.dp
+                )
+                Box(
+                    modifier = Modifier
+                        .size(11.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(1.5.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .background(if (member.isActive) PresenceDesign.Positive else MaterialTheme.colorScheme.outlineVariant)
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = member.fullName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (member.staffCode.isNotBlank()) {
+                        Text(
+                            text = "#${member.staffCode}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                val roleInfo = member.designation?.takeIf { it.isNotBlank() }
+                    ?: member.department?.takeIf { it.isNotBlank() }
+                    ?: "Employee"
+                val premisesClean = Dates.cleanPremisesName(member.premisesName ?: "").ifBlank { "Main Premises" }
+
+                Text(
+                    text = "$roleInfo • $premisesClean",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        // Right: Status badge & Earning balance
+        Column(horizontalAlignment = Alignment.End) {
+            PresenceBadge(
+                text = if (member.isActive) "ACTIVE" else "INACTIVE",
+                tone = if (member.isActive) PresenceTone.Success else PresenceTone.Neutral
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = if (netDuePaise > 0) "Due: ${Money.format(netDuePaise)}" else "Settled",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (netDuePaise > 0) PresenceDesign.DangerText else PresenceDesign.Positive
+            )
+        }
+    }
+}
+
 private data class WorkforceLedgerTarget(
     val payrollItemId: String? = null,
     val staffProfileId: String? = null,
@@ -429,911 +594,3 @@ private data class WorkforceLedgerTarget(
     val attendanceSummary: AttendanceSummaryDto = AttendanceSummaryDto(),
     val breakdown: PayrollBreakdownDto = PayrollBreakdownDto(),
 )
-
-@Composable
-private fun StaffCard(
-    staff: StaffDto,
-    payrollPeriods: List<PayrollPeriodDto>,
-    payrollItemsMap: Map<String, List<PayrollItemDto>>,
-    onOpenLedger: (MonthlySalaryCardData) -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            // Profile & Role Header Row
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                InitialAvatar(
-                    name = staff.fullName,
-                    accent = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(46.dp),
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            text = staff.fullName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        if (staff.staffCode.isNotBlank()) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                shape = RoundedCornerShape(6.dp),
-                            ) {
-                                Text(
-                                    text = "#${staff.staffCode}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        if (staff.email.isNotBlank()) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.Email,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(12.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Text(
-                                    text = staff.email,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                }
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-                        shape = RoundedCornerShape(6.dp),
-                    ) {
-                        Text(
-                            text = "EMPLOYEE",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
-                    }
-                    StatusPill(if (staff.isActive) "ACTIVE" else "CANCELLED")
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-            // Quick Metadata Chips Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Premises Chip
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(13.dp),
-                        )
-                        Text(
-                            text = staff.premisesName?.let { Dates.cleanPremisesName(it) } ?: "No Premises",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                }
-
-                // Department Chip
-                Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Business,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(13.dp),
-                        )
-                        Text(
-                            text = staff.department?.takeIf { it.isNotBlank() } ?: "Operations",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.secondary,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                }
-
-                // Designation Chip (if present)
-                if (!staff.designation.isNullOrBlank()) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f),
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Work,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.tertiary,
-                                modifier = Modifier.size(13.dp),
-                            )
-                            Text(
-                                text = staff.designation,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.tertiary,
-                                maxLines = 1,
-                                softWrap = false,
-                            )
-                        }
-                    }
-                }
-
-                // Joining Date Chip
-                if (!staff.hireDate.isNullOrBlank()) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CalendarMonth,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(13.dp),
-                            )
-                            Text(
-                                text = "Joined ${Dates.formatDate(staff.hireDate)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                softWrap = false,
-                            )
-                        }
-                    }
-                }
-            }
-
-            val totalEarned = staff.earnedBalancePaise
-            val totalPaid = staff.paidBalancePaise
-            val dueUnpaid = (totalEarned - totalPaid).coerceAtLeast(0L)
-
-            // Salary Summary Banner
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column {
-                        Text(
-                            text = "Earned",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = Money.format(totalEarned),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Paid",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = Money.format(totalPaid),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = SecondaryEmerald,
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "Due Salary",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = Money.format(dueUnpaid),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (dueUnpaid > 0) TertiaryAmber else SecondaryEmerald,
-                        )
-                    }
-                }
-            }
-
-            // Monthly Salary History Carousel
-            val monthlyCards = remember(staff, payrollPeriods, payrollItemsMap) {
-                computeMonthlySalaryCards(
-                    joiningDateIso = staff.hireDate,
-                    employeeId = staff.id,
-                    email = staff.email,
-                    staffCode = staff.staffCode,
-                    earnedBalancePaise = staff.earnedBalancePaise,
-                    payrollPeriods = payrollPeriods,
-                    payrollItemsMap = payrollItemsMap,
-                )
-            }
-
-            if (monthlyCards.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "Monthly Salary & Attendance History",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = "${monthlyCards.size} months",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        monthlyCards.forEach { cardData ->
-                            MonthlySalaryCard(
-                                cardData = cardData,
-                                onOpenLedger = { onOpenLedger(cardData) },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ManagerCard(
-    member: OrganizationMemberDto,
-    payrollPeriods: List<PayrollPeriodDto>,
-    payrollItemsMap: Map<String, List<PayrollItemDto>>,
-    onOpenLedger: (MonthlySalaryCardData) -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            // Profile & Role Header Row
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                InitialAvatar(
-                    name = member.fullName,
-                    accent = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.size(46.dp),
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            text = member.fullName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        if (!member.staffCode.isNullOrBlank()) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                shape = RoundedCornerShape(6.dp),
-                            ) {
-                                Text(
-                                    text = "#${member.staffCode}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.Email,
-                            contentDescription = null,
-                            modifier = Modifier.size(12.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = member.email,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f),
-                        shape = RoundedCornerShape(6.dp),
-                    ) {
-                        Text(
-                            text = "MANAGER",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
-                    }
-                    StatusPill(if (member.isActive) "ACTIVE" else "CANCELLED")
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-            // Quick Metadata Chips Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Premises Chip
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(13.dp),
-                        )
-                        Text(
-                            text = member.premisesName?.let { Dates.cleanPremisesName(it) } ?: "All Premises",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                }
-
-                // Role/Dept Chip
-                Surface(
-                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Business,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.size(13.dp),
-                        )
-                        Text(
-                            text = "Management",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                }
-
-                // Joining Date Chip
-                if (!member.joinedAt.isNullOrBlank()) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CalendarMonth,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(13.dp),
-                            )
-                            Text(
-                                text = "Joined ${Dates.formatDate(member.joinedAt)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                softWrap = false,
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Monthly Salary History
-            val monthlyCards = remember(member, payrollPeriods, payrollItemsMap) {
-                computeMonthlySalaryCards(
-                    joiningDateIso = member.joinedAt,
-                    employeeId = member.employeeId,
-                    email = member.email,
-                    staffCode = member.staffCode,
-                    earnedBalancePaise = 0L,
-                    payrollPeriods = payrollPeriods,
-                    payrollItemsMap = payrollItemsMap,
-                )
-            }
-
-            val totalEarned = monthlyCards.sumOf { it.earnedPaise }
-            val totalPaid = monthlyCards.sumOf { it.paidPaise }
-            val dueUnpaid = (totalEarned - totalPaid).coerceAtLeast(0L)
-
-            // Salary Summary Banner
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column {
-                        Text(
-                            text = "Earned",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = Money.format(totalEarned),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Paid",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = Money.format(totalPaid),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = SecondaryEmerald,
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "Due Salary",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = Money.format(dueUnpaid),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (dueUnpaid > 0) TertiaryAmber else SecondaryEmerald,
-                        )
-                    }
-                }
-            }
-
-            if (monthlyCards.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "Monthly Salary & Attendance History",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = "${monthlyCards.size} months",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        monthlyCards.forEach { cardData ->
-                            MonthlySalaryCard(
-                                cardData = cardData,
-                                onOpenLedger = { onOpenLedger(cardData) },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private data class MonthlySalaryCardData(
-    val monthYearLabel: String,
-    val month: Int = 1,
-    val year: Int = 2025,
-    val earnedPaise: Long,
-    val paidPaise: Long,
-    val statusLabel: String,
-    val payrollItemId: String? = null,
-    val breakdown: PayrollBreakdownDto = PayrollBreakdownDto(),
-    val attendanceSummary: AttendanceSummaryDto = AttendanceSummaryDto(),
-    val presentShiftsCount: Int = 0,
-    val halfDayShiftsCount: Int = 0,
-    val leaveShiftsCount: Int = 0,
-    val absentShiftsCount: Int = 0,
-    val holidayCount: Int = 0,
-    val offDayCount: Int = 0,
-)
-
-private fun computeMonthlySalaryCards(
-    joiningDateIso: String?,
-    employeeId: String?,
-    email: String?,
-    staffCode: String?,
-    earnedBalancePaise: Long,
-    payrollPeriods: List<PayrollPeriodDto>,
-    payrollItemsMap: Map<String, List<PayrollItemDto>>,
-): List<MonthlySalaryCardData> {
-    val currentYm = YearMonth.now()
-    val startYm = try {
-        if (!joiningDateIso.isNullOrBlank()) {
-            YearMonth.from(LocalDate.parse(joiningDateIso.take(10)))
-        } else {
-            currentYm
-        }
-    } catch (_: Exception) {
-        currentYm
-    }
-
-    val effectiveStartYm = if (startYm.isAfter(currentYm)) currentYm else startYm
-
-    val monthList = mutableListOf<YearMonth>()
-    var temp = effectiveStartYm
-    while (!temp.isAfter(currentYm)) {
-        monthList.add(temp)
-        temp = temp.plusMonths(1)
-    }
-
-    val monthFormatter = DateTimeFormatter.ofPattern("MMM yyyy")
-
-    return monthList.reversed().map { ym ->
-        val monthLabel = ym.format(monthFormatter)
-
-        var foundItem: PayrollItemDto? = null
-        var periodStatus: String? = null
-
-        for (period in payrollPeriods) {
-            val periodYm = try {
-                YearMonth.from(LocalDate.parse(period.startDate.take(10)))
-            } catch (_: Exception) {
-                null
-            }
-            if (periodYm == ym) {
-                periodStatus = period.status
-                val items = payrollItemsMap[period.id].orEmpty()
-                foundItem = items.firstOrNull { item ->
-                    (employeeId != null && item.employeeId == employeeId) ||
-                            (!email.isNullOrBlank() && item.staffEmail.equals(email, ignoreCase = true)) ||
-                            (!staffCode.isNullOrBlank() && item.staffCode.equals(staffCode, ignoreCase = true))
-                }
-                if (foundItem != null) break
-            }
-        }
-
-        val isCurrentMonth = (ym == currentYm)
-
-        if (foundItem != null) {
-            val summary = foundItem.attendanceSummary
-            val paidAmount = if (foundItem.payment != null) foundItem.payment.amountPaise else if (periodStatus == "LOCKED") foundItem.netSalaryPaise else 0L
-            val isPaid = paidAmount > 0 || foundItem.payment != null || periodStatus == "LOCKED"
-            MonthlySalaryCardData(
-                monthYearLabel = monthLabel,
-                month = ym.monthValue,
-                year = ym.year,
-                earnedPaise = foundItem.grossSalaryPaise,
-                paidPaise = paidAmount,
-                statusLabel = if (isPaid) "PAID" else "UNPAID",
-                payrollItemId = foundItem.monthlyPayrollId.ifBlank { foundItem.id },
-                breakdown = foundItem.breakdown,
-                attendanceSummary = summary,
-                presentShiftsCount = summary.presentShiftsCount,
-                halfDayShiftsCount = summary.halfDayShiftsCount,
-                leaveShiftsCount = summary.leaveShiftsCount,
-                absentShiftsCount = summary.absentShiftsCount,
-                holidayCount = summary.holidayCount,
-                offDayCount = summary.offDayCount,
-            )
-        } else {
-            if (isCurrentMonth) {
-                MonthlySalaryCardData(
-                    monthYearLabel = monthLabel,
-                    month = ym.monthValue,
-                    year = ym.year,
-                    earnedPaise = earnedBalancePaise,
-                    paidPaise = 0L,
-                    statusLabel = "UNPAID",
-                    presentShiftsCount = 0,
-                    halfDayShiftsCount = 0,
-                    leaveShiftsCount = 0,
-                    absentShiftsCount = 0,
-                    holidayCount = 0,
-                    offDayCount = 0,
-                )
-            } else {
-                MonthlySalaryCardData(
-                    monthYearLabel = monthLabel,
-                    month = ym.monthValue,
-                    year = ym.year,
-                    earnedPaise = 0L,
-                    paidPaise = 0L,
-                    statusLabel = "UNPAID",
-                    presentShiftsCount = 0,
-                    halfDayShiftsCount = 0,
-                    leaveShiftsCount = 0,
-                    absentShiftsCount = 0,
-                    holidayCount = 0,
-                    offDayCount = 0,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MonthlySalaryCard(
-    cardData: MonthlySalaryCardData,
-    onOpenLedger: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val isPaid = cardData.statusLabel.uppercase() == "PAID"
-    val statusColor = if (isPaid) SecondaryEmerald else TertiaryAmber
-    val pendingPaise = (cardData.earnedPaise - cardData.paidPaise).coerceAtLeast(0L)
-
-    Surface(
-        modifier = modifier.width(165.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // Month & Status Chip
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = cardData.monthYearLabel,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.5.sp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Surface(
-                    color = statusColor.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(6.dp),
-                ) {
-                    Text(
-                        text = if (isPaid) "PAID" else "DUE",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = statusColor,
-                        fontSize = 9.sp,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                    )
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-            // Financial Breakdown: Earned, Paid, Due
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Earned",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = Money.format(cardData.earnedPaise),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Paid",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = Money.format(cardData.paidPaise),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = if (cardData.paidPaise > 0) SecondaryEmerald else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Net Due",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = Money.format(pendingPaise),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 11.5.sp,
-                        color = if (pendingPaise > 0) TertiaryAmber else SecondaryEmerald,
-                    )
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-            // Action Button
-            OutlinedButton(
-                onClick = onOpenLedger,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
-            ) {
-                Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(13.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "View Ledger",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 10.5.sp,
-                )
-            }
-        }
-    }
-}

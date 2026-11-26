@@ -187,15 +187,7 @@ class AuthRepositoryImpl @Inject constructor(
         }
         return when (result) {
             is Resource.Success -> {
-                val authResponse = result.data
-                sessionManager.token = authResponse.accessToken
-                sessionManager.refreshToken = authResponse.refreshToken
-                if (!authResponse.loggedDeviceId.isNullOrBlank()) {
-                    sessionManager.loggedDeviceId = authResponse.loggedDeviceId
-                }
-                val user = authResponse.user.toDomainUser()
-                saveUserToLocalCache(user)
-                Resource.Success(user)
+                validateAndPersistAuthResponse(result.data)
             }
             is Resource.Error -> {
                 Resource.Error(result.exception, result.message, result.code)
@@ -219,15 +211,7 @@ class AuthRepositoryImpl @Inject constructor(
         }
         return when (result) {
             is Resource.Success -> {
-                val authResponse = result.data
-                sessionManager.token = authResponse.accessToken
-                sessionManager.refreshToken = authResponse.refreshToken
-                if (!authResponse.loggedDeviceId.isNullOrBlank()) {
-                    sessionManager.loggedDeviceId = authResponse.loggedDeviceId
-                }
-                val user = authResponse.user.toDomainUser()
-                saveUserToLocalCache(user)
-                Resource.Success(user)
+                validateAndPersistAuthResponse(result.data)
             }
             is Resource.Error -> {
                 Resource.Error(result.exception, result.message, result.code)
@@ -265,21 +249,37 @@ class AuthRepositoryImpl @Inject constructor(
         }
         return when (result) {
             is Resource.Success -> {
-                val authResponse = result.data
-                sessionManager.token = authResponse.accessToken
-                sessionManager.refreshToken = authResponse.refreshToken
-                if (!authResponse.loggedDeviceId.isNullOrBlank()) {
-                    sessionManager.loggedDeviceId = authResponse.loggedDeviceId
-                }
-                val user = authResponse.user.toDomainUser()
-                saveUserToLocalCache(user)
-                Resource.Success(user)
+                validateAndPersistAuthResponse(result.data)
             }
             is Resource.Error -> {
                 Resource.Error(result.exception, result.message, result.code)
             }
             is Resource.Loading -> Resource.Loading
         }
+    }
+
+    private suspend fun validateAndPersistAuthResponse(authResponse: AuthResponse): Resource<User> {
+        val user = authResponse.user.toDomainUser()
+        if (user.id.isBlank()) {
+            return Resource.Error(
+                IllegalStateException("Invalid user ID received"),
+                "Server returned an invalid account payload."
+            )
+        }
+        if (!user.isActive) {
+            return Resource.Error(
+                IllegalStateException("Account deactivated"),
+                "This account has been deactivated. Please contact your organization administrator.",
+                code = "ACCOUNT_DEACTIVATED"
+            )
+        }
+        sessionManager.token = authResponse.accessToken
+        sessionManager.refreshToken = authResponse.refreshToken
+        if (!authResponse.loggedDeviceId.isNullOrBlank()) {
+            sessionManager.loggedDeviceId = authResponse.loggedDeviceId
+        }
+        saveUserToLocalCache(user)
+        return Resource.Success(user)
     }
 
     override suspend fun getLoggedDevices(): Resource<List<LoggedDevice>> {
@@ -319,15 +319,7 @@ class AuthRepositoryImpl @Inject constructor(
         }
         return when (result) {
             is Resource.Success -> {
-                val authResponse = result.data
-                sessionManager.token = authResponse.accessToken
-                sessionManager.refreshToken = authResponse.refreshToken
-                if (!authResponse.loggedDeviceId.isNullOrBlank()) {
-                    sessionManager.loggedDeviceId = authResponse.loggedDeviceId
-                }
-                val user = authResponse.user.toDomainUser()
-                saveUserToLocalCache(user)
-                Resource.Success(user)
+                validateAndPersistAuthResponse(result.data)
             }
             is Resource.Error -> {
                 if (result.isAuthFailure()) {

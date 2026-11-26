@@ -413,13 +413,23 @@ private fun EarningLedgerRow(item: FlatEarningLedgerItem) {
 
             // Right Column: Earning Amount + Running Balance
             Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "+ ${Money.format(item.amountPaise)}",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.5.sp,
-                    color = SecondaryEmerald
-                )
+                if (item.amountPaise > 0) {
+                    Text(
+                        text = "+ ${Money.format(item.amountPaise)}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.5.sp,
+                        color = SecondaryEmerald
+                    )
+                } else {
+                    Text(
+                        text = "Not Paid",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.5.sp,
+                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
+                    )
+                }
                 if (item.runningBalancePaise > 0) {
                     Text(
                         text = "Bal: ${Money.format(item.runningBalancePaise)}",
@@ -486,6 +496,7 @@ private fun computeFlatEarningLedgerEvents(
 ): List<FlatEarningLedgerItem> {
     val dateDisplayFormatter = DateTimeFormatter.ofPattern("dd MMM")
     val dayOfWeekFormatter = DateTimeFormatter.ofPattern("EEE")
+    val fullDayFormatter = DateTimeFormatter.ofPattern("EEEE")
 
     if (rawEntries.isNotEmpty()) {
         val sortedEntries = rawEntries.sortedWith(compareBy<StaffEarningLedgerDto> { it.earningDate }.thenBy { it.createdAt })
@@ -494,17 +505,28 @@ private fun computeFlatEarningLedgerEvents(
         val flatItems = sortedEntries.mapIndexed { idx, item ->
             val amt = item.amountInr
             runningAccumulator += amt
-            val label = when (item.type.uppercase()) {
-                "SHIFT" -> "Shift Attendance"
-                "HOLIDAY" -> "Public Holiday (Paid)"
-                "OFF_DAY" -> "Scheduled Weekly Off (Paid)"
-                "OVERTIME" -> "Approved Overtime"
-                else -> item.type.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
-            }
 
             val localDate = runCatching { LocalDate.parse(item.earningDate) }.getOrNull()
             val dateDisplay = localDate?.format(dateDisplayFormatter) ?: item.earningDate
             val dayOfWeek = localDate?.format(dayOfWeekFormatter) ?: "Day"
+            val fullDayName = localDate?.format(fullDayFormatter) ?: dayOfWeek
+
+            val isPaid = amt > 0L
+            val label = when {
+                !item.description.isNullOrBlank() -> item.description
+                !item.sourceReference.isNullOrBlank() && !item.sourceReference.contains(":") -> item.sourceReference
+                else -> {
+                    val notPaidText = if (isPaid) "" else " (Not Paid)"
+                    val shiftNotPaidText = if (isPaid) "" else " - Not Paid"
+                    when (item.type.uppercase()) {
+                        "SHIFT" -> "$fullDayName - Shift (Present$shiftNotPaidText)"
+                        "OFF_DAY" -> "Premises Off$notPaidText"
+                        "HOLIDAY" -> "Public Holiday$notPaidText"
+                        "OVERTIME" -> "Approved Overtime$notPaidText"
+                        else -> item.type.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() } + notPaidText
+                    }
+                }
+            }
 
             FlatEarningLedgerItem(
                 id = item.id.ifBlank { "item-$idx-${item.earningDate}" },
@@ -513,7 +535,7 @@ private fun computeFlatEarningLedgerEvents(
                 dayOfWeek = dayOfWeek,
                 title = label,
                 category = item.type,
-                timeDisplay = null,
+                timeDisplay = if (!isPaid) "Not Paid" else null,
                 amountPaise = amt,
                 runningBalancePaise = runningAccumulator
             )

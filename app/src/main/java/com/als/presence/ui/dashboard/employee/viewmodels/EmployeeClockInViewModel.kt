@@ -604,7 +604,7 @@ class EmployeeClockInViewModel @Inject constructor(
             _state.update { it.copy(isSubmitting = true, error = null, message = null) }
 
             val currentLoc = _state.value.location
-            val fix = if (currentLoc != null && currentLoc.accuracyMeters <= 30f) {
+            val fix = if (currentLoc != null && currentLoc.accuracyMeters <= 10f) {
                 currentLoc
             } else {
                 when (val location = getGpsLocation()) {
@@ -662,35 +662,6 @@ class EmployeeClockInViewModel @Inject constructor(
                         it.copy(
                             isSubmitting = false,
                             error = result.message ?: "Clock-in failed"
-                        )
-                    }
-                }
-                Resource.Loading -> Unit
-            }
-        }
-    }
-
-    fun clockOut() {
-        val eventId = _state.value.activeEvent?.id ?: ""
-        viewModelScope.launch {
-            _state.update { it.copy(isSubmitting = true, error = null, message = null) }
-            when (val result = repository.clockOut(eventId)) {
-                is Resource.Success -> {
-                    _state.update {
-                        it.copy(
-                            isSubmitting = false,
-                            message = "Clocked out successfully."
-                        )
-                    }
-                    com.als.presence.core.location.ShiftLocationService.stop(context)
-                    com.als.presence.core.location.LocationMonitorScheduler.cancel(context)
-                    refresh(silent = true)
-                }
-                is Resource.Error -> {
-                    _state.update {
-                        it.copy(
-                            isSubmitting = false,
-                            error = result.message ?: "Clock-out failed"
                         )
                     }
                 }

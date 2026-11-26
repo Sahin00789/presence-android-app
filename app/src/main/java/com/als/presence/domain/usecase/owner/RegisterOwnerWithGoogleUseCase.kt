@@ -5,9 +5,13 @@ import com.als.presence.domain.model.User
 import com.als.presence.domain.repository.AuthRepository
 import javax.inject.Inject
 
+/**
+ * UseCase to register a new Organization Owner using Google OAuth token and premise configuration.
+ */
 class RegisterOwnerWithGoogleUseCase @Inject constructor(
     private val authRepository: AuthRepository
 ) {
+    /** Completes owner registration and organization creation with Google credentials. */
     suspend operator fun invoke(
         idToken: String,
         orgName: String,

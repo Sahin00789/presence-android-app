@@ -1,7 +1,10 @@
 package com.als.presence.ui.dashboard.employee.tabs
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -20,15 +24,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Celebration
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CurrencyRupee
+import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.MoreTime
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,7 +49,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.als.presence.core.common.UiState
@@ -45,28 +63,24 @@ import com.als.presence.core.designsystem.LocalScreenSizeInfo
 import com.als.presence.core.designsystem.PresenceDesign
 import com.als.presence.data.model.MonthlyEarningLedgerResponseDto
 import com.als.presence.data.model.MyOverallPayrollSummaryDto
-import com.als.presence.data.model.PaymentRecordDto
 import com.als.presence.data.model.StaffEarningLedgerDto
 import com.als.presence.ui.dashboard.common.Dates
-import com.als.presence.ui.dashboard.common.MetricTile
 import com.als.presence.ui.dashboard.common.Money
-import com.als.presence.ui.dashboard.common.PresenceRefreshButton
-import com.als.presence.ui.dashboard.common.SectionEmpty
-import com.als.presence.ui.dashboard.common.SectionError
-import com.als.presence.ui.dashboard.common.SectionHeader
-import com.als.presence.ui.dashboard.common.SectionLoading
-import com.als.presence.ui.dashboard.common.StatusPill
+import com.als.presence.ui.dashboard.common.PresenceVariant
+import com.als.presence.ui.dashboard.common.components.PresenceButton
+import com.als.presence.ui.dashboard.common.components.PresenceEmptyState
+import com.als.presence.ui.dashboard.common.components.PresenceMicroLabel
+import com.als.presence.ui.dashboard.common.components.PresenceSectionHeader
 import java.time.YearMonth
 
 /**
- * Employee "Ledger" tab.
- *
- * Order (top to bottom):
- *  1. Overall earned / paid / due card.
- *  2. Scrollable month selector cards (e.g. MAR 2026).
- *  3. Selected month earned / paid / due summary with PDF Payslip download.
- *  4. Selected month salary payments.
- *  5. Selected month earning ledger.
+ * Editorial, 2026 Fintech-Quality Redesign for Employee Salary & Earning Ledger.
+ * Features:
+ * - Selected month/year interactive timeline selector
+ * - Atmospheric Gradient Financial Hero (Large financial typography for earned, paid & due)
+ * - Lifetime settlement progress ratio bar
+ * - Single-tap Payslip PDF download action
+ * - Structured transaction rows (NOT individual cards!) with semantic icons, linked source attendance, and clear financial credits/debits
  */
 @Composable
 fun EmployeeLedgerTab(
@@ -79,12 +93,14 @@ fun EmployeeLedgerTab(
     onMonthSelected: (YearMonth) -> Unit = {},
     onDownloadPayslip: (YearMonth) -> Unit = {}
 ) {
+    val screenInfo = LocalScreenSizeInfo.current
     val scrollState = rememberScrollState()
+    val isDark = isSystemInDarkTheme()
+
     val monthlyLedger = (monthlyLedgerState as? UiState.Success)?.data
     val ledgerEntries = (ledgerState as? UiState.Success)?.data.orEmpty().ifEmpty {
         monthlyLedger?.entries.orEmpty()
     }
-    val payments = monthlyLedger?.payments.orEmpty()
 
     val currentMonth = remember { YearMonth.now() }
     val monthOffsetList = remember { (-60..0).toList() }
@@ -92,368 +108,402 @@ fun EmployeeLedgerTab(
 
     val monthName = selectedMonth.month.name.lowercase().replaceFirstChar { it.uppercase() }
     val monthYearLabel = "$monthName ${selectedMonth.year}"
-    val screenInfo = LocalScreenSizeInfo.current
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(horizontal = screenInfo.horizontalScreenPadding)
-            .padding(top = if (screenInfo.isVeryCompact) 6.dp else 10.dp, bottom = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(if (screenInfo.isVeryCompact) 8.dp else 10.dp)
+    val overall = (overallSummaryState as? UiState.Success)?.data
+    val earnedInr = monthlyLedger?.earnedInr ?: ledgerEntries.sumOf { it.amountCents }
+    val paidInr = monthlyLedger?.paidAmount?.let { Money.parseToInr(it) } ?: 0L
+    val dueInr = (earnedInr - paidInr).coerceAtLeast(0L)
+
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter
     ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .widthIn(max = if (screenInfo.isTabletOrFoldable) 700.dp else Dp.Unspecified)
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(
+                    horizontal = screenInfo.horizontalScreenPadding,
+                    vertical = if (screenInfo.isVeryCompact) 12.dp else 18.dp
+                ),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Salary Ledger",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = PresenceDesign.Ink
-                )
-                Text(
-                    text = "Monthly earnings, payments & ledger",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = PresenceDesign.Muted
-                )
-            }
-            PresenceRefreshButton(
-                onClick = onRefresh,
-                isRefreshing = ledgerState is UiState.Loading || monthlyLedgerState is UiState.Loading,
-                contentDescription = "Refresh ledger"
-            )
-        }
-
-        // 1. Overall Summary Card (Top)
-        when (overallSummaryState) {
-            is UiState.Loading, is UiState.Idle -> SectionLoading("Loading overall summary…")
-            is UiState.Error -> SectionError(overallSummaryState.message)
-            is UiState.Success -> {
-                val overall = overallSummaryState.data
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "OVERALL PAYROLL SUMMARY",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.0.sp,
-                            fontSize = 9.5.sp,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            MetricTile(
-                                label = "Total Earned",
-                                value = Money.format(overall.totalEarnedInr),
-                                modifier = Modifier.weight(1f)
-                            )
-                            MetricTile(
-                                label = "Total Paid",
-                                value = Money.format(overall.totalPaidInr),
-                                modifier = Modifier.weight(1f),
-                                accent = MaterialTheme.colorScheme.secondary
-                            )
-                            MetricTile(
-                                label = "Total Due",
-                                value = Money.format(overall.totalDueInr),
-                                modifier = Modifier.weight(1f),
-                                accent = MaterialTheme.colorScheme.tertiary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. Month Selector Chips
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Icon(
-                Icons.Default.CalendarMonth,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
-            )
-            LazyRow(
-                state = monthListState,
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            // -------------------------------------------------------------
+            // TOP HEADER WITH EDITORIAL TITLE & REFRESH ACTION
+            // -------------------------------------------------------------
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                items(monthOffsetList.size) { index ->
-                    val offset = monthOffsetList[index]
-                    val month = currentMonth.plusMonths(offset.toLong())
-                    val isSelected = month == selectedMonth
-                    androidx.compose.material3.FilterChip(
-                        selected = isSelected,
-                        onClick = { onMonthSelected(month) },
-                        label = {
-                            Text(
-                                text = "${month.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }} ${month.year}",
-                                fontSize = 11.5.sp
-                            )
-                        }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Salary & Ledger",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Verified earnings, payment settlement & payslips",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                        .border(BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
-        }
 
-        // 3. Selected Month Summary Card (Earned, Paid, Due + PDF Download)
-        when (monthlyLedgerState) {
-            is UiState.Loading, is UiState.Idle -> SectionLoading("Loading $monthYearLabel summary…")
-            is UiState.Error -> SectionError(monthlyLedgerState.message)
-            is UiState.Success -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            // -------------------------------------------------------------
+            // 1. MONTH SELECTOR CHIP ROW
+            // -------------------------------------------------------------
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CalendarMonth,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                LazyRow(
+                    state = monthListState,
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    items(monthOffsetList.size) { idx ->
+                        val offset = monthOffsetList[idx]
+                        val ym = currentMonth.plusMonths(offset.toLong())
+                        val isSelected = ym == selectedMonth
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onMonthSelected(ym) },
+                            label = {
+                                Text(
+                                    text = "${ym.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }} ${ym.year}",
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
+                    }
+                }
+            }
+
+            // -------------------------------------------------------------
+            // 2. FINTECH ATMOSPHERIC GRADIENT HERO SURFACE (SALARY METRICS)
+            // -------------------------------------------------------------
+            val heroStart = if (isDark) Color(0xFF13222E) else Color(0xFFE6F4EA)
+            val heroEnd = if (isDark) Color(0xFF1B2338) else Color(0xFFEDF2FD)
+            val heroBorder = if (isDark) Color(0xFF243B3B) else Color(0xFFC7E2D3)
+            val glowColor = if (isDark) Color(0xFF0D9488).copy(alpha = 0.16f) else Color(0xFF0D9488).copy(alpha = 0.10f)
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Brush.linearGradient(listOf(heroStart, heroEnd)))
+                    .border(BorderStroke(1.dp, heroBorder), RoundedCornerShape(22.dp))
+                    .drawBehind {
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(glowColor, Color.Transparent),
+                                center = Offset(size.width * 0.85f, size.height * 0.2f),
+                                radius = size.width * 0.6f
+                            ),
+                            radius = size.width * 0.6f,
+                            center = Offset(size.width * 0.85f, size.height * 0.2f)
+                        )
+                    }
+                    .padding(if (screenInfo.isVeryCompact) 16.dp else 20.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Column {
+                            PresenceMicroLabel(text = "$monthYearLabel Total Earned")
+                            Text(
+                                text = Money.format(earnedInr),
+                                style = MaterialTheme.typography.displaySmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        // Single-tap PDF Download Action
+                        PresenceButton(
+                            text = if (screenInfo.isVeryCompact) "Payslip" else "Download Payslip",
+                            onClick = { onDownloadPayslip(selectedMonth) },
+                            variant = PresenceVariant.Soft,
+                            size = com.als.presence.ui.dashboard.common.PresenceSize.Sm,
+                            icon = Icons.Default.PictureAsPdf
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Month Paid & Outstanding Net Due Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = if (isDark) 0.6f else 0.85f))
+                            .border(BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)), RoundedCornerShape(14.dp))
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            PresenceMicroLabel(text = "Amount Paid")
+                            Text(
+                                text = Money.format(paidInr),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = PresenceDesign.Positive
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            PresenceMicroLabel(text = "Outstanding Due")
+                            Text(
+                                text = Money.format(dueInr),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (dueInr > 0L) PresenceDesign.DangerText else PresenceDesign.Positive
+                            )
+                        }
+                    }
+
+                    // Progress bar: Paid ratio
+                    if (earnedInr > 0L) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        val paidRatio = (paidInr.toFloat() / earnedInr.toFloat()).coerceIn(0f, 1f)
+                        Column {
+                            LinearProgressIndicator(
+                                progress = { paidRatio },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(CircleShape),
+                                color = PresenceDesign.Positive,
+                                trackColor = PresenceDesign.DangerText.copy(alpha = 0.25f)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Settled: ${(paidRatio * 100).toInt()}%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = PresenceDesign.Positive,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = if (dueInr == 0L) "All Settled" else "Pending Disbursement",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    // Lifetime Summary Row if available
+                    if (overall != null) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "$monthYearLabel Summary".uppercase(),
+                                text = "Lifetime Earned: ${Money.format(overall.totalEarnedInr)}",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.0.sp,
-                                fontSize = 9.5.sp,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Medium
                             )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                StatusPill(monthlyLedger?.status ?: "OPEN")
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    onClick = { onDownloadPayslip(selectedMonth) }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.PictureAsPdf,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onPrimary,
-                                            modifier = Modifier.size(11.dp)
-                                        )
-                                        Text(
-                                            text = "PDF Payslip",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 9.5.sp,
-                                            color = MaterialTheme.colorScheme.onPrimary
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            MetricTile(
-                                label = "Earned",
-                                value = formatInrString(monthlyLedger?.earnedAmount),
-                                modifier = Modifier.weight(1f)
-                            )
-                            MetricTile(
-                                label = "Paid",
-                                value = formatInrString(monthlyLedger?.paidAmount),
-                                modifier = Modifier.weight(1f),
-                                accent = MaterialTheme.colorScheme.secondary
-                            )
-                            MetricTile(
-                                label = "Due",
-                                value = formatInrString(monthlyLedger?.dueAmount),
-                                modifier = Modifier.weight(1f),
-                                accent = MaterialTheme.colorScheme.tertiary
+                            Text(
+                                text = "Lifetime Paid: ${Money.format(overall.totalPaidInr)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = PresenceDesign.Positive,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 }
             }
-        }
 
-        // 4. Selected Month Salary Payments
-        SectionHeader(title = "$monthYearLabel Salary Payments")
-        when (monthlyLedgerState) {
-            is UiState.Loading, is UiState.Idle -> SectionLoading("Loading payments…")
-            is UiState.Error -> SectionError(monthlyLedgerState.message)
-            is UiState.Success -> {
-                if (payments.isEmpty()) {
-                    SectionEmpty("No salary payments recorded for $monthYearLabel.")
-                } else {
-                    payments.forEach { payment -> PaymentRow(payment) }
-                }
-            }
-        }
-
-        // 5. Selected Month Earning Ledger
-        SectionHeader(title = "$monthYearLabel Earning Ledger")
-        when (ledgerState) {
-            is UiState.Loading, is UiState.Idle -> SectionLoading("Loading entries…")
-            is UiState.Error -> SectionError(ledgerState.message)
-            is UiState.Success -> {
-                if (ledgerEntries.isEmpty()) {
-                    SectionEmpty("No ledger entries recorded for $monthYearLabel.")
-                } else {
-                    ledgerEntries.forEach { entry -> LedgerRow(entry) }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-}
-
-@Composable
-private fun PaymentRow(payment: PaymentRecordDto) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
+            // -------------------------------------------------------------
+            // 3. DAILY EARNING LEDGER TRANSACTIONS (STRUCTURED ROWS, NOT CARDS!)
+            // -------------------------------------------------------------
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.Payments,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.size(14.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Salary Payment",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
+                    text = "$monthYearLabel Ledger Records",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = buildString {
-                        append(payment.paymentMethod.lowercase().replace('_', ' ')
-                            .replaceFirstChar { it.uppercase() })
-                        if (payment.paymentDate.isNotBlank()) {
-                            append(" • ${Dates.formatDate(payment.paymentDate)}")
-                        }
-                        if (!payment.referenceNumber.isNullOrBlank()) {
-                            append(" • ${payment.referenceNumber}")
-                        }
-                    },
+                    text = "${ledgerEntries.size} item${if (ledgerEntries.size != 1) "s" else ""}",
                     style = MaterialTheme.typography.labelSmall,
-                    fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Text(
-                text = "-" + Money.format(payment.amountInr),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.tertiary
-            )
+
+            if (ledgerEntries.isEmpty()) {
+                PresenceEmptyState(
+                    title = "No Earning Entries",
+                    description = "No attendance or overtime earnings recorded for $monthYearLabel yet."
+                )
+            } else {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                    tonalElevation = 1.dp
+                ) {
+                    Column {
+                        ledgerEntries.forEachIndexed { index, entry ->
+                            LedgerTransactionRow(entry = entry)
+                            if (index < ledgerEntries.lastIndex) {
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+                                    modifier = Modifier.padding(horizontal = 14.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
 
-private fun formatInrString(amountStr: String?): String {
-    if (amountStr.isNullOrBlank()) return "₹0"
-    val intPart = amountStr.replace("₹", "").replace(",", "").trim().substringBefore('.')
-    val num = intPart.toLongOrNull() ?: 0L
-    return Money.format(num)
-}
-
+/**
+ * Fintech-Quality Transaction Row for Staff Earning Ledger.
+ * Uses semantic icon badges, clear typography, and financial amounts.
+ */
 @Composable
-private fun LedgerRow(entry: StaffEarningLedgerDto) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-        )
+private fun LedgerTransactionRow(entry: StaffEarningLedgerDto) {
+    val isShift = entry.type.equals("SHIFT", ignoreCase = true)
+    val isOvertime = entry.type.equals("OVERTIME", ignoreCase = true)
+    val isHoliday = entry.type.equals("HOLIDAY", ignoreCase = true)
+    val isOffDay = entry.type.equals("OFF_DAY", ignoreCase = true) || entry.type.equals("WEEKLY_OFF", ignoreCase = true)
+
+    val icon = when {
+        isShift -> Icons.Default.Schedule
+        isOvertime -> Icons.Default.MoreTime
+        isHoliday -> Icons.Default.Celebration
+        isOffDay -> Icons.Default.CheckCircle
+        else -> Icons.Default.MonetizationOn
+    }
+
+    val iconColor = when {
+        isShift -> MaterialTheme.colorScheme.primary
+        isOvertime -> PresenceDesign.Caution
+        isHoliday -> Color(0xFF7C3AED)
+        isOffDay -> Color(0xFF0D9488)
+        else -> PresenceDesign.Positive
+    }
+
+    val iconBg = iconColor.copy(alpha = 0.12f)
+
+    val displayTitle = when {
+        isShift -> "Shift Attendance Remuneration"
+        isOvertime -> "Overtime Session Earning"
+        isHoliday -> "Public Holiday Remuneration"
+        isOffDay -> "Weekly Off Remuneration"
+        else -> entry.type.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(38.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f)),
+                    .background(iconBg),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.TrendingUp,
+                    imageVector = icon,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.size(14.dp)
+                    tint = iconColor,
+                    modifier = Modifier.size(18.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = entry.type.lowercase().replace('_', ' ')
-                        .replaceFirstChar { it.uppercase() },
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
+                    text = displayTitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = Dates.formatDate(entry.earningDate),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.5.sp
                 )
             }
-            Text(
-                text = "+" + Money.format(entry.amountInr),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.secondary
-            )
         }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Text(
+            text = "+${Money.format(entry.amountCents)}",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.ExtraBold,
+            color = PresenceDesign.Positive
+        )
     }
 }

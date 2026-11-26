@@ -58,18 +58,19 @@ fun LocationStaffCardDto.toNextSession(
     premisesLongitude: Double? = null,
     radiusMeters: Int = 50
 ): NextSessionUi? {
-    val activeOvertime = overtimeClockInTime != null && overtimeClockOutTime == null
-    val activeShift = clockInTime != null && clockOutTime == null
+    val activeOvertime = overtimeClockInTime != null
+    val activeShift = clockInTime != null
     val hasShift = shiftName.isNotBlank() &&
         !shiftName.equals("No shift assigned", ignoreCase = true)
 
     val startShiftTime = regularShiftStartTime ?: assignedStartTime
     val endShiftTime = regularShiftEndTime ?: assignedEndTime
 
-    val shiftCompleted = clockOutTime != null
+    val todayIso = Dates.todayIso()
+    val shiftCompleted = Dates.isSessionOver(todayIso, endShiftTime, startShiftTime)
     val shiftOver = shiftCompleted
 
-    val overtimeCompleted = overtimeClockOutTime != null
+    val overtimeCompleted = Dates.isSessionOver(todayIso, overtimeEndTime, overtimeStartTime)
     val overtimeOver = overtimeCompleted
 
     val isEligibleShift = hasShift && !shiftOver

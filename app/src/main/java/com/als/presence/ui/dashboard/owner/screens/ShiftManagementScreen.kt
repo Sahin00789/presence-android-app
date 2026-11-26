@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.verticalScroll
 import com.als.presence.ui.dashboard.owner.modals.CreateShiftModal
 import com.als.presence.ui.dashboard.owner.modals.EditShiftModal
@@ -248,8 +249,8 @@ private fun DayShiftCard(
 ) {
     PresenceCard(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -258,18 +259,19 @@ private fun DayShiftCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(32.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = dayInfo.shortName,
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
@@ -278,7 +280,8 @@ private fun DayShiftCard(
                     Column {
                         Text(
                             text = dayInfo.fullName,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = PresenceDesign.Ink
                         )
@@ -286,6 +289,7 @@ private fun DayShiftCard(
                             text = if (shifts.isEmpty()) "No shifts assigned"
                             else "${shifts.size} ${if (shifts.size == 1) "shift" else "shifts"}",
                             style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.sp,
                             color = PresenceDesign.LabelText
                         )
                     }
@@ -302,14 +306,15 @@ private fun DayShiftCard(
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
             if (shifts.isEmpty()) {
                 Text(
                     text = "No shifts scheduled for ${dayInfo.fullName}.",
                     style = MaterialTheme.typography.bodySmall,
+                    fontSize = 11.5.sp,
                     color = PresenceDesign.LabelText,
-                    modifier = Modifier.padding(vertical = 4.dp)
+                    modifier = Modifier.padding(vertical = 2.dp)
                 )
             } else {
                 shifts.forEach { template ->
@@ -335,14 +340,14 @@ private fun ShiftItemRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -354,6 +359,7 @@ private fun ShiftItemRow(
                     Text(
                         text = template.name,
                         style = MaterialTheme.typography.titleSmall,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = PresenceDesign.Ink
                     )
@@ -363,7 +369,7 @@ private fun ShiftItemRow(
                         dot = true
                     )
                 }
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(1.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -372,18 +378,19 @@ private fun ShiftItemRow(
                         imageVector = Icons.Default.Schedule,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(13.dp)
                     )
                     Text(
                         text = "${Dates.formatTime(template.startTime)} – ${Dates.formatTime(template.endTime)}" +
                                 if (!premisesName.isNullOrBlank()) " • ${Dates.cleanPremisesName(premisesName)}" else "",
                         style = MaterialTheme.typography.bodySmall,
+                        fontSize = 11.5.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Spacer(modifier = Modifier.height(3.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     PresenceBadge(
                         label = "Day: ${template.dayName}",
                         tone = PresenceTone.Info
@@ -396,7 +403,7 @@ private fun ShiftItemRow(
             }
 
             if (canManage) {
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 PresenceIconButton(
                     icon = Icons.Default.Edit,
                     contentDescription = "Edit shift ${template.name}",

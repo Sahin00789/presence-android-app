@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="@dimen/presence_logo_spacing_sm"
+    tools:background="@color/presence_light_bg">
+
+    <!-- Logo Symbol -->
+    <ImageView
+        android:id="@+id/logo_symbol"
+        android:layout_width="@dimen/presence_logo_symbol_size_md"
+        android:layout_height="@dimen/presence_logo_symbol_size_md"
+        android:contentDescription="@string/presence_logo_description"
+        android:src="@drawable/ic_logo_symbol_color" />
+
+    <!-- Spacing -->
+    <Space
+        android:layout_width="@dimen/presence_logo_spacing_md"
+        android:layout_height="0dp" />
+
+    <!-- Wordmark -->
+    <TextView
+        android:id="@+id/logo_wordmark"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-black"
+        android:includeFontPadding="false"
+        android:letterSpacing="0.02"
+        android:text="@string/presence_brand_name"
+        android:textColor="@color/presence_navy"
+        android:textSize="@dimen/presence_logo_text_size_md"
+        android:textStyle="bold" />
+
+</LinearLayout>

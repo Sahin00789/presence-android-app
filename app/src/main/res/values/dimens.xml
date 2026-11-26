@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Logo Sizes -->
+    <dimen name="presence_logo_symbol_size_sm">32dp</dimen>
+    <dimen name="presence_logo_symbol_size_md">48dp</dimen>
+    <dimen name="presence_logo_symbol_size_lg">64dp</dimen>
+    <dimen name="presence_logo_symbol_size_xl">96dp</dimen>
+    <dimen name="presence_logo_app_icon_size">108dp</dimen>
+
+    <!-- Typography Sizes -->
+    <dimen name="presence_logo_text_size_sm">18sp</dimen>
+    <dimen name="presence_logo_text_size_md">24sp</dimen>
+    <dimen name="presence_logo_text_size_lg">32sp</dimen>
+    <dimen name="presence_logo_subtitle_size">13sp</dimen>
+
+    <!-- Spacing -->
+    <dimen name="presence_logo_spacing_sm">8dp</dimen>
+    <dimen name="presence_logo_spacing_md">12dp</dimen>
+    <dimen name="presence_logo_spacing_lg">16dp</dimen>
+    <dimen name="presence_logo_padding">20dp</dimen>
+    <dimen name="presence_logo_container_radius">20dp</dimen>
+</resources>

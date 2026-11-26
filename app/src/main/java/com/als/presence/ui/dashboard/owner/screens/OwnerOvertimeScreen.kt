@@ -163,19 +163,6 @@ fun OwnerOvertimeScreen(
             crumb = "Scheduling",
             title = "Overtime Console",
             onBack = onBack,
-            actions = {
-                PresenceButton(
-                    label = "+ Book OT",
-                    icon = Icons.Default.Add,
-                    size = PresenceSize.Sm,
-                    onClick = {
-                        val defaultStaff = premisesFilteredStaffList.firstOrNull() ?: allStaffList.firstOrNull()
-                        if (defaultStaff != null) {
-                            bookingStaffMember = defaultStaff
-                        }
-                    }
-                )
-            },
             onRefresh = { viewModel.refresh() }
         ) {
 
@@ -211,64 +198,16 @@ fun OwnerOvertimeScreen(
                 }
             }
 
-            // Tab Navigation
-            TabRow(
+            // Modern High-UX Segmented Tabs
+            com.als.presence.ui.dashboard.common.PresenceSegmentedTabRow(
                 selectedTabIndex = selectedTab,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp)),
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                indicator = {},
-                divider = {}
-            ) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (selectedTab == 0) MaterialTheme.colorScheme.surface else Color.Transparent
-                        )
-                        .padding(vertical = 8.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Text(
-                            text = "Roster (${premisesFilteredStaffList.size})",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontSize = 13.sp,
-                            fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal
-                        )
-                    }
-                }
-
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (selectedTab == 1) MaterialTheme.colorScheme.surface else Color.Transparent
-                        )
-                        .padding(vertical = 8.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(Icons.Default.MoreTime, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Text(
-                            text = "Logs (${premisesFilteredOvertimeList.size})",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontSize = 13.sp,
-                            fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
-                        )
-                    }
-                }
-            }
+                tabs = listOf(
+                    "Roster (${premisesFilteredStaffList.size})",
+                    "Logs (${premisesFilteredOvertimeList.size})"
+                ),
+                onTabSelected = { selectedTab = it },
+                icons = listOf(Icons.Default.People, Icons.Default.MoreTime)
+            )
 
             // Tab Content
             if (selectedTab == 0) {

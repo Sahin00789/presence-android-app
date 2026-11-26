@@ -211,6 +211,8 @@ data class StaffEarningLedgerDto(
     @Serializable(with = FlexiblePaiseLongSerializer::class)
     val amountPaise: Long = 0L,
     val earningDate: String = "",
+    val sourceReference: String? = null,
+    val description: String? = null,
     val createdAt: String = ""
 ) {
     val amountInr: Long get() {
@@ -328,6 +330,10 @@ data class UnworkedPaymentRuleDto(
     val dayType: String = "", // "HOLIDAY", "WEEKLY_OFF"
     @Serializable(with = FlexibleInrLongSerializer::class)
     val paymentInr: Long = 0L,
+    @Serializable(with = FlexibleInrLongSerializer::class)
+    val holidayPay: Long = 0L,
+    @Serializable(with = FlexibleInrLongSerializer::class)
+    val offDayPay: Long = 0L,
     val createdAt: String? = null
 )
 
@@ -336,6 +342,8 @@ data class CreateUnworkedPaymentRuleRequest(
     val employeeId: String? = null,
     val premisesId: String? = null,
     val dayType: String, // "HOLIDAY" or "WEEKLY_OFF"
-    val paymentInr: Long
+    val paymentInr: Long = 0L,
+    val holidayPay: Long? = null,
+    val offDayPay: Long? = null
 )
 

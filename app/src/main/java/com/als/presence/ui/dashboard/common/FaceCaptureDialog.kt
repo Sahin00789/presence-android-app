@@ -470,8 +470,15 @@ private fun FaceCameraPreview(
 
     DisposableEffect(Unit) {
         onDispose {
-            runCatching { ProcessCameraProvider.getInstance(context).get().unbindAll() }
-            analyzerExecutor.shutdown()
+            try {
+                val future = ProcessCameraProvider.getInstance(context)
+                if (future.isDone) {
+                    future.get().unbindAll()
+                }
+            } catch (_: Exception) {}
+            try {
+                analyzerExecutor.shutdown()
+            } catch (_: Exception) {}
         }
     }
 

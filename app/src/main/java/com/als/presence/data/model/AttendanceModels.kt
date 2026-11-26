@@ -119,20 +119,6 @@ data class ClockInRequest(
 )
 
 @Serializable
-data class ClockOutRequest(
-    val attendanceEventId: String? = null,
-    val latitude: Double? = null,
-    val longitude: Double? = null,
-    val accuracyMeters: Double? = null
-)
-
-@Serializable
-data class ClockOutResponseDto(
-    val id: String = "",
-    val clockOut: String = ""
-)
-
-@Serializable
 data class FaceStatusDto(
     val enrolled: Boolean = false,
     val modelVersion: String? = null,

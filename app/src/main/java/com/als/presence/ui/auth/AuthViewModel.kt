@@ -45,6 +45,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * ViewModel responsible for authentication state, Email OTP flow, Google OAuth Single Sign-On,
+ * Owner registration wizard, device session management, and app updates.
+ */
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
@@ -218,6 +222,66 @@ class AuthViewModel @Inject constructor(
         _isRegistrationSuccessPending.value = pending
     }
 
+    private val _rateLimitCountdown = MutableStateFlow(0)
+    val rateLimitCountdown: StateFlow<Int> = _rateLimitCountdown.asStateFlow()
+    private var rateLimitJob: kotlinx.coroutines.Job? = null
+
+    private val _roleMismatch = MutableStateFlow<Pair<Role, Role>?>(null)
+    val roleMismatch: StateFlow<Pair<Role, Role>?> = _roleMismatch.asStateFlow()
+
+    fun clearRoleMismatch() {
+        _roleMismatch.value = null
+    }
+
+    private val _employeePendingPremises = MutableStateFlow(false)
+    val employeePendingPremises: StateFlow<Boolean> = _employeePendingPremises.asStateFlow()
+
+    fun dismissPendingPremises() {
+        _employeePendingPremises.value = false
+    }
+
+    fun saveOwnerDraft(draft: com.als.presence.data.local.OwnerRegistrationDraft) {
+        sessionManager.saveOwnerDraft(draft)
+    }
+
+    fun getOwnerDraft(): com.als.presence.data.local.OwnerRegistrationDraft? {
+        return sessionManager.getOwnerDraft()
+    }
+
+    fun clearOwnerDraft() {
+        sessionManager.clearOwnerDraft()
+    }
+
+    private fun startRateLimitCountdown(seconds: Int = 60) {
+        rateLimitJob?.cancel()
+        rateLimitJob = viewModelScope.launch {
+            _rateLimitCountdown.value = seconds
+            while (_rateLimitCountdown.value > 0) {
+                kotlinx.coroutines.delay(1000L)
+                _rateLimitCountdown.value -= 1
+            }
+        }
+    }
+
+    private fun checkRateLimit(code: String?, message: String?) {
+        val isRateLimit = code == "429" ||
+            code == "RATE_LIMIT_EXCEEDED" ||
+            message?.contains("too many requests", ignoreCase = true) == true ||
+            message?.contains("rate limit", ignoreCase = true) == true
+        if (isRateLimit) {
+            startRateLimitCountdown(60)
+        }
+    }
+
+    private fun handleAuthSuccess(user: User) {
+        if (user.role != _selectedRole.value) {
+            _roleMismatch.value = Pair(_selectedRole.value, user.role)
+        }
+        if (user.role == Role.EMPLOYEE && user.premisesId.isNullOrBlank()) {
+            _employeePendingPremises.value = true
+        }
+    }
+
     private fun cleanEmail(email: String): String {
         return email.replace(Regex("[\\s\\u00A0]+"), "").lowercase()
     }
@@ -225,6 +289,7 @@ class AuthViewModel @Inject constructor(
     fun requestOtp(email: String, role: Role = Role.EMPLOYEE, isRegistration: Boolean = false) {
         val sanitized = cleanEmail(email)
         viewModelScope.launch {
+            _uiState.value = UiState.Idle
             if (!isOnline.value) {
                 _uiState.value = UiState.Error(
                     message = "Server is not connected. Device is currently offline."
@@ -238,6 +303,7 @@ class AuthViewModel @Inject constructor(
                     _uiState.value = UiState.Idle
                 }
                 is Resource.Error -> {
+                    checkRateLimit(result.code, result.message)
                     val errorMsg = result.message?.takeIf { it.isNotBlank() }
                         ?: "Failed to send verification code. Server is not connected."
                     _uiState.value = UiState.Error(message = errorMsg, code = result.code)
@@ -287,9 +353,11 @@ class AuthViewModel @Inject constructor(
                 radiusMeters = radiusMeters
             )) {
                 is Resource.Success -> {
+                    handleAuthSuccess(result.data)
                     _uiState.value = UiState.Success(result.data)
                 }
                 is Resource.Error -> {
+                    checkRateLimit(result.code, result.message)
                     val errorMsg = result.message?.takeIf { it.isNotBlank() }
                         ?: "OTP Verification failed. Server is not connected."
                     _uiState.value = UiState.Error(message = errorMsg, code = result.code)
@@ -363,9 +431,11 @@ class AuthViewModel @Inject constructor(
                 )
             ) {
                 is Resource.Success -> {
+                    handleAuthSuccess(result.data)
                     _uiState.value = UiState.Success(result.data)
                 }
                 is Resource.Error -> {
+                    checkRateLimit(result.code, result.message)
                     val errorMsg = result.message?.takeIf { it.isNotBlank() }
                         ?: "Google login failed. Server is not connected."
                     _uiState.value = UiState.Error(message = errorMsg, code = result.code)
@@ -407,8 +477,12 @@ class AuthViewModel @Inject constructor(
                 latitude = latitude,
                 longitude = longitude
             )) {
-                is Resource.Success -> _uiState.value = UiState.Success(result.data)
+                is Resource.Success -> {
+                    handleAuthSuccess(result.data)
+                    _uiState.value = UiState.Success(result.data)
+                }
                 is Resource.Error -> {
+                    checkRateLimit(result.code, result.message)
                     val errorMsg = result.message?.takeIf { it.isNotBlank() }
                         ?: "Owner registration failed. Server is not connected."
                     _uiState.value = UiState.Error(message = errorMsg, code = result.code)

@@ -73,12 +73,11 @@ class SyncCoordinator @Inject constructor(
     }
 
     suspend fun performSync(forceFullSync: Boolean = false): Boolean {
-        if (_isSyncing.value) {
+        if (!_isSyncing.compareAndSet(expect = false, update = true)) {
             Log.d(TAG, "Sync already in progress. Skipping.")
             return false
         }
 
-        _isSyncing.value = true
         Log.d(TAG, "Starting synchronization handshake (forceFullSync=$forceFullSync)...")
         var overallSuccess = true
 
@@ -446,13 +445,9 @@ class SyncCoordinator @Inject constructor(
 
     private suspend fun handleWebSocketEvent(event: DomainWebSocketEvent) {
         Log.d(TAG, "Handling WebSocket event: $event (isOwnEvent=${event.isOwnEvent})")
-        if (!event.isOwnEvent) {
-            val toastMsg = event.toastMessage ?: "Real-time update received"
-            withContext(Dispatchers.Main) {
-                Toast.makeText(context, toastMsg, Toast.LENGTH_SHORT).show()
-            }
-            performSync(forceFullSync = false)
-        } else {
+        
+        if (event.isOwnEvent) {
+            // Action performed locally by current user; rebuild snapshots silently without toast popups
             when (event) {
                 is DomainWebSocketEvent.StaffUpdate -> {
                     projectionEngine.rebuildOwnerEmployeesSnapshot("ALL")
@@ -461,7 +456,7 @@ class SyncCoordinator @Inject constructor(
                     projectionEngine.rebuildOwnerPingsSnapshot("ALL")
                 }
                 is DomainWebSocketEvent.ShiftUpdate -> {
-                    performSync(forceFullSync = false)
+                    performSelectiveSync(SyncDomain.SHIFTS)
                 }
                 is DomainWebSocketEvent.WalletUpdate -> {
                     val calendar = Calendar.getInstance()
@@ -469,9 +464,50 @@ class SyncCoordinator @Inject constructor(
                     val year = calendar.get(Calendar.YEAR)
                     projectionEngine.rebuildOwnerReportsSnapshot(month, year, null)
                 }
-                else -> {
-                    // Generic update
+                else -> {}
+            }
+            return
+        }
+
+        // Action received from another device/server: perform silent background domain sync
+        when (event) {
+            is DomainWebSocketEvent.StaffUpdate -> {
+                performSelectiveSync(SyncDomain.WORKFORCE)
+            }
+            is DomainWebSocketEvent.PremisesUpdate -> {
+                performSelectiveSync(SyncDomain.PREMISES)
+            }
+            is DomainWebSocketEvent.ShiftUpdate -> {
+                performSelectiveSync(SyncDomain.SHIFTS)
+            }
+            is DomainWebSocketEvent.AttendanceUpdate -> {
+                performSelectiveSync(SyncDomain.ATTENDANCE)
+            }
+            is DomainWebSocketEvent.WalletUpdate -> {
+                performSelectiveSync(SyncDomain.PAYROLL)
+            }
+            is DomainWebSocketEvent.Notification -> {
+                // Display toast ONLY for explicit notifications/alerts meant for the user
+                val displayMsg = event.toastMessage ?: event.body ?: event.title
+                if (!displayMsg.isNullOrBlank()) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, displayMsg, Toast.LENGTH_SHORT).show()
+                    }
                 }
+                performSync(forceFullSync = false)
+            }
+            is DomainWebSocketEvent.Generic -> {
+                // If generic event contains an explicit operational alert, show toast; otherwise silently sync
+                val displayMsg = event.toastMessage
+                if (!displayMsg.isNullOrBlank() && (displayMsg.startsWith("Alert:") || displayMsg.startsWith("Notification:"))) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, displayMsg, Toast.LENGTH_SHORT).show()
+                    }
+                }
+                performSync(forceFullSync = false)
+            }
+            else -> {
+                performSync(forceFullSync = false)
             }
         }
     }

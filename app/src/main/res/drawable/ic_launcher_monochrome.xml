@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Launcher Safe Bounds Scale Group -->
+    <group
+        android:translateX="5.4"
+        android:translateY="5.4"
+        android:scaleX="0.9"
+        android:scaleY="0.9">
+
+        <!-- Outer Security Shield & GPS Geofence Contour -->
+        <path
+            android:pathData="M54,16 C68,16 82,22 84,36 C86,54 74,74 54,92 C34,74 22,54 24,36 C26,22 40,16 54,16 Z"
+            android:strokeWidth="7"
+            android:strokeColor="#FFFFFF"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+
+        <!-- Biometric Face-Scan Framing Corners -->
+        <path
+            android:pathData="M38,44 L38,38 C38,36 40,34 42,34 L48,34"
+            android:strokeWidth="3.5"
+            android:strokeColor="#FFFFFF"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+
+        <path
+            android:pathData="M70,44 L70,38 C70,36 68,34 66,34 L60,34"
+            android:strokeWidth="3.5"
+            android:strokeColor="#FFFFFF"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+
+        <path
+            android:pathData="M38,60 L38,66 C38,68 40,70 42,70 L48,70"
+            android:strokeWidth="3.5"
+            android:strokeColor="#FFFFFF"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+
+        <path
+            android:pathData="M70,60 L70,66 C70,68 68,70 66,70 L60,70"
+            android:strokeWidth="3.5"
+            android:strokeColor="#FFFFFF"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+
+        <!-- Verified Attendance Checkmark Pulse -->
+        <path
+            android:pathData="M42,53 L50,61 L66,45"
+            android:strokeWidth="6.5"
+            android:strokeColor="#FFFFFF"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+
+        <!-- Location Beacon Signal Dot -->
+        <path
+            android:pathData="M54,26m-3.5,0a3.5,3.5 0 1,0 7,0a3.5,3.5 0 1,0 -7,0"
+            android:fillColor="#FFFFFF" />
+    </group>
+</vector>

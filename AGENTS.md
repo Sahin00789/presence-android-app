@@ -96,15 +96,15 @@ The **Employee Attendance, Shift Management & Salary Ledger System** (`presence`
 
 ---
 
-## 7. Attendance, GPS & Local Face Verification
+## 7. Attendance, GPS & Single Clock-In Model
 1. **Premises Geofence**: Default radius of **50 metres**. Distance evaluated via geodesic FusedLocation readings.
-2. **Clock-In Requirements**: Valid geofence check + local ONNX face verification match.
+2. **Clock-In Requirements**: Valid geofence check + local ONNX face verification match. No clock-out route or button exists; employee clocks in once per shift/overtime session.
 3. **Periodic GPS Monitoring & Manual Attendance Rules**:
    - Active shift schedules trigger location checks approximately every 10 minutes (`attendance_location_pings`).
    - **Three Consecutive Outside Pings (`outside count > 3`)**: Automatically raises a monitoring exception alert and notifies Owner.
    - **Manual Attendance Marking & Action Buttons**: Resolution action buttons appear on the Owner dashboard and remain visible and active **until the shift or overtime is completely finished/completed**.
-   - **Manual Options**: Owner can manually mark attendance as `ABSENT`, `HALF_DAY`, `LEAVE`, or resume tracking (`RESUME`).
-   - **Default Present Policy (No Action)**: If the owner **does not press any button** before the shift or overtime session completes, the attendance status automatically **defaults to Present** (`PRESENT`).
+   - **Manual Options**: Owner can manually mark attendance as `ABSENT`, `HALF_DAY`, `LEAVE` with reason, or resume tracking (`RESUME`).
+   - **Default Present Policy & Immediate Ledger Credit**: If the owner **does not press any button** before the shift or overtime session completes, the attendance status automatically **defaults to Present** (`PRESENT`) when shift end time passes, and earnings immediately accrue in `staff_earning_ledger`.
 4. **Local Biometrics**:
    - ONNX Runtime Mobile infers face embeddings on-device using CameraX input against `multi_pose_face_templates`.
    - Only 128-dimensional numerical embeddings are transmitted/stored securely. Raw facial images are discarded after feature extraction.

@@ -5,9 +5,17 @@ import com.als.presence.domain.model.User
 import com.als.presence.domain.repository.AuthRepository
 import javax.inject.Inject
 
+/**
+ * UseCase to verify a 6-digit OTP code submitted during authentication or account registration.
+ */
 class VerifyOtpUseCase @Inject constructor(
     private val authRepository: AuthRepository
 ) {
+    /**
+     * Verifies OTP and completes authentication or account setup.
+     *
+     * @return [Resource.Success] with [User] payload on successful verification.
+     */
     suspend operator fun invoke(
         email: String,
         otp: String,

@@ -5,9 +5,13 @@ import com.als.presence.domain.model.LoggedDevice
 import com.als.presence.domain.repository.AuthRepository
 import javax.inject.Inject
 
+/**
+ * UseCase to fetch list of active device sessions logged into user account.
+ */
 class GetLoggedDevicesUseCase @Inject constructor(
     private val authRepository: AuthRepository
 ) {
+    /** Returns list of [LoggedDevice] sessions. */
     suspend operator fun invoke(): Resource<List<LoggedDevice>> {
         return authRepository.getLoggedDevices()
     }

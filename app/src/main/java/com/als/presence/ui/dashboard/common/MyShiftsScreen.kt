@@ -207,12 +207,13 @@ private fun DayScheduleAndPaymentCard(
     val isMyWeeklyOff = !isAssigned && hasPersonalAssignments
     val isPremisesWeeklyOff = !isAssigned && !hasPersonalAssignments && fallbackTemplates.isEmpty()
 
-    PresenceCard(
+    com.als.presence.ui.dashboard.common.components.GeometricActivityCard(
+        palette = if (isAssigned) com.als.presence.core.designsystem.GradientPalette.Amber else com.als.presence.core.designsystem.GradientPalette.Lavender,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Day Header Row
             Row(
@@ -576,14 +577,16 @@ private fun UnworkPaymentsSection(
         ?: unworkedRules.find { it.dayType == "WEEKLY_OFF" }
 
     val defaultPresentPay = primaryAssignment?.presentPay ?: 0.0
-    val holidayRate = if (holidayRule != null && holidayRule.paymentInr > 0) {
-        "₹${holidayRule.paymentInr}"
+    val hAmt = holidayRule?.let { if (it.holidayPay > 0) it.holidayPay else it.paymentInr } ?: 0L
+    val holidayRate = if (hAmt > 0) {
+        "₹$hAmt"
     } else if (defaultPresentPay > 0) {
         formatRate(defaultPresentPay)
     } else "₹0"
 
-    val weeklyOffRate = if (weeklyOffRule != null && weeklyOffRule.paymentInr > 0) {
-        "₹${weeklyOffRule.paymentInr}"
+    val oAmt = weeklyOffRule?.let { if (it.offDayPay > 0) it.offDayPay else it.paymentInr } ?: 0L
+    val weeklyOffRate = if (oAmt > 0) {
+        "₹$oAmt"
     } else if (defaultPresentPay > 0) {
         formatRate(defaultPresentPay)
     } else "₹0"
